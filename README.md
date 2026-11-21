@@ -22,6 +22,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
 
 修改 `页面代码/` 下的界面结构、样式或交互逻辑时，运行中的窗口通过内置文件监听自动热重载刷新，无需重新编译。
 
+## 配置快速记账
+
+在 `%USERPROFILE%\.codex-launcher\quick-ledger.json` 中保存一个 UTF-8 JSON 对象，键为表单名称，值为飞书「获取填写链接」生成的 HTTPS 地址。例如：
+
+```json
+{
+  "日常记账": "https://my.feishu.cn/base/add/你的表单链接标识"
+}
+```
+
+重启 AI Hub 后，可以在「工具 → 快速记账」或 Ctrl+K 中打开这些表单。链接保存在本机，点击入口会用系统默认浏览器打开飞书。
+
 ## 离线提字
 
 「提字」优先使用 RapidOCR 提供的 PP-OCRv6 模型，通过 ONNX Runtime 在本机识别。安装 Python 3.12 后，在 PowerShell 中为 AI Hub 安装独立环境：

@@ -45,6 +45,7 @@ namespace CodexLauncher
         private bool _webReady = false;
 
         private AccountsStore _store;
+        private readonly Dictionary<string, string> _quickLedgerForms = CoreService.ReadQuickLedgerForms();
         private List<AccountViewModel> _accounts = new List<AccountViewModel>();
         private ProxyStatusInfo _proxy = new ProxyStatusInfo();
         private readonly ClashNetwork _network = new ClashNetwork();
@@ -895,6 +896,7 @@ namespace CodexLauncher
                 { "pending_update", LocalUpdate.IsPending },
                 { "brand_icon", "https://icons.aihub.local/aihub.png" },
                 { "voice_recorder_hotkey", VoiceRecorderShortcut.Display },
+                { "quick_ledger_forms", _quickLedgerForms.Keys.ToArray() },
                 { "settings", new Dictionary<string, object>
                     {
                         { "minimize_to_tray", _store.settings.minimize_to_tray },
@@ -1624,6 +1626,13 @@ namespace CodexLauncher
                     case "openDataDir":
                         CoreService.EnsureDirs();
                         Process.Start("explorer.exe", CoreService.DataDir);
+                        break;
+
+                    case "openLedgerForm":
+                        string formUrl;
+                        if (!_quickLedgerForms.TryGetValue(AuthParser.GetStr(data, "id") ?? "", out formUrl))
+                            throw new InvalidOperationException("记账表单未配置，请检查本地 quick-ledger.json。");
+                        CoreService.LaunchToolItem(new ToolItem { kind = "url", target = formUrl });
                         break;
 
                     case "getChangelog":

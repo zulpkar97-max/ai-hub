@@ -230,54 +230,9 @@ kbd {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
 }
 
-/* Sidebar Footer */
-.sidebar-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--hairline);
-}
-
-.sidebar-action-btn { width: 100%; }
-
-.sidebar-global-tools {
-  display: grid;
-  gap: 3px;
-  margin: 13px 0 0;
-  padding: 10px 0 0;
-  border-top: 1px solid var(--hairline);
-}
-
-.sidebar-tool-label {
-  padding: 0 10px 3px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.sidebar-global-tools .sidebar-tool-button { justify-content: flex-start; padding-inline: 10px; }
-
-.sidebar-version-btn {
+.sidebar-action-btn {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 11.5px;
-  cursor: pointer;
-  transition: all 0.14s var(--ease);
-}
-
-.sidebar-version-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 /* RIGHT ELEVATED PURE WHITE PANE */
@@ -505,6 +460,49 @@ kbd {
   margin-bottom: 16px;
   overflow: hidden;
 }
+
+.tools-page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.utility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+
+.utility-row + .utility-row { border-top: 1px solid var(--hairline); }
+
+.utility-copy, .utility-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.utility-copy > .ic { color: var(--text-secondary); flex-shrink: 0; }
+.utility-copy h2 { margin: 0; font-size: 13px; font-weight: 650; }
+.utility-copy p, .tools-version { margin: 2px 0 0; color: var(--text-muted); font-size: 11.5px; }
+.tools-version { margin-inline-start: 5px; font-weight: 400; }
+
+.btn.tools-about {
+  justify-content: space-between;
+  margin-top: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--hairline);
+  color: var(--text-secondary);
+}
+
+.tools-about > .utility-action { gap: 4px; }
+
+.settings-group + .settings-group { margin-top: 22px; }
+.settings-heading { margin: 0 0 7px; font-size: 12px; font-weight: 650; color: var(--text-secondary); }
+.setting-label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; }
 
 .network-card {
   display: flex;

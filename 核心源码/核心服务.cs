@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.4.0";
+        public const string AppVersion = "v5.4.1";
 
         private static readonly object StoreLock = new object();
         private static readonly object ProfileLifecycleLock = new object();
@@ -710,6 +710,34 @@ namespace CodexLauncher
             var psi = new ProcessStartInfo { FileName = item.target, Arguments = item.arguments ?? "", UseShellExecute = true };
             if (File.Exists(item.target)) psi.WorkingDirectory = Path.GetDirectoryName(item.target);
             Process.Start(psi);
+        }
+
+        public static Dictionary<string, string> ReadQuickLedgerForms()
+        {
+            var forms = new Dictionary<string, string>();
+            try
+            {
+                string path = Path.Combine(DataDir, "quick-ledger.json");
+                if (!File.Exists(path)) return forms;
+                var entries = Json.Deserialize<Dictionary<string, string>>(File.ReadAllText(path, Encoding.UTF8));
+                if (entries == null) return forms;
+                foreach (var entry in entries)
+                {
+                    string name = entry.Key.Trim();
+                    Uri url;
+                    if (name.Length == 0 || !Uri.TryCreate(entry.Value, UriKind.Absolute, out url)
+                        || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort || url.UserInfo.Length != 0
+                        || !url.Host.EndsWith(".feishu.cn", StringComparison.OrdinalIgnoreCase)
+                        || !url.AbsolutePath.StartsWith("/base/add/", StringComparison.Ordinal)
+                        || url.AbsolutePath.Length == "/base/add/".Length) continue;
+                    forms[name] = url.AbsoluteUri;
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
+            return forms;
         }
 
         public static int StopToolItem(ToolItem item)

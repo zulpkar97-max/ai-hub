@@ -5,7 +5,8 @@
 
   let appState = null;
   let uiReadySent = false;
-  let activeTab = "workspace"; // "workspace" | "manage"
+  let activeTab = "workspace";
+  let toolsRenderKey;
   let cmdkItems = [];
   let cmdkSelected = 0;
   let networkBusy = "";
@@ -31,6 +32,9 @@
     scan: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>',
     crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
     mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
+    receipt: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-3.5-2-3.5 2-3.5-2L5 21zM9 8h6M9 12h6"/></svg>',
+    chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+    chevronRight: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
     key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
   };
 
@@ -145,30 +149,32 @@
 
   function renderAll() {
     if (!appState) return;
-    $("#version-label").textContent = `${appState.version || "v4.1"} · 更新日志`;
     $("#nav-workspace-dot").classList.toggle("hidden", appState.network?.state !== "reachable" || !appState.proxy?.running);
 
-    const globalTools = $("#sidebar-global-tools");
-    const shot = appState.screenshot?.hotkey || "Ctrl+Shift+A";
-    const voice = appState.voice_recorder_hotkey;
-    const globalHtml = `
-      <div class="sidebar-tool-label">全局工具</div>
-      <button class="sidebar-tool-button btn btn-ghost" data-act="startScreenshot" title="截图 · ${esc(shot)}">${ICONS.crop}<span>截图</span></button>
-      <button class="sidebar-tool-button btn btn-ghost" data-act="startVoiceRecorder" title="AI 录音笔${voice ? " · " + esc(voice) : ""}" ${voice ? "" : "disabled"}>${ICONS.mic}<span>AI 录音笔</span></button>`;
-    if (globalTools.dataset.rendered !== globalHtml) {
-      globalTools.innerHTML = globalHtml;
-      globalTools.dataset.rendered = globalHtml;
-    }
     const pending = appState.pending_update;
     const headerActions = $("#header-actions");
     if (pending !== (headerActions.dataset.pending === "true")) {
       headerActions.innerHTML = pending ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : "";
       headerActions.dataset.pending = String(!!pending);
     }
-    $$(".nav-item").forEach((el) => el.classList.toggle("active", el.dataset.tab === activeTab));
+    $$(".nav-item").forEach((el) => {
+      const selected = el.dataset.tab === activeTab;
+      el.classList.toggle("active", selected);
+      if (selected) el.setAttribute("aria-current", "page");
+      else el.removeAttribute("aria-current");
+    });
 
     if (activeTab === "workspace") renderUnifiedWorkspace();
+    else if (activeTab === "tools") renderTools();
     else renderManage();
+  }
+
+  function switchTab(tab) {
+    closePopover();
+    if (activeTab === tab) return;
+    activeTab = tab;
+    renderAll();
+    $("#view-content").scrollTop = 0;
   }
 
   function iconButton(action, label, glyph, { disabled = false, danger = false, spinning = false, attrs = "" } = {}) {
@@ -513,12 +519,65 @@
   }
 
   // TAB 2: MANAGE & SETTINGS
+  function renderTools() {
+    $("#view-title").textContent = "工具";
+    $("#view-sub").textContent = "";
+
+    const screenshot = appState.screenshot;
+    const shotKey = screenshot?.enabled && screenshot.registered ? screenshot.hotkey : "";
+    const voiceKey = appState.voice_recorder_hotkey;
+    const hasForms = !!appState.quick_ledger_forms?.length;
+    const view = $("#view-content");
+    const renderKey = JSON.stringify([shotKey, voiceKey, hasForms, appState.version]);
+    if (renderKey === toolsRenderKey && view.firstElementChild?.classList.contains("tools-page")) return;
+    closePopover();
+    toolsRenderKey = renderKey;
+    view.innerHTML = `
+      <div class="tools-page">
+        <div class="surface-card">
+          <div class="utility-row">
+            <div class="utility-copy">
+              ${ICONS.crop}
+              <div><h2>截图</h2><p>框选、标注与提字</p></div>
+            </div>
+            <div class="utility-action">
+              ${shotKey ? `<kbd>${esc(shotKey)}</kbd>` : ""}
+              <button class="btn btn-primary btn-sm" data-act="startScreenshot">立即截图</button>
+            </div>
+          </div>
+          <div class="utility-row">
+            <div class="utility-copy">
+              ${ICONS.mic}
+              <div><h2>AI 录音笔</h2><p>微信输入法${voiceKey ? "" : " · 当前不可用"}</p></div>
+            </div>
+            <div class="utility-action">
+              ${voiceKey ? `<kbd>${esc(voiceKey)}</kbd>` : ""}
+              <button class="btn btn-secondary btn-sm" data-act="startVoiceRecorder" ${voiceKey ? "" : "disabled"}>打开</button>
+            </div>
+          </div>
+          <div class="utility-row">
+            <div class="utility-copy">
+              ${ICONS.receipt}
+              <div><h2>快速记账</h2><p>${hasForms ? "飞书表单" : "尚未配置飞书表单"}</p></div>
+            </div>
+            ${hasForms
+              ? `<button class="btn btn-secondary btn-sm" data-act="openLedgerMenu" aria-controls="popover-menu" aria-expanded="false">选择表单 ${ICONS.chevronDown}</button>`
+              : '<button class="btn btn-secondary btn-sm" data-act="openDataDir">打开数据目录</button>'}
+          </div>
+        </div>
+        <button class="btn btn-ghost tools-about" data-act="openChangelog">
+          <span>关于 AI Hub <span class="tools-version">${esc(appState.version)}</span></span>
+          <span class="utility-action">更新日志 ${ICONS.chevronRight}</span>
+        </button>
+      </div>`;
+  }
+
   function renderManage() {
     const sections = appState.tool_sections || [];
     const settings = appState.settings || {};
 
-    $("#view-title").textContent = "管理与设置";
-    $("#view-sub").textContent = "集中管理软件卸载、工作台分区整理与托盘偏好";
+    $("#view-title").textContent = "设置";
+    $("#view-sub").textContent = "";
 
     // 1. Software Uninstall Center (includes ChatGPT / Codex MSIX!)
     const uniqueApps = [];
@@ -610,23 +669,15 @@
         `).join("");
 
     $("#view-content").innerHTML = `
+      <section class="settings-group" aria-labelledby="settings-hotkeys">
+      <h2 id="settings-hotkeys" class="settings-heading">快捷键</h2>
       <div class="surface-card">
-        <div class="group-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <div>
-            <div class="group-title" style="display:flex;align-items:center;gap:8px;">
-              <span>快捷截图、标注与提取文字（OCR）</span>
-              ${shotStatusTag}
-            </div>
-            <div class="group-sub">智能吸附窗口 · 放大镜取色(C) · 矩形/箭头/画笔/马赛克/文字 · 滚轮调粗细 · 本机离线中英文 OCR · 贴图置顶</div>
-          </div>
-          <button class="btn btn-primary btn-sm" data-act="startScreenshot" style="flex-shrink:0;">${ICONS.crop} 立即截图</button>
-        </div>
         <div class="setting-row">
           <div>
-            <div style="font-size:13px;font-weight:500;">启用全局截图快捷键</div>
-            <div style="font-size:11.5px;color:var(--text-muted);">缩进托盘时同样随时响应，彻底替代飞书后台截图</div>
+            <div class="setting-label">全局截图快捷键 ${shotStatusTag}</div>
+            <div class="group-sub">缩到系统托盘时也可使用</div>
           </div>
-          <label class="toggle">
+          <label class="toggle" aria-label="启用全局截图快捷键">
             <input type="checkbox" data-setting="screenshot_enabled" ${shot.enabled ? "checked" : ""} />
             <span class="toggle-track"></span><span class="toggle-thumb"></span>
           </label>
@@ -640,12 +691,15 @@
         </div>
         ${shotConflictBanner}
       </div>
+      </section>
 
+      <section class="settings-group" aria-labelledby="settings-apps">
+      <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
       <div class="surface-card">
         <div class="group-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
           <div>
-            <div class="group-title">桌面图标收纳盒（随时隐藏 / 恢复）</div>
-            <div class="group-sub">仅移入本机收纳夹，绝不删除文件，也不碰你的工作文件夹与文档（当前已隐藏 ${hiddenCount}/${shortcuts.length}）</div>
+            <div class="group-title">桌面图标收纳</div>
+            <div class="group-sub">已隐藏 ${hiddenCount}/${shortcuts.length} 个快捷方式，可随时恢复</div>
           </div>
           <div style="display:flex;gap:6px;">
             <button class="btn btn-primary btn-sm" data-act="hideAllAiShortcuts" ${aiVisibleCount === 0 ? "disabled" : ""}>一键隐藏 AI 图标</button>
@@ -660,15 +714,18 @@
 
       <div class="surface-card">
         <div class="group-header">
-          <div class="group-title">软件卸载中心</div>
+          <div class="group-title">软件卸载</div>
           <div class="group-sub">点击后会先弹窗确认，再调用 Windows 系统或软件官方卸载程序</div>
         </div>
         ${uninstRows}
       </div>
+      </section>
 
+      <section class="settings-group" aria-labelledby="settings-layout">
+      <h2 id="settings-layout" class="settings-heading">工作台布局</h2>
       <div class="surface-card">
         <div class="group-header">
-          <div class="group-title">工作台分区与条目整理</div>
+          <div class="group-title">分区与条目</div>
           <div class="group-sub">隐藏条目或删除分区仅影响工作台展示，不会卸载软件；随时可重新扫描找回</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;">
@@ -678,11 +735,11 @@
         </div>
         ${secRows}
       </div>
+      </section>
 
+      <section class="settings-group" aria-labelledby="settings-general">
+      <h2 id="settings-general" class="settings-heading">通用</h2>
       <div class="surface-card">
-        <div class="group-header">
-          <div class="group-title">托盘、图标与通用设置</div>
-        </div>
         <div class="setting-row">
           <div>
             <div style="font-size:13px;font-weight:500;">关闭窗口时缩到系统托盘</div>
@@ -716,11 +773,10 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--hairline);">
           <button class="btn btn-secondary btn-sm" data-act="pinDesktop">更新桌面图标</button>
           <button class="btn btn-secondary btn-sm" data-act="openDataDir">打开数据目录</button>
-          ${appState.pending_update ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : ""}
-          <button class="btn btn-secondary btn-sm" data-act="openChangelog">查看更新日志</button>
           <button class="btn btn-danger-outline btn-sm" data-act="forceQuit">退出 AI Hub</button>
         </div>
       </div>
+      </section>
     `;
   }
 
@@ -728,6 +784,19 @@
 
   function closePopover() {
     $("#popover-menu").classList.add("hidden");
+    $('[data-act="openLedgerMenu"][aria-expanded="true"]')?.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleLedgerMenu(anchor) {
+    if (anchor.getAttribute("aria-expanded") === "true") return closePopover();
+
+    const pop = $("#popover-menu");
+    pop.innerHTML = (appState.quick_ledger_forms || []).map((name) =>
+      `<button class="pop-item" data-act="openLedgerForm" data-id="${esc(name)}">${ICONS.ext} ${esc(name)}</button>`
+    ).join("");
+    positionPopover(pop, anchor);
+    anchor.setAttribute("aria-expanded", "true");
+    pop.querySelector("button")?.focus({ preventScroll: true });
   }
 
   function openAccountMoreMenu(anchorBtn, acc) {
@@ -1418,6 +1487,9 @@
     if (appState.antigravity?.cli_installed)
       items.push({ title: "刷新 Antigravity 额度", tag: "AI 工作工具", sub: "模型额度", run: () => postAction("refreshAntigravity") });
     items.push({ title: `快捷截图与提字（${appState.screenshot?.hotkey || "Ctrl+Shift+A"}）`, sub: "框选 · 标注 · OCR 提取文字 · 钉在桌面", tag: "工具", run: () => postAction("startScreenshot") });
+    for (const name of appState.quick_ledger_forms || []) {
+      items.push({ title: `快速记账 · ${name}`, sub: "飞书表单", tag: "工具", run: () => postAction("openLedgerForm", { id: name }) });
+    }
     items.push({ title: "一键隐藏已收纳的 AI 桌面图标", sub: "移入本地收纳夹，随时可一键恢复", tag: "桌面", run: () => postAction("hideAllDesktopShortcuts", { category: "ai" }) });
     items.push({ title: "恢复全部隐藏的桌面图标", sub: "将收纳夹里的快捷方式放回桌面", tag: "桌面", run: () => postAction("restoreAllDesktopShortcuts") });
     items.push({ title: appState.proxy?.running ? "Clash Verge · 打开面板" : "Clash Verge · 启动代理", sub: appState.proxy?.running ? "当前运行中" : "当前未启动", tag: "网络", run: () => postAction("proxyOpen") });
@@ -1478,15 +1550,10 @@
   $("#win-max").addEventListener("click", () => postAction("toggleMaximize"));
   $("#win-close").addEventListener("click", () => postAction("close"));
 
-  $$(".nav-item").forEach((btn) => btn.addEventListener("click", () => {
-    activeTab = btn.dataset.tab;
-    closePopover();
-    renderAll();
-  }));
+  $$(".nav-item").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
   $("#btn-open-cmdk").addEventListener("click", openCmdk);
   $("#btn-batch-exit").addEventListener("click", openBatchExitModal);
-  $("#btn-open-changelog").addEventListener("click", openChangelogModal);
 
   $("#cmdk-input").addEventListener("input", (e) => { cmdkSelected = 0; renderCmdkList(e.target.value); });
   $("#cmdk-input").addEventListener("keydown", (e) => {
@@ -1502,9 +1569,11 @@
       if ($("#cmdk-backdrop").classList.contains("hidden")) openCmdk();
       else closeCmdk();
     } else if (e.key === "Escape") {
+      const ledgerTrigger = $('[data-act="openLedgerMenu"][aria-expanded="true"]');
       closeCmdk();
       closeModal();
       closePopover();
+      ledgerTrigger?.focus({ preventScroll: true });
     }
   });
 
@@ -1518,7 +1587,7 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest("#popover-menu") && !e.target.closest('[data-act="openMoreMenu"], [data-act="openWorkMore"]')) closePopover();
+    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWorkMore"], [data-act="openLedgerMenu"]')) closePopover();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
     if (e.target === $("#cmdk-backdrop")) return closeCmdk();
 
@@ -1548,7 +1617,10 @@
     else if (act === "openNetworkPicker") openNetworkPicker();
     else if (act === "openWorkMore") openWorkMore(actBtn, id);
     else if (act === "refreshAntigravity") { closePopover(); postAction("refreshAntigravity"); }
-    else if (act === "goManage") { closePopover(); activeTab = "manage"; renderAll(); }
+    else if (act === "goManage") {
+      switchTab("manage");
+      $("#settings-apps")?.scrollIntoView({ block: "start" });
+    }
     else if (act === "copyWorkAddress") { closePopover(); postAction("copyWorkAddress", { tool: id }); }
     else if (["proxyOpen", "proxyRestart", "proxyStop"].includes(act)) {
       closePopover();
@@ -1566,6 +1638,12 @@
     else if (act === "forceQuit") postAction("forceQuit");
     else if (act === "startScreenshot") postAction("startScreenshot");
     else if (act === "startVoiceRecorder") postAction("startVoiceRecorder");
+    else if (act === "openLedgerMenu") toggleLedgerMenu(actBtn);
+    else if (act === "openLedgerForm") {
+      closePopover();
+      $('[data-act="openLedgerMenu"]')?.focus({ preventScroll: true });
+      postAction("openLedgerForm", { id });
+    }
     else if (act === "reregisterHotkey") postAction("reregisterHotkey");
     else if (act === "setScreenshotHotkey") postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: actBtn.dataset.hk });
     else if (act === "hideAllAiShortcuts") postAction("hideAllDesktopShortcuts", { category: "ai" });
