@@ -314,7 +314,7 @@ namespace CodexLauncher
 
         // ==================== CODEX USAGE FETCHER ====================
 
-        public static UsageSnapshot FetchCodexUsage(AuthInfo auth)
+        public static UsageSnapshot FetchCodexUsage(AuthInfo auth, ProxyStatusInfo automaticProxy = null)
         {
             if (auth == null || !auth.LoggedIn || string.IsNullOrEmpty(auth.AccessToken))
                 return new UsageSnapshot { Success = false, ErrorMessage = "尚未登录或无访问令牌" };
@@ -331,8 +331,8 @@ namespace CodexLauncher
                 if (!string.IsNullOrEmpty(auth.AccountId))
                     req.Headers["ChatGPT-Account-Id"] = auth.AccountId;
 
-                var proxyInfo = GetProxyStatus();
-                if (!proxyInfo.SystemProxyOn && proxyInfo.PortListening && proxyInfo.MixedPort > 0)
+                var proxyInfo = automaticProxy ?? GetProxyStatus();
+                if (automaticProxy != null || (!proxyInfo.SystemProxyOn && proxyInfo.PortListening && proxyInfo.MixedPort > 0))
                     req.Proxy = new WebProxy("127.0.0.1", proxyInfo.MixedPort);
 
                 using (var resp = (HttpWebResponse)req.GetResponse())
@@ -491,8 +491,9 @@ namespace CodexLauncher
 
             try
             {
-                info.Running = Process.GetProcessesByName("clash-verge").Length > 0
+                info.ClashProcessRunning = Process.GetProcessesByName("clash-verge").Length > 0
                     || Process.GetProcessesByName("verge-mihomo").Length > 0;
+                info.Running = info.ClashProcessRunning;
             }
             catch { }
 
@@ -1079,9 +1080,9 @@ namespace CodexLauncher
             return total;
         }
 
-        public static List<AccountViewModel> BuildAccountViewModels()
+        public static List<AccountViewModel> BuildAccountViewModels(AccountsStore store = null)
         {
-            var store = LoadStore();
+            if (store == null) store = LoadStore();
             var procs = ScanCodexProcesses();
             var list = new List<AccountViewModel>();
 

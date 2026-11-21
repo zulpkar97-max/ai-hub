@@ -1,0 +1,36 @@
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <AssemblyName>CodexLauncher</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <OutputType>winexe</OutputType>
+    <FrameworkRuntimeDir>$(MSBuildToolsPath)</FrameworkRuntimeDir>
+    <WinMetadataDir>$(WINDIR)\System32\WinMetadata</WinMetadataDir>
+    <WebViewSdkDir>$(MSBuildProjectDirectory)\资源\第三方</WebViewSdkDir>
+    <ApplicationIcon>资源\aihub.ico</ApplicationIcon>
+    <ApplicationManifest>资源\AIHub.manifest</ApplicationManifest>
+    <OutputFile Condition="'$(OutputFile)' == ''">$(MSBuildProjectDirectory)\bin\$(AssemblyName).exe</OutputFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="核心源码\**\*.cs" />
+    <FrameworkAssembly Include="System;System.Core;System.Drawing;System.Management;System.Runtime;System.Web.Extensions;System.Windows.Forms;System.Xaml" />
+    <WpfAssembly Include="WindowsBase;PresentationCore;PresentationFramework" />
+    <WindowsContract Include="Windows.Foundation;Windows.Globalization;Windows.Graphics;Windows.Media;Windows.Storage" />
+    <WebViewAssembly Include="Microsoft.Web.WebView2.Core;Microsoft.Web.WebView2.Wpf" />
+    <EmbeddedUi Include="页面代码\index.html;页面代码\界面样式.css;页面代码\工作台交互.js;页面代码\gemini.png;页面代码\ai-studio.png">
+      <LogicalName>AIHub.Ui.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedUi>
+  </ItemGroup>
+  <!-- Use the Windows .NET Framework compiler and native WinRT contracts used by the packaged executable. -->
+  <Target Name="Build">
+    <ItemGroup>
+      <CompileReference Include="@(FrameworkAssembly->'$(FrameworkRuntimeDir)\%(Identity).dll')" />
+      <CompileReference Include="@(WpfAssembly->'$(FrameworkRuntimeDir)\WPF\%(Identity).dll')" />
+      <CompileReference Include="@(WindowsContract->'$(WinMetadataDir)\%(Identity).winmd')" />
+      <CompileReference Include="@(WebViewAssembly->'$(WebViewSdkDir)\%(Identity).dll')" />
+    </ItemGroup>
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(OutputFile)'))" />
+    <Csc ToolPath="$(FrameworkRuntimeDir)" Sources="@(Compile)" References="@(CompileReference)"
+         Resources="@(EmbeddedUi)" Win32Icon="$(ApplicationIcon)" Win32Manifest="$(ApplicationManifest)"
+         OutputAssembly="$(OutputFile)" TargetType="$(OutputType)" Optimize="true" Utf8Output="true" />
+  </Target>
+</Project>

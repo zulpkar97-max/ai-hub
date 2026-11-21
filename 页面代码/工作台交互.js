@@ -189,7 +189,10 @@
 
   function shortcutLabel(hotkey) {
     const modifiers = { Ctrl: "⌃", Shift: "⇧", Win: "⊞", Alt: "⌥" };
-    return hotkey.split("+").map((key) => modifiers[key] || key).join("");
+    return hotkey.split("+").map((part) => {
+      const key = part.trim();
+      return modifiers[key] || key;
+    }).join("");
   }
 
   function renderSidebarTools() {
@@ -237,7 +240,7 @@
   }
 
   function quotaTone(percent) {
-    return percent <= 30 ? "warn" : "ok";
+    return percent <= 10 ? "danger" : (percent <= 30 ? "warn" : "ok");
   }
 
   function renderQuotaMeter({ title, value, when, percent, tone = "", labelAttrs = "", valueAttrs = "", fillAttrs = "", timeAttrs = "", action = "" }) {

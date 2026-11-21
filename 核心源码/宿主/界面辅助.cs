@@ -107,12 +107,12 @@ namespace CodexLauncher
         }
 
         // Refined Light-Mode Palette
-        public static readonly SolidColorBrush SidebarBg = BrushFromHex("#E6EAEF");
-        public static readonly SolidColorBrush MainBg = BrushFromHex("#F2F4F7");
-        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#F6F8FA");
-        public static readonly SolidColorBrush HoverBg = BrushFromHex("#E6EAEF");
+        public static readonly SolidColorBrush SidebarBg = BrushFromHex("#F7F7F8");
+        public static readonly SolidColorBrush MainBg = BrushFromHex("#FFFFFF");
+        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#FFFFFF");
+        public static readonly SolidColorBrush HoverBg = BrushFromHex("#F0F1F4");
 
-        public static readonly SolidColorBrush Hairline = BrushFromHex("#D9DFE8");
+        public static readonly SolidColorBrush Hairline = BrushFromHex("#E4E6EB");
         public static readonly SolidColorBrush BorderStrong = BrushFromHex("#232B35");
 
         public static readonly SolidColorBrush TextPrimary = BrushFromHex("#141920");

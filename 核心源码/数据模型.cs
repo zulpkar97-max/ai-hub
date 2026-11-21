@@ -162,7 +162,19 @@ namespace CodexLauncher
     {
         private DateTimeOffset _lastAttempt;
         private DateTimeOffset _retryAfter;
+        private int _failureCount;
         internal bool LastSuccessWasAutomatic;
+
+        internal static bool TryGetAutomaticProxy(bool appRunning, bool enabled, string networkState,
+            Func<ProxyStatusInfo> readProxy, out ProxyStatusInfo proxy)
+        {
+            proxy = null;
+            if (!appRunning || !enabled) return false;
+            try { proxy = readProxy(); }
+            catch (Exception) { return false; }
+            return proxy != null && proxy.Running && proxy.ClashProcessRunning && proxy.PortListening
+                && proxy.MixedPort > 0 && networkState != "stopped";
+        }
 
         internal bool IsDue(DateTimeOffset now, DateTimeOffset? fetchedAt, IEnumerable<QuotaBucketSnapshot> buckets,
             TimeSpan maximumAge, bool onlyNonFullResets)
@@ -182,8 +194,17 @@ namespace CodexLauncher
 
         internal void Finish(DateTimeOffset now, bool success, bool automatic)
         {
-            _retryAfter = success ? DateTimeOffset.MinValue : now.AddMinutes(10);
-            if (success) LastSuccessWasAutomatic = automatic;
+            if (success)
+            {
+                _failureCount = 0;
+                _retryAfter = DateTimeOffset.MinValue;
+                LastSuccessWasAutomatic = automatic;
+            }
+            else if (automatic)
+            {
+                _failureCount = Math.Min(_failureCount + 1, 3);
+                _retryAfter = now.AddMinutes(_failureCount == 1 ? 10 : _failureCount == 2 ? 30 : 120);
+            }
         }
 
         internal static List<string> CollectRefilled(string owner, Dictionary<string, long> notified,
@@ -212,6 +233,7 @@ namespace CodexLauncher
         public bool Installed { get; set; }
         public string ExePath { get; set; }
         public bool Running { get; set; }
+        internal bool ClashProcessRunning { get; set; }
         public bool SystemProxyOn { get; set; }
         public bool TunOn { get; set; }
         public int MixedPort { get; set; }

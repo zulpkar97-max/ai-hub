@@ -46,7 +46,7 @@ namespace CodexLauncher
             catch { return null; }
         }
 
-        internal static AntigravityUsage Refresh(CancellationToken cancellation)
+        internal static AntigravityUsage Refresh(CancellationToken cancellation, Func<ProxyStatusInfo> automaticProxy = null)
         {
             if (!IsInstalled) throw new InvalidOperationException("请先安装 Antigravity CLI。");
             Directory.CreateDirectory(WorkDir);
@@ -70,6 +70,17 @@ namespace CodexLauncher
                     { "AIHUB_AGY_QUOTA_PATH", capture },
                     { "AGY_CLI_DISABLE_AUTO_UPDATE", "true" }
                 };
+                cancellation.ThrowIfCancellationRequested();
+                if (automaticProxy != null)
+                {
+                    var proxy = automaticProxy();
+                    if (proxy == null) throw new OperationCanceledException();
+                    string proxyUrl = "http://127.0.0.1:" + proxy.MixedPort;
+                    environment["HTTP_PROXY"] = proxyUrl;
+                    environment["HTTPS_PROXY"] = proxyUrl;
+                    environment["ALL_PROXY"] = proxyUrl;
+                    environment["NO_PROXY"] = "localhost,127.0.0.1,::1";
+                }
                 using (var terminal = new QuotaTerminal(Binary, "--mode plan --settings " + Quote(settings), WorkDir, environment))
                 {
                     var clock = Stopwatch.StartNew();
