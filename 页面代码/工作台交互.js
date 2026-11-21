@@ -8,6 +8,7 @@
   let activeTab = "workspace"; // "workspace" | "manage"
   let cmdkItems = [];
   let cmdkSelected = 0;
+  let networkBusy = "";
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -141,7 +142,7 @@
   function renderAll() {
     if (!appState) return;
     $("#version-label").textContent = `${appState.version || "v4.1"} · 更新日志`;
-    $("#nav-workspace-dot").classList.toggle("hidden", !appState.proxy?.running);
+    $("#nav-workspace-dot").classList.toggle("hidden", appState.network?.state !== "reachable" || !appState.proxy?.running);
 
     $$(".nav-item").forEach((el) => el.classList.toggle("active", el.dataset.tab === activeTab));
 
@@ -149,7 +150,69 @@
     else renderManage();
   }
 
-  // UNIFIED WORKSPACE: Clash Verge -> Codex Accounts & Quotas -> Desktop AI Apps (2-col) -> Google Chrome Accounts
+  function renderNetwork(proxy) {
+    const network = appState.network || {};
+    const detailsOpen = $("#network-details")?.open;
+    const state = proxy.running ? (network.state === "stopped" ? "unknown" : network.state) : "stopped";
+    const delay = state === "reachable" ? network.delay : null;
+    const slow = delay > 300;
+    const unavailable = state === "timeout" || state === "unavailable" || state === "stopped";
+    const label = state === "reachable" ? (slow ? "网络较慢" : "网络正常")
+      : unavailable ? "网络异常" : (state === "controller" ? "无法读取网络状态" : "待检测");
+    const tone = state === "reachable" ? (slow ? "is-warning" : "is-ok") : (unavailable ? "is-warning" : "");
+    const delayLabel = delay != null ? delay + " ms" : (state === "timeout" ? "超时" : state === "unavailable" ? "不可用" : "—");
+    const mode = ({ rule: "规则模式", global: "全局模式", direct: "直连模式" })[network.mode];
+    const group = mode && proxy.running ? [mode, network.group].filter(Boolean).join(" · ") : "";
+    const clash = proxy.running ? "运行中" : (proxy.installed ? "未启动" : "未检测到");
+    const checked = proxy.running && network.checked_at ? fmtDate(network.checked_at, true) : "";
+    const diagnostics = [
+      ["Clash Verge", clash],
+      ["系统代理", proxy.system_proxy ? "ON" : "OFF"],
+      ["TUN", proxy.tun ? "ON" : "OFF"],
+      ["代理端口", proxy.port ? proxy.port + (proxy.port_listening ? " · 监听中" : " · 未监听") : "—"],
+      ["当前配置", proxy.profile || "—"],
+    ];
+    if (checked) diagnostics.push(["检测时间", checked]);
+    if (proxy.running) diagnostics.push(["延迟探测", "www.gstatic.com · HTTPS 204"]);
+    return `
+      <section class="surface-card network-card" aria-labelledby="network-title">
+        <div class="network-main">
+          <div class="network-heading">
+            <h2 id="network-title" class="app-name">网络</h2>
+            <span class="status-inline network-status ${tone}"><span class="status-dot"></span>${label}</span>
+          </div>
+          <div class="network-metrics">
+            <div class="network-metric">
+              <div class="network-label">当前节点</div>
+              <strong>${esc(proxy.running ? network.node || "未读取到节点" : "代理未启动")}</strong>
+              ${group ? `<span class="network-context">${esc(group)}</span>` : ""}
+            </div>
+            <div class="network-metric">
+              <div class="network-label">延迟</div>
+              <strong class="${tone}">${delayLabel}</strong>
+            </div>
+          </div>
+          <div class="network-actions">
+            <button class="btn btn-secondary btn-sm" data-act="measureNetwork"
+              ${!proxy.running || !appState.network || networkBusy ? "disabled" : ""}>${ICONS.refresh} ${networkBusy === "measure" ? "检测中…" : "刷新延迟"}</button>
+            <button class="btn btn-secondary btn-sm" data-act="openNetworkPicker"
+              ${!proxy.running || !network.can_select || networkBusy ? "disabled" : ""}>切换节点</button>
+          </div>
+        </div>
+        <details class="network-details" id="network-details" ${detailsOpen ? "open" : ""}>
+          <summary>网络详情</summary>
+          <dl class="network-diagnostics">${diagnostics.map(([key, value]) =>
+            `<div><dt>${key}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl>
+          ${proxy.installed ? `
+            <div class="network-management">
+              <button class="btn btn-secondary btn-sm" data-act="proxyOpen">${proxy.running ? "打开 Clash 面板" : "启动代理"}</button>
+              ${proxy.running ? `<button class="btn btn-secondary btn-sm" data-act="proxyRestart">重启代理</button>
+                <button class="btn btn-ghost btn-sm" data-act="proxyStop">关闭代理</button>` : ""}
+            </div>` : ""}
+        </details>
+      </section>`;
+  }
+
   function renderUnifiedWorkspace() {
     const proxy = appState.proxy || {};
     const accounts = appState.accounts || [];
@@ -166,51 +229,14 @@
 
     const shotHk = appState.screenshot?.hotkey || "Ctrl+Shift+A";
     $("#view-title").textContent = "工作台";
-    $("#view-sub").textContent = `网络通道${proxy.running ? "在线" : "未启动"} · ${runningOtherApps + (runningCodex.length ? 1 : 0)} 个工具运行中`;
+    $("#view-sub").textContent = `${runningOtherApps + (runningCodex.length ? 1 : 0)} 个工具运行中`;
     $("#header-actions").innerHTML = `
       ${appState.pending_update ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : ""}
       <button class="btn btn-secondary btn-sm" data-act="startScreenshot" title="快捷截图与提字 (${esc(shotHk)})">${ICONS.crop} 截图</button>
       ${appState.voice_recorder_hotkey ? `<button class="btn btn-secondary btn-sm" data-act="startVoiceRecorder" title="打开微信输入法 AI 录音笔 (${esc(appState.voice_recorder_hotkey)})">${ICONS.mic} AI 录音笔</button>` : ""}
     `;
 
-    // LAYER 1: Clash Verge Priority Network Channel
-    const proxyTags = proxy.running
-      ? `
-        <span class="tag ${proxy.system_proxy ? "tag-ok" : ""}">系统代理 ${proxy.system_proxy ? "ON" : "OFF"}</span>
-        <span class="tag ${proxy.tun ? "tag-ok" : ""}">TUN ${proxy.tun ? "ON" : "OFF"}</span>
-        ${proxy.port ? `<span class="tag">:${proxy.port}</span>` : ""}
-        ${proxy.profile ? `<span style="font-size:11.5px;color:var(--text-muted);margin-left:4px;">${esc(proxy.profile)}</span>` : ""}
-      `
-      : `<span style="font-size:11.5px;color:var(--warn);">启动代理后可正常连接 Codex、Gemini 与远程工作通道</span>`;
-
-    const proxyBtns = proxy.installed
-      ? `
-        <button class="btn ${proxy.running ? "btn-secondary" : "btn-primary"} btn-sm" data-act="proxyOpen">${proxy.running ? "打开面板" : "启动代理"}</button>
-        ${proxy.running ? `<button class="btn btn-secondary btn-sm" data-act="proxyRestart">重启代理</button>` : ""}
-        ${proxy.running ? `<button class="btn btn-ghost btn-sm" data-act="proxyStop">关闭</button>` : ""}
-      `
-      : `<span class="tag">未检测到</span>`;
-
-    let html = `
-      <div class="sec-heading"><span class="sec-title">网络与通道（前置必备）</span></div>
-      <div class="surface-card proxy-card ${proxy.running ? "" : "offline"}">
-        <div class="proxy-inner">
-          <div class="app-left">
-            ${proxy.icon_url ? `<img class="app-icon" src="${esc(proxy.icon_url)}" alt="Clash Verge" />` : ""}
-            <div class="app-info">
-              <div class="app-name-line">
-                <span class="app-name">Clash Verge</span>
-                <span class="status-inline ${proxy.running ? "running" : ""}">
-                  <span class="status-dot"></span>${proxy.running ? "运行中" : (proxy.installed ? "未启动" : "未检测到")}
-                </span>
-              </div>
-              <div class="tag-row">${proxyTags}</div>
-            </div>
-          </div>
-          <div class="app-right">${proxyBtns}</div>
-        </div>
-      </div>
-    `;
+    let html = renderNetwork(proxy);
 
     html += `
       <div class="sec-heading"><span class="sec-title">AI 工作工具</span></div>
@@ -231,7 +257,6 @@
           </div>
         </header>
         <div class="codex-accounts">
-          <h3 class="sec-title">账号</h3>
           ${accounts.length ? "" : '<div class="quota-feedback">暂无账号</div>'}
     `;
 
@@ -308,7 +333,7 @@
       }
 
       html += `
-        <article class="account-card">
+        <article class="codex-account">
           <div class="account-top">
             <div class="app-info">
               <div class="app-name-line">
@@ -662,6 +687,98 @@
 
   function closeModal() {
     $("#modal-backdrop").classList.add("hidden");
+  }
+
+  async function measureNetwork() {
+    if (networkBusy) return;
+    networkBusy = "measure";
+    renderAll();
+    try {
+      await callHost("measureNetwork");
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      networkBusy = "";
+      renderAll();
+    }
+  }
+
+  function openNetworkPicker() {
+    if (networkBusy) return;
+    openModal(`
+      <div class="modal-header">
+        <h3>切换节点</h3>
+        <button class="btn btn-icon" data-close-modal aria-label="关闭">${ICONS.close}</button>
+      </div>
+      <div class="modal-body" id="network-picker" aria-live="polite"></div>
+    `, true);
+
+    const panel = $("#network-picker");
+    const isOpen = () => panel.isConnected && !$("#modal-backdrop").classList.contains("hidden");
+
+    async function loadNodes(group) {
+      panel.textContent = "正在读取节点…";
+      try {
+        const result = await callHost("listNetworkNodes", { group });
+        if (!isOpen()) return;
+        panel.innerHTML = `
+          <div class="field">
+            <label for="network-policy-group">策略组</label>
+            <select id="network-policy-group">${result.groups.map((name) =>
+              `<option value="${esc(name)}" ${name === result.group ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
+          </div>
+          <div class="network-node-list" aria-label="节点列表">${result.nodes.map((node, i) => {
+            const latency = node.delay != null ? node.delay + " ms" : (node.state === "unavailable" ? "不可用" : "未测");
+            return `<button type="button" class="network-node" data-node-index="${i}"
+              ${node.selected ? "disabled" : ""}>
+              <span>${esc(node.name)}</span><span class="network-node-delay">${node.selected ? "当前 · " : ""}${latency}</span>
+            </button>`;
+          }).join("")}</div>
+          <div class="quota-feedback" role="status" data-switch-message></div>`;
+
+        const policy = panel.querySelector("select");
+        const list = panel.querySelector(".network-node-list");
+        const message = panel.querySelector("[data-switch-message]");
+        policy.addEventListener("change", () => loadNodes(policy.value));
+        list.addEventListener("click", async (event) => {
+          const button = event.target.closest("[data-node-index]");
+          if (!button || button.disabled || networkBusy) return;
+          const node = result.nodes[Number(button.dataset.nodeIndex)];
+          networkBusy = "switch";
+          renderAll();
+          policy.disabled = true;
+          list.querySelectorAll("button").forEach((item) => { item.disabled = true; });
+          message.textContent = "正在切换节点并检测延迟…";
+          try {
+            await callHost("switchNetworkNode", { group: result.group, node: node.name });
+            if (isOpen()) closeModal();
+            showToast("已切换到 " + node.name);
+          } catch (err) {
+            if (isOpen()) {
+              message.textContent = err.message;
+              policy.disabled = false;
+              list.querySelectorAll("button").forEach((item, i) => { item.disabled = result.nodes[i].selected; });
+            } else {
+              showToast(err.message, true);
+            }
+          } finally {
+            networkBusy = "";
+            renderAll();
+          }
+        });
+      } catch (err) {
+        if (!isOpen()) return;
+        panel.textContent = err.message;
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn btn-secondary btn-sm";
+        retry.textContent = "重新读取";
+        retry.addEventListener("click", () => loadNodes(group));
+        panel.appendChild(retry);
+      }
+    }
+
+    loadNodes("");
   }
 
   function openConfirmModal(title, message, confirmLabel, danger, onConfirm) {
@@ -1181,6 +1298,8 @@
     else if (act === "refresh") postAction("refresh", { toast: "1" });
     else if (act === "refreshAllUsage") postAction("refreshAllUsage");
     else if (act === "refreshUsage") postAction("refreshUsage", { id });
+    else if (act === "measureNetwork") measureNetwork();
+    else if (act === "openNetworkPicker") openNetworkPicker();
     else if (act === "proxyOpen") postAction("proxyOpen");
     else if (act === "proxyRestart") postAction("proxyRestart");
     else if (act === "proxyStop") postAction("proxyStop");

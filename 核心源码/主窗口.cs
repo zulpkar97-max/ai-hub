@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
@@ -46,6 +47,11 @@ namespace CodexLauncher
         private AccountsStore _store;
         private List<AccountViewModel> _accounts = new List<AccountViewModel>();
         private ProxyStatusInfo _proxy = new ProxyStatusInfo();
+        private readonly ClashNetwork _network = new ClashNetwork();
+        private readonly SemaphoreSlim _networkGate = new SemaphoreSlim(1);
+        private NetworkStatus _networkStatus = new NetworkStatus { state = "unknown" };
+        private bool _networkPolling;
+        private bool _networkWorking;
         private List<ChromeProfileInfo> _chromeProfiles = new List<ChromeProfileInfo>();
         private readonly Dictionary<string, UsageSnapshot> _usageCache = new Dictionary<string, UsageSnapshot>();
         private readonly Dictionary<string, AuthInfo> _usageLoading = new Dictionary<string, AuthInfo>();
@@ -540,6 +546,7 @@ namespace CodexLauncher
                     if (shortcuts != null) _desktopShortcuts = shortcuts;
 
                     PushFullState();
+                    PollNetwork();
                     CheckExpiryBalloon();
 
                     if (refreshError != null && refreshError != _lastRefreshError)
@@ -547,6 +554,64 @@ namespace CodexLauncher
                     _lastRefreshError = refreshError;
                 }));
             });
+        }
+
+        private async void PollNetwork()
+        {
+            if (_networkPolling || _networkWorking) return;
+            _networkPolling = true;
+            await _networkGate.WaitAsync();
+            try
+            {
+                bool running = _proxy.Running;
+                bool visible = IsVisible;
+                var status = await Task.Run(() => _network.Read(running, visible));
+                if (running == _proxy.Running) SetNetworkStatus(status);
+            }
+            finally
+            {
+                _networkGate.Release();
+                _networkPolling = false;
+            }
+        }
+
+        private void SetNetworkStatus(NetworkStatus status)
+        {
+            if (Json.Serialize(_networkStatus) == Json.Serialize(status)) return;
+            _networkStatus = status;
+            PushFullState();
+        }
+
+        private async void RunNetworkAction(string reqId, Func<object> work)
+        {
+            if (_networkWorking)
+            {
+                ReplyJs(reqId, false, null, "正在处理网络操作，请稍后再试。");
+                return;
+            }
+
+            _networkWorking = true;
+            await _networkGate.WaitAsync();
+            try
+            {
+                var result = await Task.Run(work);
+                var status = result as NetworkStatus;
+                if (status != null) SetNetworkStatus(status);
+                ReplyJs(reqId, true, result, null);
+            }
+            catch (InvalidOperationException ex)
+            {
+                ReplyJs(reqId, false, null, ex.Message);
+            }
+            catch (Exception)
+            {
+                ReplyJs(reqId, false, null, "无法从本机 Clash 控制接口完成操作，请稍后重试。");
+            }
+            finally
+            {
+                _networkGate.Release();
+                _networkWorking = false;
+            }
         }
 
         private void CheckExpiryBalloon()
@@ -786,6 +851,7 @@ namespace CodexLauncher
                     }
                 },
                 { "desktop_shortcuts", shortcutList },
+                { "network", _networkStatus },
                 { "proxy", new Dictionary<string, object>
                     {
                         { "installed", _proxy.Installed },
@@ -793,6 +859,7 @@ namespace CodexLauncher
                         { "system_proxy", _proxy.SystemProxyOn },
                         { "tun", _proxy.TunOn },
                         { "port", _proxy.MixedPort },
+                        { "port_listening", _proxy.PortListening },
                         { "profile", _proxy.ActiveProfileName ?? "" },
                         { "icon_url", _proxy.Installed ? CoreService.GetCachedIconUrl(_proxy.ExePath, "exe") : "" }
                     }
@@ -918,6 +985,18 @@ namespace CodexLauncher
                             if (vm != null) RefreshUsageForAccountAsync(vm, false);
                             break;
                         }
+
+                    case "measureNetwork":
+                        RunNetworkAction(reqId, () => _network.Measure());
+                        break;
+
+                    case "listNetworkNodes":
+                        RunNetworkAction(reqId, () => _network.ListNodes(AuthParser.GetStr(data, "group")));
+                        break;
+
+                    case "switchNetworkNode":
+                        RunNetworkAction(reqId, () => _network.SwitchNode(AuthParser.GetStr(data, "group"), AuthParser.GetStr(data, "node")));
+                        break;
 
                     case "proxyOpen":
                         CoreService.OpenOrStartClashVerge();

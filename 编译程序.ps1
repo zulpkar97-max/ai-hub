@@ -19,6 +19,7 @@ $winmd = 'C:\Windows\System32\WinMetadata'
 $sources = @(
     (Join-Path $root '核心源码\数据模型.cs'),
     (Join-Path $root '核心源码\核心服务.cs'),
+    (Join-Path $root '核心源码\网络通道.cs'),
     (Join-Path $root '核心源码\桌面图标收纳.cs'),
     (Join-Path $root '核心源码\离线文字识别.cs'),
     (Join-Path $root '核心源码\界面辅助.cs'),
