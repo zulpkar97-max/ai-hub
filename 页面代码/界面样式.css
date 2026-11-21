@@ -528,42 +528,49 @@ kbd {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 9px 16px;
-  padding: 10px 14px;
+  gap: 6px 10px;
+  padding: 7px 10px;
 }
 
-.network-heading {
-  display: grid;
-  gap: 1px;
-}
-
-.network-heading h2 { margin: 0; }
-.network-status .status-dot { flex: none; }
-.network-card .is-ok { color: var(--ok); }
-.network-card .is-warning { color: var(--warn); }
-.network-status.is-ok .status-dot { background: var(--ok); }
-.network-status.is-warning .status-dot { background: var(--warn); }
-
-.network-route {
+.network-data {
   display: flex;
   align-items: center;
-  gap: 12px;
   flex: 0 1 auto;
   min-width: 0;
-  padding-inline-start: 16px;
-  border-inline-start: 1px solid var(--hairline);
+  max-width: 100%;
 }
 
-.network-node-summary {
-  display: grid;
-  gap: 1px;
+.network-cell {
+  display: inline-flex;
+  align-items: center;
+  min-height: 19px;
+  padding-inline: 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.network-cell + .network-cell { border-inline-start: 1px solid var(--hairline); }
+.network-status { gap: 6px; font-weight: 600; }
+.network-status .status-dot { flex: none; }
+.network-policy, .network-traffic { color: var(--text-secondary); }
+.network-cell.network-node-summary {
+  display: block;
+  align-content: center;
+  flex: 0 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
 }
 
-.network-node-summary strong { font-size: 13px; font-weight: 600; }
-.network-policy { font-size: 11.5px; color: var(--text-muted); }
-.network-latency { flex: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.network-latency { font-weight: 650; font-variant-numeric: tabular-nums; }
+.network-latency small { margin-left: 3px; font-size: 10.5px; color: var(--text-muted); font-weight: 400; }
+.network-card .is-ok { color: var(--ok); }
+.network-card .is-warning { color: var(--warn); }
+.network-card .is-danger { color: var(--danger); }
+.network-status.is-ok .status-dot { background: var(--ok); }
+.network-status.is-danger .status-dot { background: var(--danger); }
 
 .network-actions, .network-picker-actions {
   display: flex;
@@ -572,7 +579,35 @@ kbd {
   gap: 6px;
 }
 
-.network-actions { margin-inline-start: auto; }
+.network-actions {
+  margin-inline-start: auto;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--hairline);
+  gap: 2px;
+}
+
+.network-tool {
+  width: 29px;
+  min-height: 29px;
+  padding: 0;
+  justify-content: center;
+}
+
+.network-tool .ic { width: 15px; height: 15px; }
+.network-tool.is-spinning { opacity: 0.75; }
+.network-tool.is-spinning .ic { animation: network-spin 0.9s linear infinite; }
+
+@keyframes network-spin { to { transform: rotate(1turn); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .network-tool.is-spinning .ic { animation: none; }
+}
+
+@media (max-width: 770px) {
+  .network-data { flex-wrap: wrap; row-gap: 5px; }
+  .network-cell.network-node-summary { max-width: 100%; }
+  .network-actions { margin-inline-start: 0; border-inline-start: 0; }
+}
 
 .network-picker-header {
   flex-wrap: wrap;
@@ -580,6 +615,7 @@ kbd {
 }
 
 .network-picker-actions { margin-inline-start: auto; }
+.network-picker-actions .btn-ghost { min-height: 28px; }
 
 .network-policies:not(:empty) {
   align-self: flex-start;
@@ -808,13 +844,10 @@ kbd {
   margin: 0;
 }
 
-.codex-tool-header .status-inline {
-  margin-top: 2px;
-}
-
 .codex-tool-actions,
-.codex-tool .account-top .app-right {
+.account-actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
@@ -826,26 +859,11 @@ kbd {
   border-top: 1px solid var(--hairline);
 }
 
-.codex-account, .codex-accounts > .quota-feedback {
-  padding: 13px 14px;
-}
-
+.codex-account, .codex-accounts > .quota-feedback { padding: 15px 16px 17px; }
 .codex-account + .codex-account { border-top: 1px solid var(--hairline); }
-
-.codex-tool .account-top,
-.codex-tool .meter-head,
-.codex-tool .meter-head-left,
-.codex-tool .meter-head-right {
-  flex-wrap: wrap;
-}
-
-.codex-tool .meter-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-}
-
-.codex-tool .meter-head-right {
-  flex-shrink: 1;
-}
+.account-name { margin: 0; font-size: 14px; }
+.account-email { max-width: 480px; }
+.account-actions .status-inline { margin-inline-end: 4px; }
 
 .quota-feedback {
   grid-column: 1 / -1;
@@ -860,43 +878,38 @@ kbd {
 
 .account-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
-/* Precision Hardware Segmented Quota & Countdown Meters (Zero nested grey box!) */
-.meter-divider {
-  height: 1px;
-  background: var(--hairline);
-  margin: 12px 0 11px;
+.account-usage { margin-top: 14px; }
+
+.account-usage-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
+
+.account-usage-head span:first-child { font-weight: 600; color: var(--text-secondary); }
+.account-usage-head time { margin-inline-start: auto; }
 
 .meter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px 20px;
-  align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  gap: 13px 18px;
+  align-items: start;
 }
 
 .meter-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.meter-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.meter-head-left {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
+  display: grid;
+  grid-template-rows: auto auto auto 9px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -909,18 +922,12 @@ kbd {
 .meter-reset {
   font-size: 11px;
   color: var(--text-muted);
-}
-
-.meter-head-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  margin-bottom: 4px;
 }
 
 .meter-pct {
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 13.5px;
+  font-size: 18px;
+  line-height: 1.2;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);
@@ -930,11 +937,17 @@ kbd {
 .meter-pct.tone-warn { color: var(--warn); }
 .meter-pct.tone-danger { color: var(--danger); }
 
-/* Sleek Full-Width Gradient Progress Track (Plan A) */
+.meter-calibrate {
+  justify-self: start;
+  margin-top: 3px;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
 .grad-track {
   position: relative;
   width: 100%;
-  height: 6px;
+  height: 9px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.068);
   box-shadow: inset 0 1px 1.5px rgba(15, 23, 42, 0.05);

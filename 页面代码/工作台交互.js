@@ -15,6 +15,7 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   const ICONS = {
+    switch: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg>',
     refresh: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
     plus: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
     play: '<svg class="ic ic-xs" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none"/></svg>',
@@ -113,13 +114,14 @@
     const level = (expired || remainMs <= 48 * 3600000) ? "danger" : (remainMs <= 5 * 86400000 ? "warn" : "ok");
     const p2 = (n) => String(n).padStart(2, "0");
     const compact = expired ? `已超期 ${d}天 ${p2(h)}:${p2(m)}:${p2(s)}` : `${d}天 ${p2(h)}时 ${p2(m)}分 ${p2(s)}秒`;
-    return { expired, pct, level, compact, targetShort: fmtDate(acc.recycle_at, true) };
+    const meterValue = d > 0 ? `${d}天 ${p2(h)}时` : (h > 0 ? `${h}时 ${p2(m)}分` : `${m}分 ${p2(s)}秒`);
+    return { expired, pct, level, compact, meterValue, targetShort: fmtDate(acc.recycle_at, true) };
   }
 
   function recycleStatus(cd) {
     if (cd.expired) return "回收已超期";
     if (cd.level === "danger") return "临近回收";
-    return cd.level === "warn" ? "即将回收" : "回收倒计时";
+    return cd.level === "warn" ? "即将回收" : "回收";
   }
 
   function renderGradientBar(pct, tone, fillAttr = "") {
@@ -134,7 +136,7 @@
     if (p === "plus") return `<span class="tag tag-ok">Plus</span>`;
     if (p === "pro") return `<span class="tag tag-pro">Pro</span>`;
     if (p === "team" || p === "enterprise") return `<span class="tag tag-pro">${esc(p.toUpperCase())}</span>`;
-    if (p === "free") return `<span class="tag">免费版</span>`;
+    if (p === "free") return `<span class="tag">Free</span>`;
     return `<span class="tag">${esc(p || "已登录")}</span>`;
   }
 
@@ -151,38 +153,56 @@
     else renderManage();
   }
 
+  function networkDelayTone(state, delay) {
+    if (state === "timeout" || state === "unavailable") return "is-danger";
+    if (state !== "reachable" || delay == null) return "";
+    return delay < 100 ? "is-ok" : (delay <= 180 ? "is-warning" : "is-danger");
+  }
+
+  function formatTraffic(bytes) {
+    return (Math.max(0, bytes) / (1024 ** 3)).toFixed(2) + " GB";
+  }
+
   function renderNetwork(proxy) {
     const network = appState.network || {};
     const state = proxy.running ? (network.state === "stopped" ? "unknown" : network.state) : "stopped";
-    const delay = state === "reachable" ? network.delay : null;
-    const slow = delay > 300;
-    const unavailable = state === "timeout" || state === "unavailable" || state === "stopped";
-    const label = state === "reachable" ? (slow ? "网络较慢" : "网络正常")
-      : unavailable ? "网络异常" : (state === "controller" ? "状态未知" : "待检测");
-    const tone = state === "reachable" ? (slow ? "is-warning" : "is-ok") : (unavailable ? "is-warning" : "");
-    const delayLabel = delay != null ? delay + " ms" : (state === "timeout" ? "超时" : state === "unavailable" ? "不可用" : "—");
+    const down = ["stopped", "timeout", "unavailable"].includes(state);
+    const label = state === "reachable" ? "网络正常" : (down ? "网络异常" : (state === "controller" ? "状态未知" : "网络待检测"));
+    const tone = state === "reachable" ? "is-ok" : (down ? "is-danger" : "");
+    const delayTone = networkDelayTone(state, network.delay);
+    const latency = !proxy.running ? "—" : state === "timeout" ? "超时" : state === "unavailable" ? "不可用"
+      : (network.delay != null && !network.delay_stale ? network.delay + " ms" : "—");
+    const lastDelay = proxy.running && network.delay_stale ? " · 上次 " + network.delay + " ms" : "";
     const mode = ({ rule: "规则路由", global: "全局代理", direct: "直连" })[network.mode];
     const policy = proxy.running ? network.group || mode : "";
+    const node = proxy.running ? network.node || "节点未知" : "代理未启动";
+    const subscription = network.subscription;
+    const traffic = subscription ? "剩余 " + formatTraffic(subscription.total_bytes - subscription.used_bytes) : "流量待获取";
+    const trafficDetails = subscription
+      ? ["NIVA Network", "已用 " + formatTraffic(subscription.used_bytes), "总量 " + formatTraffic(subscription.total_bytes),
+        subscription.expires_at ? "到期 " + fmtDate(subscription.expires_at) : ""].filter(Boolean).join("\n")
+      : "NIVA Network";
+    const refreshLabel = networkBusy === "refresh" ? "刷新中…" : "刷新网络状态";
+    const tools = [
+      ["refreshNetwork", refreshLabel, ICONS.refresh, !proxy.running || !appState.network_status_refresh || !!networkBusy, networkBusy === "refresh"],
+      ["openNetworkPicker", "切换节点", ICONS.switch, !proxy.running || !network.can_select || !appState.network_japan_picker || !!networkBusy],
+      ["proxyOpen", "打开 Clash Verge", ICONS.ext, !proxy.installed],
+      ["openNetworkMenu", "更多网络操作", ICONS.more, !proxy.running],
+    ];
+
     return `
-      <section class="surface-card network-card" aria-labelledby="network-title">
-        <div class="network-heading">
-          <h2 id="network-title" class="app-name">网络</h2>
-          <span class="status-inline network-status ${tone}"><span class="status-dot"></span>${label}</span>
+      <section class="surface-card network-card" aria-label="网络状态">
+        <div class="network-data">
+          <span class="network-cell network-status ${tone}"><span class="status-dot"></span>${label}</span>
+          ${policy ? `<span class="network-cell network-policy">${esc(policy)}</span>` : ""}
+          <span class="network-cell network-node-summary" title="${esc(node)}">${esc(node)}</span>
+          <span class="network-cell network-latency ${delayTone}" title="当前节点延迟${esc(lastDelay)}">${esc(latency)}${lastDelay ? `<small>${esc(lastDelay)}</small>` : ""}</span>
+          <span class="network-cell network-traffic" title="${esc(trafficDetails)}">${esc(traffic)}</span>
         </div>
-        <div class="network-route">
-          <div class="network-node-summary">
-            <strong>${esc(proxy.running ? network.node || "未读取到节点" : "代理未启动")}</strong>
-            ${policy ? `<span class="network-policy">${esc(policy)}</span>` : ""}
-          </div>
-          <strong class="network-latency ${tone}" title="当前节点延迟">${esc(delayLabel)}</strong>
-        </div>
-        <div class="network-actions">
-          <button class="btn btn-secondary btn-sm" data-act="measureNetwork"
-            ${!proxy.running || !appState.network || networkBusy ? "disabled" : ""}>${ICONS.refresh} ${networkBusy === "measure" ? "检测中…" : "刷新延迟"}</button>
-          <button class="btn btn-secondary btn-sm" data-act="openNetworkPicker"
-            ${!proxy.running || !network.can_select || !appState.network_japan_picker || networkBusy ? "disabled" : ""}>切换节点</button>
-          <button class="btn btn-secondary btn-icon-only btn-sm" data-act="openNetworkMenu"
-            aria-label="更多网络操作"${!proxy.installed && !proxy.running ? " disabled" : ""}>${ICONS.more}</button>
+        <div class="network-actions" role="group" aria-label="网络工具栏">
+          ${tools.map(([action, label, icon, disabled, spin]) => `<button type="button"
+            class="btn btn-ghost network-tool${spin ? " is-spinning" : ""}" data-act="${action}"
+            title="${label}" aria-label="${label}" ${disabled ? "disabled" : ""}>${icon}</button>`).join("")}
         </div>
       </section>`;
   }
@@ -193,9 +213,7 @@
     const sections = appState.tool_sections || [];
     const chromes = appState.chrome_profiles || [];
 
-    const runningCodex = accounts.filter((a) => a.running);
-    const visibleCodex = runningCodex.filter((a) => a.window_visible === true).length;
-    const backgroundCodex = runningCodex.length - visibleCodex;
+    const codexRunning = accounts.some((acc) => acc.running);
     let runningOtherApps = 0;
     sections.forEach((s) => (s.items || []).forEach((it) => {
       if (it.uninstall_hint !== "OpenAI.Codex" && it.running) runningOtherApps++;
@@ -203,7 +221,7 @@
 
     const shotHk = appState.screenshot?.hotkey || "Ctrl+Shift+A";
     $("#view-title").textContent = "工作台";
-    $("#view-sub").textContent = `${runningOtherApps + (runningCodex.length ? 1 : 0)} 个工具运行中`;
+    $("#view-sub").textContent = `${runningOtherApps + (codexRunning ? 1 : 0)} 个工具运行中`;
     $("#header-actions").innerHTML = `
       ${appState.pending_update ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : ""}
       <button class="btn btn-secondary btn-sm" data-act="startScreenshot" title="快捷截图与提字 (${esc(shotHk)})">${ICONS.crop} 截图</button>
@@ -220,9 +238,7 @@
             <img class="app-icon" src="https://icons.aihub.local/chatgpt.png" alt="" />
             <div class="app-info">
               <h2 id="codex-tool-title" class="app-name">Codex</h2>
-              <div class="status-inline ${runningCodex.length ? "running" : ""}">
-                <span class="status-dot"></span>${accounts.length} 个账号 · ${visibleCodex} 个窗口已打开${backgroundCodex ? ` · ${backgroundCodex} 个后台运行` : ""}
-              </div>
+              <div class="app-sub">${accounts.length} 个账号</div>
             </div>
           </div>
           <div class="codex-tool-actions">
@@ -237,97 +253,86 @@
     for (const acc of accounts) {
       const cd = computeCountdown(acc);
       const auth = acc.auth || {};
-      const email = auth.logged_in
-        ? (auth.email || auth.display_name || "已登录")
-        : "尚未登录 · 点击启动并登录后自动识别账号与额度";
-      const usageUpdated = acc.usage?.success && acc.usage?.fetched_at ? "额度更新于 " + fmtDate(acc.usage.fetched_at, true) : "";
-      const subLine = [email, acc.disk_size ? ("本地 " + acc.disk_size) : "", usageUpdated, acc.notes].filter(Boolean).join(" · ");
+      const name = acc.is_default ? "主账号" : acc.name;
+      const email = auth.logged_in ? (auth.email || auth.display_name || "已登录") : "尚未登录";
+      const timestamp = acc.usage?.success ? acc.usage.fetched_at : null;
+      const updated = timestamp ? new Date(timestamp) : null;
+      const updatedText = updated && !Number.isNaN(updated.getTime())
+        ? (updated.toDateString() === new Date().toDateString()
+          ? updated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
+          : fmtDate(timestamp, true))
+        : "";
 
-      // Build clean full-width / auto-split segmented hardware meters (NO nested grey box!)
       let meterBlocks = "";
       if (!auth.logged_in) {
-        meterBlocks = `<div style="font-size:12px;color:var(--text-muted);">登录后自动读取该账号剩余额度</div>`;
+        meterBlocks = '<div class="quota-feedback">登录后自动读取剩余额度</div>';
       } else if (auth.can_fetch_usage === false) {
-        meterBlocks = `<div style="font-size:12px;color:var(--text-muted);">当前登录方式未提供可读取的额度</div>`;
+        meterBlocks = '<div class="quota-feedback">当前登录方式未提供可读取的额度</div>';
       } else if (!acc.usage) {
         meterBlocks = `<div class="quota-feedback">${acc.usage_loading ? "正在查询额度…" : "暂无额度数据"}</div>`;
       } else if (!acc.usage.success) {
         meterBlocks = `
           <div class="quota-feedback">
             <span>${acc.usage_loading ? "正在重试额度…" : esc(acc.usage.error || "额度查询失败")}</span>
-            <button class="btn btn-secondary btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(acc.name)} 的额度查询" ${acc.usage_loading ? "disabled" : ""}>重试</button>
-          </div>
-        `;
+            <button class="btn btn-secondary btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询" ${acc.usage_loading ? "disabled" : ""}>重试</button>
+          </div>`;
       } else {
         const windows = [acc.usage.primary, acc.usage.secondary].filter(Boolean);
-        for (const w of windows) {
+        meterBlocks = windows.map((w) => {
           const pct = Math.max(0, Math.min(100, Number(w.left_percent) || 0));
           const tone = pct <= 10 ? "danger" : (pct <= 30 ? "warn" : "ok");
-          meterBlocks += `
+          return `
             <div class="meter-block">
-              <div class="meter-head">
-                <div class="meter-head-left">
-                  <span class="meter-name">${esc(w.label)}</span>
-                  ${w.reset_text ? `<span class="meter-reset">${esc(w.reset_text)}</span>` : ""}
-                </div>
-                <div class="meter-head-right">
-                  <span class="meter-pct tone-${tone}">${pct}%</span>
-                  <span style="font-size:11px;color:var(--text-muted);">剩余</span>
-                </div>
-              </div>
+              <span class="meter-name">${esc(String(w.label).replace("限额", "额度"))}</span>
+              <strong class="meter-pct tone-${tone}" aria-label="剩余 ${pct}%">${pct}%</strong>
+              <span class="meter-reset">${esc(w.reset_text || "重置时间未知")}</span>
               ${renderGradientBar(pct, tone)}
-            </div>
-          `;
-        }
-        if (windows.length === 0) {
-          meterBlocks = `<div style="font-size:12px;color:var(--text-muted);">当前套餐暂无独立额度窗口</div>`;
-        }
+            </div>`;
+        }).join("") || '<div class="quota-feedback">当前套餐暂无独立额度窗口</div>';
       }
 
-      // Add high-precision 25-day countdown meter right into the same clean grid!
       if (cd) {
-        const calBtn = auth.subscription_until
-          ? `<button class="btn btn-accent btn-sm" style="padding:2px 7px;font-size:10.5px;" data-act="calibrate5Days" data-id="${esc(acc.id)}">按到期前5天校准</button>`
-          : "";
         meterBlocks += `
           <div class="meter-block">
-            <div class="meter-head">
-              <div class="meter-head-left">
-                <span class="meter-name" data-cd-status="${esc(acc.id)}">${recycleStatus(cd)}</span>
-                <span class="meter-reset" title="${esc(fmtDate(acc.recycle_at))}">截止 ${esc(cd.targetShort)}</span>
-              </div>
-              <div class="meter-head-right">
-                <span class="meter-pct tone-${cd.level}" data-cd-clock="${esc(acc.id)}">${esc(cd.compact)}</span>
-                ${calBtn}
-              </div>
-            </div>
+            <span class="meter-name" data-cd-status="${esc(acc.id)}">${recycleStatus(cd)}</span>
+            <strong class="meter-pct tone-${cd.level}" data-cd-clock="${esc(acc.id)}" title="${esc(cd.compact)}">${esc(cd.meterValue)}</strong>
+            <span class="meter-reset" title="${esc(fmtDate(acc.recycle_at))}">截止 ${esc(cd.targetShort)}</span>
             ${renderGradientBar(cd.pct, cd.level, `data-cd-fill="${esc(acc.id)}"`)}
-          </div>
-        `;
+            ${auth.subscription_until ? `<button class="btn btn-secondary meter-calibrate" data-act="calibrate5Days" data-id="${esc(acc.id)}">按到期前 5 天校准</button>` : ""}
+          </div>`;
       }
 
       html += `
         <article class="codex-account">
-          <div class="account-top">
+          <header class="account-top">
             <div class="app-info">
               <div class="app-name-line">
-                <span class="app-name">${esc(acc.name)}</span>
-                <span class="status-inline ${acc.running ? "running" : ""}">
-                  <span class="status-dot"></span>${acc.running ? (acc.window_visible === false ? "后台运行" : "窗口已打开") : "未运行"}
-                </span>
-                ${acc.is_default ? `<span class="tag tag-dark">原生主号</span>` : ""}
+                <h3 class="app-name account-name">${esc(name)}</h3>
+                ${acc.is_default ? '<span class="tag">默认</span>' : ""}
                 ${planTagHtml(auth)}
               </div>
-              <div class="app-sub" style="max-width:480px;">${esc(subLine)}</div>
+              <div class="app-sub account-email">${esc(email)}</div>
             </div>
-            <div class="app-right">
-              ${!acc.running ? `<button class="btn btn-primary btn-sm" data-act="launchAccount" data-id="${esc(acc.id)}">${ICONS.play} ${auth.logged_in ? "启动" : "打开 Codex 登录"}</button>` : ""}
-              ${acc.running ? `<button class="btn btn-secondary btn-sm" data-act="stopAccount" data-id="${esc(acc.id)}" title="仅关闭当前账号窗口">关闭</button>` : ""}
+            <div class="account-actions">
+              <span class="status-inline ${acc.running ? "running" : ""}">
+                <span class="status-dot"></span>${acc.running ? "运行中" : "未运行"}
+              </span>
+              <button class="btn ${acc.running ? "btn-secondary" : "btn-primary"} btn-sm"
+                data-act="${acc.running ? "stopAccount" : "launchAccount"}" data-id="${esc(acc.id)}"
+                ${!acc.running && !auth.logged_in ? 'title="启动 Codex 并登录"' : ""}>
+                ${acc.running ? "关闭" : ICONS.play + " 启动"}
+              </button>
               <button class="btn btn-secondary btn-sm btn-icon-only" data-act="openMoreMenu" data-id="${esc(acc.id)}" title="更多操作">${ICONS.more}</button>
             </div>
+          </header>
+          <div class="account-usage">
+            <div class="account-usage-head">
+              <span>额度</span>
+              ${acc.usage_loading ? '<span>查询中…</span>' : ""}
+              ${updatedText ? `<time datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(updatedText)}</time>` : ""}
+            </div>
+            <div class="meter-grid">${meterBlocks}</div>
           </div>
-          <div class="meter-divider"></div>
-          <div class="meter-grid">${meterBlocks}</div>
         </article>
       `;
     }
@@ -642,14 +647,10 @@
   }
 
   function openNetworkMenu(anchorBtn) {
-    const proxy = appState.proxy || {};
     const pop = $("#popover-menu");
     pop.innerHTML = `
-      <button class="pop-item" data-act="proxyOpen">${ICONS.ext} 打开 Clash 面板</button>
-      ${proxy.running ? `
-        <button class="pop-item" data-act="proxyRestart">${ICONS.refresh} 重启代理</button>
-        <button class="pop-item danger" data-act="proxyStop">${ICONS.close} 关闭代理</button>
-      ` : ""}`;
+      <button class="pop-item" data-act="proxyRestart">${ICONS.refresh} 重启代理</button>
+      <button class="pop-item danger" data-act="proxyStop">${ICONS.close} 关闭代理</button>`;
     positionPopover(pop, anchorBtn);
   }
 
@@ -681,12 +682,13 @@
     $("#modal-backdrop").classList.add("hidden");
   }
 
-  async function measureNetwork() {
+  async function refreshNetwork() {
     if (networkBusy) return;
-    networkBusy = "measure";
+    networkBusy = "refresh";
     renderAll();
     try {
-      await callHost("measureNetwork");
+      const result = await callHost("refreshNetwork");
+      if (result.warning) showToast(result.warning, true);
     } catch (err) {
       showToast(err.message, true);
     } finally {
@@ -701,7 +703,7 @@
       <div class="modal-header network-picker-header">
         <h3>切换节点</h3>
         <div class="network-picker-actions">
-          <button class="btn btn-secondary btn-sm" id="network-probe-all" disabled>${ICONS.refresh}<span>刷新全部延迟</span></button>
+          <button class="btn btn-ghost btn-sm" id="network-probe-all" disabled>${ICONS.refresh}<span>刷新全部延迟</span></button>
           <button class="btn btn-ghost btn-icon-only" data-close-modal aria-label="关闭节点选择器">${ICONS.close}</button>
         </div>
       </div>
@@ -1372,7 +1374,7 @@
     else if (act === "refresh") postAction("refresh", { toast: "1" });
     else if (act === "refreshAllUsage") postAction("refreshAllUsage");
     else if (act === "refreshUsage") postAction("refreshUsage", { id });
-    else if (act === "measureNetwork") measureNetwork();
+    else if (act === "refreshNetwork") refreshNetwork();
     else if (act === "openNetworkPicker") openNetworkPicker();
     else if (act === "openNetworkMenu") openNetworkMenu(actBtn);
     else if (["proxyOpen", "proxyRestart", "proxyStop"].includes(act)) {
@@ -1474,7 +1476,8 @@
       const label = recycleStatus(cd);
       if (status && status.textContent !== label) status.textContent = label;
       if (clock) {
-        clock.textContent = cd.compact;
+        clock.textContent = cd.meterValue;
+        clock.title = cd.compact;
         clock.className = `meter-pct tone-${cd.level}`;
       }
       if (fill) {

@@ -885,6 +885,7 @@ namespace CodexLauncher
                 },
                 { "desktop_shortcuts", shortcutList },
                 { "network", _networkStatus },
+                { "network_status_refresh", true },
                 { "network_japan_picker", true },
                 { "proxy", new Dictionary<string, object>
                     {
@@ -1020,9 +1021,13 @@ namespace CodexLauncher
                             break;
                         }
 
-                    case "measureNetwork":
-                        await RunNetworkAction(reqId, () => _network.Measure());
-                        break;
+                    case "refreshNetwork":
+                        {
+                            int mixedPort = _proxy.PortListening ? _proxy.MixedPort : 0;
+                            var clashExe = _proxy.ExePath;
+                            await RunNetworkAction(reqId, () => _network.Refresh(mixedPort, clashExe));
+                            break;
+                        }
 
                     case "listNetworkNodes":
                         await RunNetworkAction(reqId, () => _network.ListNodes(AuthParser.GetStr(data, "group")));

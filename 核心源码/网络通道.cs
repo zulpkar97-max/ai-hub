@@ -22,8 +22,11 @@ namespace CodexLauncher
         public string group { get; set; }
         public string node { get; set; }
         public int? delay { get; set; }
+        public bool delay_stale { get; set; }
         public string checked_at { get; set; }
         public bool can_select { get; set; }
+        public SubscriptionUsage subscription { get; set; }
+        public string warning { get; set; }
     }
 
     internal sealed class ClashNetwork
@@ -40,7 +43,9 @@ namespace CodexLauncher
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private readonly Func<string, string, string, string> _request;
         private readonly Dictionary<string, NetworkStatus> _measurements = new Dictionary<string, NetworkStatus>(StringComparer.Ordinal);
+        private readonly NivaSubscription _subscription = new NivaSubscription();
         private string _selectedGroup;
+        private NetworkStatus _lastRoute;
 
         public ClashNetwork(Func<string, string, string, string> request = null)
         {
@@ -52,22 +57,53 @@ namespace CodexLauncher
             if (!running)
             {
                 _measurements.Clear();
-                return new NetworkStatus { state = "stopped" };
+                _lastRoute = null;
+                return FinishStatus(new NetworkStatus { state = "stopped" });
             }
             try
             {
-                return ReadStatus(Connect(), false, probe);
+                var routes = Connect();
+                _subscription.ReadCached(routes.Get);
+                return FinishStatus(ReadStatus(routes, false, probe));
             }
             catch (Exception)
             {
                 _measurements.Clear();
-                return new NetworkStatus { state = "controller" };
+                return FinishStatus(new NetworkStatus { state = "controller" });
             }
         }
 
-        public NetworkStatus Measure()
+        public NetworkStatus Refresh(int mixedPort, string clashExe)
         {
-            return ReadStatus(Connect(), true, true);
+            var warnings = new List<string>();
+            try
+            {
+                Func<string, string, string, string> send = null;
+                try { send = _request ?? MihomoController.Open(); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+
+                var json = new JavaScriptSerializer { MaxJsonLength = 8 * 1024 * 1024 };
+                Func<string, Dictionary<string, object>> get = send == null ? null :
+                    new Func<string, Dictionary<string, object>>(path => json.Deserialize<Dictionary<string, object>>(send("GET", path, null)));
+                _subscription.Refresh(get, path => send("PUT", path, null), mixedPort, clashExe);
+            }
+            catch (Exception)
+            {
+                warnings.Add("订阅更新失败");
+            }
+
+            NetworkStatus status;
+            try { status = ReadStatus(Connect(), true, true); }
+            catch (Exception) { status = new NetworkStatus { state = "controller" }; }
+
+            if (status.state != "reachable")
+            {
+                if (status.state == "timeout") warnings.Add("延迟检测超时");
+                else warnings.Add(string.IsNullOrEmpty(status.node) ? "未能读取当前节点" : "当前节点检测失败");
+            }
+            status.warning = string.Join("，", warnings);
+            return FinishStatus(status);
         }
 
         public object ListNodes(string group)
@@ -135,7 +171,27 @@ namespace CodexLauncher
             if (AuthParser.GetStr(routes.Find(group), "now") != node)
                 throw new InvalidOperationException("Clash 未确认节点切换，请重新查看当前节点。");
             _selectedGroup = group;
-            return ReadStatus(routes, true, true);
+            return FinishStatus(ReadStatus(routes, true, true));
+        }
+
+        private NetworkStatus FinishStatus(NetworkStatus status)
+        {
+            status.subscription = _subscription.ReadCached();
+            if (status.state == "stopped") return status;
+            if (string.IsNullOrEmpty(status.node) && _lastRoute != null)
+            {
+                status.node = _lastRoute.node;
+                status.group = _lastRoute.group;
+                status.mode = _lastRoute.mode;
+            }
+            if (!status.delay.HasValue && !string.IsNullOrEmpty(status.node) &&
+                _lastRoute != null && status.node == _lastRoute.node && _lastRoute.delay.HasValue)
+            {
+                status.delay = _lastRoute.delay;
+                status.delay_stale = true;
+            }
+            _lastRoute = status;
+            return status;
         }
 
         private Routes Connect()
@@ -362,11 +418,18 @@ namespace CodexLauncher
         private const string PipePrefix = @"\\.\pipe\";
         private const int TimeoutMs = 5500;
 
+        internal static string ConfigurationDirectory
+        {
+            get
+            {
+                var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                return Path.Combine(roaming, "io.github.clash-verge-rev.clash-verge-rev");
+            }
+        }
+
         public static Func<string, string, string, string> Open()
         {
-            var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var directory = Path.Combine(roaming, "io.github.clash-verge-rev.clash-verge-rev");
-            var runtime = Path.Combine(directory, "clash-verge.yaml");
+            var runtime = Path.Combine(ConfigurationDirectory, "clash-verge.yaml");
             var yaml = File.Exists(runtime) ? File.ReadAllText(runtime) : "";
             var configured = ReadValue(yaml, "external-controller-pipe");
             var pipe = configured.StartsWith(PipePrefix, StringComparison.OrdinalIgnoreCase)
@@ -407,14 +470,15 @@ namespace CodexLauncher
                 stream.Connect(1000);
                 byte[] payload = Encoding.UTF8.GetBytes(body ?? "");
                 string headers = method + " " + path + " HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n";
-                if (body != null)
-                    headers += "Content-Type: application/json\r\nContent-Length: " + payload.Length.ToString(CultureInfo.InvariantCulture) + "\r\n";
+                if (method == "PUT")
+                    headers += "Content-Length: " + payload.Length.ToString(CultureInfo.InvariantCulture) + "\r\n";
+                if (body != null) headers += "Content-Type: application/json\r\n";
                 byte[] message = Encoding.ASCII.GetBytes(headers + "\r\n").Concat(payload).ToArray();
                 if (!stream.WriteAsync(message, 0, message.Length).Wait(TimeoutMs)) throw new TimeoutException();
                 using (var reader = new StreamReader(stream, Encoding.UTF8))
                 {
                     var read = reader.ReadToEndAsync();
-                    if (!read.Wait(TimeoutMs)) throw new TimeoutException();
+                    if (!read.Wait(RequestTimeout(method, path))) throw new TimeoutException();
                     var response = read.Result;
                     int split = response.IndexOf("\r\n\r\n", StringComparison.Ordinal);
                     var status = Regex.Match(response, @"\AHTTP/1\.[01] (\d{3})\b");
@@ -432,7 +496,7 @@ namespace CodexLauncher
             request.Method = method;
             request.Proxy = null;
             request.AllowAutoRedirect = false;
-            request.Timeout = request.ReadWriteTimeout = TimeoutMs;
+            request.Timeout = request.ReadWriteTimeout = RequestTimeout(method, path);
             if (secret.Length > 0) request.Headers[HttpRequestHeader.Authorization] = "Bearer " + secret;
             try
             {
@@ -443,6 +507,7 @@ namespace CodexLauncher
                     request.ContentLength = bytes.Length;
                     using (var output = request.GetRequestStream()) output.Write(bytes, 0, bytes.Length);
                 }
+                else if (method == "PUT") request.ContentLength = 0;
                 using (var response = (HttpWebResponse)request.GetResponse())
                 using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
                 {
@@ -459,6 +524,11 @@ namespace CodexLauncher
                 }
                 throw;
             }
+        }
+
+        private static int RequestTimeout(string method, string path)
+        {
+            return method == "PUT" && path.StartsWith("/providers/proxies/", StringComparison.Ordinal) ? 16000 : TimeoutMs;
         }
 
         internal sealed class ResponseException : IOException
