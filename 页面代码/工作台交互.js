@@ -201,12 +201,12 @@
   }
 
   function renderQuotaMeter({ title, value, when, percent, tone = "", labelAttrs = "", valueAttrs = "", fillAttrs = "", timeAttrs = "", action = "" }) {
-    return `<div class="meter-block">
+    return `<div class="meter-block${action ? " meter-with-action" : ""}">
       <span class="meter-name" ${labelAttrs}>${esc(title)}</span>
       <strong class="meter-pct${tone ? ` tone-${tone}` : ""}" ${valueAttrs}>${esc(value)}</strong>
       <span class="meter-reset" ${timeAttrs}>${esc(when)}</span>
-      ${percent == null ? '<div class="grad-track"></div>' : renderGradientBar(percent, tone, fillAttrs)}
       ${action}
+      ${percent == null ? '<div class="grad-track"></div>' : renderGradientBar(percent, tone, fillAttrs)}
     </div>`;
   }
 

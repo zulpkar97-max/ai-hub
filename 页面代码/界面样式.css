@@ -1042,11 +1042,25 @@ kbd {
 .meter-pct.tone-warn { color: var(--warn); }
 .meter-pct.tone-danger { color: var(--danger); }
 
+.meter-with-action {
+  container: quota-actions / inline-size;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+}
+
+.meter-with-action > :is(.meter-name, .meter-pct, .meter-reset) { grid-column: 1; }
+.meter-with-action > .grad-track { grid-column: 1 / -1; }
+
 .meter-calibrate {
-  justify-self: start;
-  margin-top: 3px;
+  grid-column: 2;
+  grid-row: 2;
+  align-self: center;
   padding: 3px 7px;
   font-size: 11px;
+}
+
+@container quota-actions (max-width: 184px) {
+  .meter-calibrate { grid-row: 1; }
 }
 
 .grad-track {
