@@ -18,7 +18,9 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.4.2";
+        public const string AppVersion = "v5.4.3";
+        private const string BrandIconFile = "aihub-v5.png";
+        public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
         private static readonly object StoreLock = new object();
         private static readonly object ProfileLifecycleLock = new object();
@@ -38,9 +40,8 @@ namespace CodexLauncher
         public static readonly string WebViewCacheDir = Path.Combine(DataDir, "webview2-cache");
         public static readonly string AccountsFile = Path.Combine(DataDir, "accounts.json");
 
-        // v4.0 Precision Switch Dark Charcoal AI Hub brand icons (new filename refreshes Explorer cache immediately)
-        public static readonly string PermanentIcon = Path.Combine(DataDir, "aihub-v4.ico");
-        public static readonly string PermanentPng256 = Path.Combine(DataDir, "aihub-v4-256.png");
+        public static readonly string PermanentIcon = Path.Combine(DataDir, "aihub-v5.ico");
+        public static readonly string PermanentPng256 = Path.Combine(DataDir, BrandIconFile);
         public static readonly string BundledIcon = Path.Combine(BaseDir, "资源", "aihub.ico");
         public static readonly string BundledPng256 = Path.Combine(BaseDir, "资源", "aihub-256.png");
         public static readonly string BundledChatGptPng = Path.Combine(BaseDir, "资源", "chatgpt-256.png");
@@ -68,7 +69,7 @@ namespace CodexLauncher
             Directory.CreateDirectory(AppIconsCacheDir);
             CopyAssetIfNeeded(BundledIcon, PermanentIcon);
             CopyAssetIfNeeded(BundledPng256, PermanentPng256);
-            CopyAssetIfNeeded(BundledPng256, Path.Combine(AppIconsCacheDir, "aihub.png"));
+            CopyAssetIfNeeded(BundledPng256, Path.Combine(AppIconsCacheDir, BrandIconFile));
             CopyAssetIfNeeded(BundledChatGptPng, Path.Combine(AppIconsCacheDir, "chatgpt.png"));
         }
 
@@ -78,7 +79,7 @@ namespace CodexLauncher
             {
                 EnsureDirs();
                 if (kind == "url" || string.IsNullOrEmpty(exePath))
-                    return "https://icons.aihub.local/aihub.png";
+                    return BrandIconUrl;
                 if (exePath.IndexOf("chatgpt", StringComparison.OrdinalIgnoreCase) >= 0)
                     return "https://icons.aihub.local/chatgpt.png";
 
@@ -98,7 +99,7 @@ namespace CodexLauncher
                 if (File.Exists(dst)) return "https://icons.aihub.local/" + key;
             }
             catch { }
-            return "https://icons.aihub.local/aihub.png";
+            return BrandIconUrl;
         }
 
         private static void CopyAssetIfNeeded(string src, string dst)

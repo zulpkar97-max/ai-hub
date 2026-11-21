@@ -104,7 +104,7 @@ namespace CodexLauncher
             Height = 630;
             MinWidth = 820;
             MinHeight = 520;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            WindowStartupLocation = WindowStartupLocation.Manual;
             Background = Brushes.Transparent;
             FontFamily = UiHelpers.MainFont;
             Icon = UiHelpers.LoadWindowIcon();
@@ -143,6 +143,7 @@ namespace CodexLauncher
             try
             {
                 _hwnd = new WindowInteropHelper(this).Handle;
+                PositionStartupWindow();
                 var src = HwndSource.FromHwnd(_hwnd);
                 if (src != null)
                 {
@@ -170,6 +171,33 @@ namespace CodexLauncher
             {
                 Background = UiHelpers.SidebarBg;
             }
+        }
+
+        private void PositionStartupWindow()
+        {
+            var monitor = NativeScreen.GetAllMonitors()
+                .Where(display => display.WorkingArea.Width > 0 && display.WorkingArea.Height > 0)
+                .OrderBy(display => display.Bounds.Left)
+                .ThenBy(display => display.Bounds.Top)
+                .FirstOrDefault();
+            var work = monitor.WorkingArea;
+            if (work.Width <= 0 || work.Height <= 0) return;
+
+            double scale = monitor.ScalePercent > 0 ? monitor.ScalePercent / 100.0 : 1;
+            int width = Math.Min(work.Width, (int)Math.Round(Width * scale));
+            int height = Math.Min(work.Height, (int)Math.Round(Height * scale));
+            const uint moveFlags = NativeScreen.SWP_NOZORDER | NativeScreen.SWP_NOACTIVATE;
+            if (!NativeScreen.SetWindowPos(_hwnd, IntPtr.Zero,
+                work.Left + (work.Width - width) / 2, work.Top + (work.Height - height) / 2,
+                width, height, moveFlags)) return;
+
+            // WPF can adjust the window size when it receives the destination monitor's DPI.
+            NativeScreen.RECT actual;
+            if (NativeScreen.GetWindowRect(_hwnd, out actual) && (actual.Width != width || actual.Height != height))
+                NativeScreen.SetWindowPos(_hwnd, IntPtr.Zero,
+                    work.Left + Math.Max(0, (work.Width - actual.Width) / 2),
+                    work.Top + Math.Max(0, (work.Height - actual.Height) / 2),
+                    0, 0, moveFlags | NativeScreen.SWP_NOSIZE);
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -894,7 +922,7 @@ namespace CodexLauncher
                 { "version", CoreService.AppVersion },
                 { "safe_profile_actions", true },
                 { "pending_update", LocalUpdate.IsPending },
-                { "brand_icon", "https://icons.aihub.local/aihub.png" },
+                { "brand_icon", CoreService.BrandIconUrl },
                 { "voice_recorder_hotkey", VoiceRecorderShortcut.Display },
                 { "quick_ledger_forms", _quickLedgerForms.Keys.ToArray() },
                 { "settings", new Dictionary<string, object>

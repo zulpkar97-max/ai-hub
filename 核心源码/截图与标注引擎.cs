@@ -124,6 +124,7 @@ namespace CodexLauncher
         internal struct DisplayMonitor
         {
             public RECT Bounds;
+            public RECT WorkingArea;
             public string Device;
             public int ScalePercent;
         }
@@ -232,6 +233,8 @@ namespace CodexLauncher
         public const int CAPTUREBLT = 0x40000000;
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         internal static readonly IntPtr PerMonitorV2 = new IntPtr(-4);
+        internal const uint SWP_NOSIZE = 0x0001;
+        internal const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_NOACTIVATE = 0x0010;
         internal const uint SWP_SHOWWINDOW = 0x0040;
         private const uint GW_HWNDNEXT = 2;
@@ -253,6 +256,7 @@ namespace CodexLauncher
                 list.Add(new DisplayMonitor
                 {
                     Bounds = hasInfo ? info.rcMonitor : rc,
+                    WorkingArea = hasInfo ? info.rcWork : rc,
                     Device = hasInfo ? info.device : null,
                     ScalePercent = scalePercent
                 });
