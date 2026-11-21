@@ -52,6 +52,7 @@ namespace CodexLauncher
         private NetworkStatus _networkStatus = new NetworkStatus { state = "unknown" };
         private bool _networkPolling;
         private bool _networkWorking;
+        private CancellationTokenSource _networkBatch;
         private List<ChromeProfileInfo> _chromeProfiles = new List<ChromeProfileInfo>();
         private readonly Dictionary<string, UsageSnapshot> _usageCache = new Dictionary<string, UsageSnapshot>();
         private readonly Dictionary<string, AuthInfo> _usageLoading = new Dictionary<string, AuthInfo>();
@@ -582,7 +583,7 @@ namespace CodexLauncher
             PushFullState();
         }
 
-        private async void RunNetworkAction(string reqId, Func<object> work)
+        private async Task RunNetworkAction(string reqId, Func<object> work)
         {
             if (_networkWorking)
             {
@@ -603,6 +604,10 @@ namespace CodexLauncher
             {
                 ReplyJs(reqId, false, null, ex.Message);
             }
+            catch (OperationCanceledException)
+            {
+                ReplyJs(reqId, false, null, "已取消测速。");
+            }
             catch (Exception)
             {
                 ReplyJs(reqId, false, null, "无法从本机 Clash 控制接口完成操作，请稍后重试。");
@@ -611,6 +616,34 @@ namespace CodexLauncher
             {
                 _networkGate.Release();
                 _networkWorking = false;
+            }
+        }
+
+        private async void RunNetworkBatch(string reqId, string group)
+        {
+            if (_networkWorking || _networkBatch != null)
+            {
+                ReplyJs(reqId, false, null, "正在处理网络操作，请稍后再试。");
+                return;
+            }
+
+            using (var cancellation = new CancellationTokenSource())
+            {
+                _networkBatch = cancellation;
+                var token = cancellation.Token;
+                var progress = new Progress<object>(update =>
+                {
+                    if (!token.IsCancellationRequested)
+                        SendEventToJs("networkProbeProgress", new { reqId, update });
+                });
+                try
+                {
+                    await RunNetworkAction(reqId, () => _network.MeasureGroup(group, progress, token));
+                }
+                finally
+                {
+                    _networkBatch = null;
+                }
             }
         }
 
@@ -852,6 +885,7 @@ namespace CodexLauncher
                 },
                 { "desktop_shortcuts", shortcutList },
                 { "network", _networkStatus },
+                { "network_japan_picker", true },
                 { "proxy", new Dictionary<string, object>
                     {
                         { "installed", _proxy.Installed },
@@ -925,7 +959,7 @@ namespace CodexLauncher
             });
         }
 
-        private void HandleJsAction(string action, string reqId, Dictionary<string, object> data)
+        private async void HandleJsAction(string action, string reqId, Dictionary<string, object> data)
         {
             try
             {
@@ -987,15 +1021,23 @@ namespace CodexLauncher
                         }
 
                     case "measureNetwork":
-                        RunNetworkAction(reqId, () => _network.Measure());
+                        await RunNetworkAction(reqId, () => _network.Measure());
                         break;
 
                     case "listNetworkNodes":
-                        RunNetworkAction(reqId, () => _network.ListNodes(AuthParser.GetStr(data, "group")));
+                        await RunNetworkAction(reqId, () => _network.ListNodes(AuthParser.GetStr(data, "group")));
                         break;
 
                     case "switchNetworkNode":
-                        RunNetworkAction(reqId, () => _network.SwitchNode(AuthParser.GetStr(data, "group"), AuthParser.GetStr(data, "node")));
+                        await RunNetworkAction(reqId, () => _network.SwitchNode(AuthParser.GetStr(data, "group"), AuthParser.GetStr(data, "node")));
+                        break;
+
+                    case "measureNetworkGroup":
+                        RunNetworkBatch(reqId, AuthParser.GetStr(data, "group"));
+                        break;
+
+                    case "cancelNetworkBatch":
+                        if (_networkBatch != null) _networkBatch.Cancel();
                         break;
 
                     case "proxyOpen":

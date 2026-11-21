@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,6 +9,8 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 namespace CodexLauncher
@@ -26,11 +29,18 @@ namespace CodexLauncher
     internal sealed class ClashNetwork
     {
         private const string TestUrl = "https://www.gstatic.com/generate_204";
+        private static readonly string[] PolicyNames = { "NIVA Network", "AI 服务", "谷歌" };
+        private static readonly Regex JapanName = new Regex(
+            @"日本|🇯🇵|(?<![A-Za-z])(?:Japan|JP(?![A-Za-z])|JP(?=Tokyo|Osaka))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex InformationalName = new Regex(
+            @"流量|到期|过期|套餐|官网|客服|重置|订阅|公告|通知|防失联|traffic|expires?|reset|website|support",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex NonProxyType = new Regex(
+            @"^(?:Direct|Reject.*|Pass|Compatible|Selector|URLTest|Fallback|LoadBalance|Relay)$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private readonly Func<string, string, string, string> _request;
+        private readonly Dictionary<string, NetworkStatus> _measurements = new Dictionary<string, NetworkStatus>(StringComparer.Ordinal);
         private string _selectedGroup;
-        private string _measuredRoute;
-        private NetworkStatus _measurement;
-        private DateTimeOffset _measuredAt;
 
         public ClashNetwork(Func<string, string, string, string> request = null)
         {
@@ -41,7 +51,7 @@ namespace CodexLauncher
         {
             if (!running)
             {
-                _measurement = null;
+                _measurements.Clear();
                 return new NetworkStatus { state = "stopped" };
             }
             try
@@ -50,7 +60,7 @@ namespace CodexLauncher
             }
             catch (Exception)
             {
-                _measurement = null;
+                _measurements.Clear();
                 return new NetworkStatus { state = "controller" };
             }
         }
@@ -70,20 +80,48 @@ namespace CodexLauncher
                 group = routes.Target(_selectedGroup);
                 if (!groups.Contains(group)) group = groups[0];
             }
-            var choices = routes.Choices(group);
-            var selected = AuthParser.GetStr(routes.Find(group), "now");
             return new
             {
                 group,
-                groups,
-                nodes = choices.Select(name =>
-                {
-                    var status = new NetworkStatus();
-                    var current = routes.Leaf(name);
-                    ReadHistory(status, current);
-                    return new { name, selected = name == selected, status.delay, status.state };
-                }).ToArray()
+                groups = groups.Select(name => new { name, label = PolicyLabel(name) }).ToArray(),
+                nodes = BuildNodeList(routes, group, routes.Choices(group))
             };
+        }
+
+        public NetworkStatus MeasureGroup(string group, IProgress<object> progress, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var routes = Connect();
+            var choices = routes.Choices(group);
+            progress.Report(new { nodes = BuildNodeList(routes, group, choices) });
+            var results = new ConcurrentBag<NetworkStatus>();
+            Parallel.ForEach(choices, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (name, loop) =>
+            {
+                if (cancellation.IsCancellationRequested)
+                {
+                    loop.Stop();
+                    return;
+                }
+                progress.Report(new { name, state = "testing" });
+                var outcome = MeasureNode(routes, name);
+                results.Add(outcome);
+                progress.Report(new { name, outcome.delay, outcome.state });
+            });
+            foreach (var outcome in results) _measurements[outcome.node] = outcome;
+            cancellation.ThrowIfCancellationRequested();
+            return Read(true, false);
+        }
+
+        private object[] BuildNodeList(Routes routes, string group, string[] choices)
+        {
+            var selected = AuthParser.GetStr(routes.Find(group), "now");
+            var active = AuthParser.GetStr(routes.Leaf(group), "name");
+            return choices.Select(name =>
+            {
+                var status = new NetworkStatus { node = name };
+                ReadDelay(status, routes.Find(name));
+                return (object)new { name, selected = name == selected, active = name == active, status.delay, status.state };
+            }).ToArray();
         }
 
         public NetworkStatus SwitchNode(string group, string node)
@@ -113,12 +151,11 @@ namespace CodexLauncher
             {
                 state = "unknown",
                 mode = routes.Mode,
-                group = Members(routes.Find(target)).Length == 0 ? null : target,
+                group = PolicyLabel(target),
                 node = AuthParser.GetStr(leaf, "name"),
                 can_select = routes.Selectors().Length > 0
             };
             if (string.IsNullOrEmpty(status.node)) return status;
-            ReadHistory(status, leaf);
             if ((AuthParser.GetStr(leaf, "type") ?? "").StartsWith("Reject", StringComparison.OrdinalIgnoreCase))
             {
                 status.delay = null;
@@ -126,35 +163,27 @@ namespace CodexLauncher
                 return status;
             }
 
-            var route = routes.Mode + "\n" + target + "\n" + status.node;
-            var now = DateTimeOffset.UtcNow;
-            bool sameRoute = _measurement != null && _measuredRoute == route;
-            if (force || (probe && (!sameRoute || now - _measuredAt >= TimeSpan.FromMinutes(2))))
+            NetworkStatus cached;
+            DateTimeOffset measuredAt;
+            if (force || (probe && (!_measurements.TryGetValue(status.node, out cached) ||
+                !DateTimeOffset.TryParse(cached.checked_at, out measuredAt) ||
+                DateTimeOffset.UtcNow - measuredAt >= TimeSpan.FromMinutes(2))))
             {
-                MeasureNode(routes, status);
-                _measuredRoute = route;
-                _measuredAt = DateTimeOffset.UtcNow;
-                _measurement = status;
+                cached = MeasureNode(routes, status.node);
+                _measurements[status.node] = cached;
+                CopyDelay(status, cached);
             }
-            else if (sameRoute)
-            {
-                DateTimeOffset historyAt;
-                if (!DateTimeOffset.TryParse(status.checked_at, out historyAt) || historyAt <= _measuredAt)
-                {
-                    status.state = _measurement.state;
-                    status.delay = _measurement.delay;
-                    status.checked_at = _measurement.checked_at;
-                }
-            }
+            else ReadDelay(status, leaf);
             return status;
         }
 
-        private static void MeasureNode(Routes routes, NetworkStatus status)
+        private static NetworkStatus MeasureNode(Routes routes, string name)
         {
-            status.delay = null;
+            var status = new NetworkStatus { node = name };
             try
             {
-                var reply = routes.Get(ProxyPath(status.node) + "/delay?timeout=3500&expected=204&url=" + Uri.EscapeDataString(TestUrl));
+                var body = routes.Send("GET", ProxyPath(name) + "/delay?timeout=3500&expected=204&url=" + Uri.EscapeDataString(TestUrl), null);
+                var reply = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(body);
                 int value;
                 if (int.TryParse(AuthParser.GetStr(reply, "delay"), out value) && value > 0)
                     status.delay = value;
@@ -169,6 +198,33 @@ namespace CodexLauncher
                 status.state = "controller";
             }
             status.checked_at = DateTimeOffset.UtcNow.ToString("o");
+            return status;
+        }
+
+        private void ReadDelay(NetworkStatus status, Dictionary<string, object> proxy)
+        {
+            ReadHistory(status, proxy);
+            NetworkStatus cached;
+            DateTimeOffset historyAt;
+            DateTimeOffset measuredAt;
+            if (_measurements.TryGetValue(status.node, out cached) &&
+                DateTimeOffset.TryParse(cached.checked_at, out measuredAt) &&
+                (!DateTimeOffset.TryParse(status.checked_at, out historyAt) || historyAt <= measuredAt))
+                CopyDelay(status, cached);
+        }
+
+        private static void CopyDelay(NetworkStatus status, NetworkStatus measured)
+        {
+            status.state = measured.state;
+            status.delay = measured.delay;
+            status.checked_at = measured.checked_at;
+        }
+
+        private static string PolicyLabel(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            var plain = name.Trim().TrimStart('◈', '◇', '◆').TrimStart();
+            return PolicyNames.FirstOrDefault(label => string.Equals(label, plain, StringComparison.OrdinalIgnoreCase));
         }
 
         private static void ReadHistory(NetworkStatus status, Dictionary<string, object> proxy)
@@ -243,19 +299,22 @@ namespace CodexLauncher
 
             public string[] Selectors()
             {
-                if (Mode != "rule" && Mode != "global") return Array.Empty<string>();
-                return _proxies.Keys.Where(name =>
-                {
-                    var proxy = Find(name);
-                    return AuthParser.GetStr(proxy, "type") == "Selector" && Members(proxy).Length > 0 &&
-                        (Mode == "global" ? name == "GLOBAL" : name != "GLOBAL");
-                }).OrderBy(name => name, StringComparer.CurrentCulture).ToArray();
+                if (Mode != "rule") return Array.Empty<string>();
+                var selectors = _proxies.Keys.Where(name => AuthParser.GetStr(Find(name), "type") == "Selector").ToArray();
+                return PolicyNames.Select(label => selectors.FirstOrDefault(name => name == label) ??
+                    selectors.FirstOrDefault(name => PolicyLabel(name) == label)).Where(name => name != null).ToArray();
             }
 
             public string[] Choices(string group)
             {
                 if (!Selectors().Contains(group)) throw new InvalidOperationException("当前模式下无法切换该策略组。");
-                return Members(Find(group));
+                return Members(Find(group)).Where(name =>
+                {
+                    if (!JapanName.IsMatch(name) || InformationalName.IsMatch(name)) return false;
+                    var proxy = Find(name);
+                    var type = AuthParser.GetStr(proxy, "type");
+                    return !string.IsNullOrEmpty(type) && !NonProxyType.IsMatch(type) && Members(proxy).Length == 0;
+                }).ToArray();
             }
 
             public string Target(string preferred)

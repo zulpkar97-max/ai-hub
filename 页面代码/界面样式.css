@@ -524,18 +524,17 @@ kbd {
   overflow: hidden;
 }
 
-.network-main {
+.network-card {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 24px;
-  padding: 13px 16px;
+  gap: 9px 16px;
+  padding: 10px 14px;
 }
 
 .network-heading {
   display: grid;
-  gap: 3px;
-  min-width: 94px;
+  gap: 1px;
 }
 
 .network-heading h2 { margin: 0; }
@@ -545,61 +544,71 @@ kbd {
 .network-status.is-ok .status-dot { background: var(--ok); }
 .network-status.is-warning .status-dot { background: var(--warn); }
 
-.network-metrics {
+.network-route {
   display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  flex: 1 1 205px;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
   min-width: 0;
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--hairline);
 }
 
-.network-metric {
+.network-node-summary {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.network-metric strong { font-size: 13px; font-weight: 600; }
-.network-label, .network-context { font-size: 11.5px; color: var(--text-muted); }
+.network-node-summary strong { font-size: 13px; font-weight: 600; }
+.network-policy { font-size: 11.5px; color: var(--text-muted); }
+.network-latency { flex: none; font-size: 13px; font-variant-numeric: tabular-nums; }
 
-.network-actions, .network-management {
+.network-actions, .network-picker-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 }
 
 .network-actions { margin-inline-start: auto; }
 
-.network-details {
-  border-top: 1px solid var(--hairline);
-  padding: 0 16px;
+.network-picker-header {
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.network-details summary {
-  width: fit-content;
-  padding: 8px 0;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  cursor: pointer;
+.network-picker-actions { margin-inline-start: auto; }
+
+.network-policies:not(:empty) {
+  align-self: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
 }
 
-.network-diagnostics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
-  gap: 9px 14px;
-  margin: 2px 0 12px;
+.network-policies .filter-tab:disabled { cursor: default; }
+.network-policies .filter-tab:disabled:not(.active) { opacity: 0.55; }
+
+.network-picker-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
   font-size: 12px;
-  overflow-wrap: anywhere;
+  color: var(--text-secondary);
 }
 
-.network-diagnostics dt { color: var(--text-muted); }
-.network-diagnostics dd { margin: 2px 0 0; }
-.network-management { padding-bottom: 12px; }
+.network-picker-meta [role="status"] { color: var(--text-muted); }
 
 .network-node-list {
   display: grid;
+  flex: 0 1 auto;
   max-height: 49vh;
   overflow: auto;
   border: 1px solid var(--hairline);
@@ -624,10 +633,17 @@ kbd {
 }
 
 .network-node:last-child { border-bottom: 0; }
-.network-node:hover:not(:disabled), .network-node:disabled { background: var(--surface-subtle); }
+.network-node:hover:not(:disabled) { background: var(--surface-hover); }
+.network-node.is-current { background: var(--surface-subtle); }
 .network-node:disabled { cursor: default; }
 .network-node:focus-visible { outline-offset: -2px; }
+.network-node-name { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; min-width: 0; }
+.network-current { font-size: 11px; font-weight: 600; color: var(--ok); }
 .network-node-delay { flex: none; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.network-node-delay[data-node-state="reachable"] { color: var(--text-secondary); }
+.network-node-delay[data-node-state="timeout"],
+.network-node-delay[data-node-state="unavailable"] { color: var(--warn); }
+.network-node-empty { padding: 14px 11px; font-size: 12px; color: var(--text-muted); }
 
 .app-row {
   display: flex;

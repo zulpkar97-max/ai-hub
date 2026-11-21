@@ -9,6 +9,7 @@
   let cmdkItems = [];
   let cmdkSelected = 0;
   let networkBusy = "";
+  let onNetworkPickerClose = null;
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -45,11 +46,11 @@
     webview.postMessage({ action, data });
   }
 
-  function callHost(action, data = {}) {
+  function callHost(action, data = {}, onProgress) {
     return new Promise((resolve, reject) => {
       if (!webview) return reject(new Error("WebView2 bridge unavailable"));
       const reqId = "r" + (reqSeq++);
-      pendingReqs.set(reqId, { resolve, reject });
+      pendingReqs.set(reqId, { resolve, reject, onProgress });
       webview.postMessage({ action, reqId, data });
     });
   }
@@ -152,64 +153,37 @@
 
   function renderNetwork(proxy) {
     const network = appState.network || {};
-    const detailsOpen = $("#network-details")?.open;
     const state = proxy.running ? (network.state === "stopped" ? "unknown" : network.state) : "stopped";
     const delay = state === "reachable" ? network.delay : null;
     const slow = delay > 300;
     const unavailable = state === "timeout" || state === "unavailable" || state === "stopped";
     const label = state === "reachable" ? (slow ? "网络较慢" : "网络正常")
-      : unavailable ? "网络异常" : (state === "controller" ? "无法读取网络状态" : "待检测");
+      : unavailable ? "网络异常" : (state === "controller" ? "状态未知" : "待检测");
     const tone = state === "reachable" ? (slow ? "is-warning" : "is-ok") : (unavailable ? "is-warning" : "");
     const delayLabel = delay != null ? delay + " ms" : (state === "timeout" ? "超时" : state === "unavailable" ? "不可用" : "—");
-    const mode = ({ rule: "规则模式", global: "全局模式", direct: "直连模式" })[network.mode];
-    const group = mode && proxy.running ? [mode, network.group].filter(Boolean).join(" · ") : "";
-    const clash = proxy.running ? "运行中" : (proxy.installed ? "未启动" : "未检测到");
-    const checked = proxy.running && network.checked_at ? fmtDate(network.checked_at, true) : "";
-    const diagnostics = [
-      ["Clash Verge", clash],
-      ["系统代理", proxy.system_proxy ? "ON" : "OFF"],
-      ["TUN", proxy.tun ? "ON" : "OFF"],
-      ["代理端口", proxy.port ? proxy.port + (proxy.port_listening ? " · 监听中" : " · 未监听") : "—"],
-      ["当前配置", proxy.profile || "—"],
-    ];
-    if (checked) diagnostics.push(["检测时间", checked]);
-    if (proxy.running) diagnostics.push(["延迟探测", "www.gstatic.com · HTTPS 204"]);
+    const mode = ({ rule: "规则路由", global: "全局代理", direct: "直连" })[network.mode];
+    const policy = proxy.running ? network.group || mode : "";
     return `
       <section class="surface-card network-card" aria-labelledby="network-title">
-        <div class="network-main">
-          <div class="network-heading">
-            <h2 id="network-title" class="app-name">网络</h2>
-            <span class="status-inline network-status ${tone}"><span class="status-dot"></span>${label}</span>
-          </div>
-          <div class="network-metrics">
-            <div class="network-metric">
-              <div class="network-label">当前节点</div>
-              <strong>${esc(proxy.running ? network.node || "未读取到节点" : "代理未启动")}</strong>
-              ${group ? `<span class="network-context">${esc(group)}</span>` : ""}
-            </div>
-            <div class="network-metric">
-              <div class="network-label">延迟</div>
-              <strong class="${tone}">${delayLabel}</strong>
-            </div>
-          </div>
-          <div class="network-actions">
-            <button class="btn btn-secondary btn-sm" data-act="measureNetwork"
-              ${!proxy.running || !appState.network || networkBusy ? "disabled" : ""}>${ICONS.refresh} ${networkBusy === "measure" ? "检测中…" : "刷新延迟"}</button>
-            <button class="btn btn-secondary btn-sm" data-act="openNetworkPicker"
-              ${!proxy.running || !network.can_select || networkBusy ? "disabled" : ""}>切换节点</button>
-          </div>
+        <div class="network-heading">
+          <h2 id="network-title" class="app-name">网络</h2>
+          <span class="status-inline network-status ${tone}"><span class="status-dot"></span>${label}</span>
         </div>
-        <details class="network-details" id="network-details" ${detailsOpen ? "open" : ""}>
-          <summary>网络详情</summary>
-          <dl class="network-diagnostics">${diagnostics.map(([key, value]) =>
-            `<div><dt>${key}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl>
-          ${proxy.installed ? `
-            <div class="network-management">
-              <button class="btn btn-secondary btn-sm" data-act="proxyOpen">${proxy.running ? "打开 Clash 面板" : "启动代理"}</button>
-              ${proxy.running ? `<button class="btn btn-secondary btn-sm" data-act="proxyRestart">重启代理</button>
-                <button class="btn btn-ghost btn-sm" data-act="proxyStop">关闭代理</button>` : ""}
-            </div>` : ""}
-        </details>
+        <div class="network-route">
+          <div class="network-node-summary">
+            <strong>${esc(proxy.running ? network.node || "未读取到节点" : "代理未启动")}</strong>
+            ${policy ? `<span class="network-policy">${esc(policy)}</span>` : ""}
+          </div>
+          <strong class="network-latency ${tone}" title="当前节点延迟">${esc(delayLabel)}</strong>
+        </div>
+        <div class="network-actions">
+          <button class="btn btn-secondary btn-sm" data-act="measureNetwork"
+            ${!proxy.running || !appState.network || networkBusy ? "disabled" : ""}>${ICONS.refresh} ${networkBusy === "measure" ? "检测中…" : "刷新延迟"}</button>
+          <button class="btn btn-secondary btn-sm" data-act="openNetworkPicker"
+            ${!proxy.running || !network.can_select || !appState.network_japan_picker || networkBusy ? "disabled" : ""}>切换节点</button>
+          <button class="btn btn-secondary btn-icon-only btn-sm" data-act="openNetworkMenu"
+            aria-label="更多网络操作"${!proxy.installed && !proxy.running ? " disabled" : ""}>${ICONS.more}</button>
+        </div>
       </section>`;
   }
 
@@ -664,10 +638,26 @@
       items.push(`<button class="pop-item danger" data-act="openWipe" data-id="${esc(acc.id)}">${ICONS.trash} 删除本地账号数据…</button>`);
     }
     pop.innerHTML = items.join("");
+    positionPopover(pop, anchorBtn);
+  }
+
+  function openNetworkMenu(anchorBtn) {
+    const proxy = appState.proxy || {};
+    const pop = $("#popover-menu");
+    pop.innerHTML = `
+      <button class="pop-item" data-act="proxyOpen">${ICONS.ext} 打开 Clash 面板</button>
+      ${proxy.running ? `
+        <button class="pop-item" data-act="proxyRestart">${ICONS.refresh} 重启代理</button>
+        <button class="pop-item danger" data-act="proxyStop">${ICONS.close} 关闭代理</button>
+      ` : ""}`;
+    positionPopover(pop, anchorBtn);
+  }
+
+  function positionPopover(pop, anchorBtn) {
     pop.classList.remove("hidden");
 
     const rect = anchorBtn.getBoundingClientRect();
-    const popW = 176;
+    const popW = pop.offsetWidth;
     const popH = pop.offsetHeight || 160;
     let left = rect.right - popW;
     let top = rect.bottom + 6;
@@ -679,6 +669,7 @@
 
   function openModal(html, wide = false) {
     closePopover();
+    onNetworkPickerClose?.();
     const dlg = $("#modal-dialog");
     dlg.className = "modal-dialog" + (wide ? " modal-wide" : "");
     dlg.innerHTML = html;
@@ -686,6 +677,7 @@
   }
 
   function closeModal() {
+    onNetworkPickerClose?.();
     $("#modal-backdrop").classList.add("hidden");
   }
 
@@ -706,78 +698,160 @@
   function openNetworkPicker() {
     if (networkBusy) return;
     openModal(`
-      <div class="modal-header">
+      <div class="modal-header network-picker-header">
         <h3>切换节点</h3>
-        <button class="btn btn-icon" data-close-modal aria-label="关闭">${ICONS.close}</button>
+        <div class="network-picker-actions">
+          <button class="btn btn-secondary btn-sm" id="network-probe-all" disabled>${ICONS.refresh}<span>刷新全部延迟</span></button>
+          <button class="btn btn-ghost btn-icon-only" data-close-modal aria-label="关闭节点选择器">${ICONS.close}</button>
+        </div>
       </div>
-      <div class="modal-body" id="network-picker" aria-live="polite"></div>
+      <div class="modal-body network-picker" id="network-picker">
+        <div class="network-policies" role="group" aria-label="策略组"></div>
+        <div class="network-picker-meta">
+          <span>日本节点</span>
+          <span role="status" data-picker-status></span>
+        </div>
+        <div class="network-node-list" aria-label="日本节点"></div>
+      </div>
     `, true);
 
     const panel = $("#network-picker");
+    const policies = panel.querySelector(".network-policies");
+    const message = panel.querySelector("[data-picker-status]");
+    const list = panel.querySelector(".network-node-list");
+    const probe = $("#network-probe-all");
     const isOpen = () => panel.isConnected && !$("#modal-backdrop").classList.contains("hidden");
+    const latencyLabels = { testing: "测试中…", timeout: "超时", unavailable: "不可用", controller: "检测失败" };
+    let picker = { group: "", groups: [], nodes: [] };
+    let loading = false;
+    let pendingGroup = "";
+    let rows = new Map();
+
+    function latency(node) {
+      return node.delay != null ? node.delay + " ms" : latencyLabels[node.state] || "未测";
+    }
+
+    function renderControls() {
+      const locked = loading || !!networkBusy;
+      policies.innerHTML = picker.groups.map((group) => {
+        const active = group.name === (loading ? pendingGroup : picker.group);
+        return `<button type="button" class="filter-tab ${active ? "active" : ""}" data-policy="${esc(group.name)}"
+          aria-pressed="${active}" ${locked ? "disabled" : ""}>${esc(group.label)}</button>`;
+      }).join("");
+      probe.disabled = locked || picker.nodes.length === 0;
+      probe.querySelector("span").textContent = networkBusy === "batch" ? "测速中…" : "刷新全部延迟";
+      list.querySelectorAll("[data-node-index]").forEach((button, index) => {
+        button.disabled = locked || picker.nodes[index].selected;
+      });
+    }
+
+    function renderNodes(emptyLabel = "这个策略组暂无日本节点") {
+      picker.nodes.sort((a, b) => (a.delay ?? Infinity) - (b.delay ?? Infinity) || a.name.localeCompare(b.name, "zh-CN"));
+      list.innerHTML = picker.nodes.length ? picker.nodes.map((node, index) => `
+        <button type="button" class="network-node${node.active ? " is-current" : ""}" data-node-index="${index}">
+          <span class="network-node-name"><span>${esc(node.name)}</span>${node.active ? '<span class="network-current">当前</span>' : ""}</span>
+          <span class="network-node-delay" data-node-state="${esc(node.state)}">${latency(node)}</span>
+        </button>`).join("") : `<div class="network-node-empty">${esc(emptyLabel)}</div>`;
+      rows = new Map(Array.from(list.querySelectorAll(".network-node-delay"), (row, index) => [picker.nodes[index].name, row]));
+    }
 
     async function loadNodes(group) {
-      panel.textContent = "正在读取节点…";
+      if (loading || networkBusy) return;
+      loading = true;
+      pendingGroup = group;
+      message.textContent = "正在读取节点…";
+      renderControls();
       try {
         const result = await callHost("listNetworkNodes", { group });
         if (!isOpen()) return;
-        panel.innerHTML = `
-          <div class="field">
-            <label for="network-policy-group">策略组</label>
-            <select id="network-policy-group">${result.groups.map((name) =>
-              `<option value="${esc(name)}" ${name === result.group ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
-          </div>
-          <div class="network-node-list" aria-label="节点列表">${result.nodes.map((node, i) => {
-            const latency = node.delay != null ? node.delay + " ms" : (node.state === "unavailable" ? "不可用" : "未测");
-            return `<button type="button" class="network-node" data-node-index="${i}"
-              ${node.selected ? "disabled" : ""}>
-              <span>${esc(node.name)}</span><span class="network-node-delay">${node.selected ? "当前 · " : ""}${latency}</span>
-            </button>`;
-          }).join("")}</div>
-          <div class="quota-feedback" role="status" data-switch-message></div>`;
-
-        const policy = panel.querySelector("select");
-        const list = panel.querySelector(".network-node-list");
-        const message = panel.querySelector("[data-switch-message]");
-        policy.addEventListener("change", () => loadNodes(policy.value));
-        list.addEventListener("click", async (event) => {
-          const button = event.target.closest("[data-node-index]");
-          if (!button || button.disabled || networkBusy) return;
-          const node = result.nodes[Number(button.dataset.nodeIndex)];
-          networkBusy = "switch";
-          renderAll();
-          policy.disabled = true;
-          list.querySelectorAll("button").forEach((item) => { item.disabled = true; });
-          message.textContent = "正在切换节点并检测延迟…";
-          try {
-            await callHost("switchNetworkNode", { group: result.group, node: node.name });
-            if (isOpen()) closeModal();
-            showToast("已切换到 " + node.name);
-          } catch (err) {
-            if (isOpen()) {
-              message.textContent = err.message;
-              policy.disabled = false;
-              list.querySelectorAll("button").forEach((item, i) => { item.disabled = result.nodes[i].selected; });
-            } else {
-              showToast(err.message, true);
-            }
-          } finally {
-            networkBusy = "";
-            renderAll();
-          }
-        });
+        picker = result;
+        list.scrollTop = 0;
+        renderNodes();
+        message.textContent = picker.nodes.length + " 个";
       } catch (err) {
         if (!isOpen()) return;
-        panel.textContent = err.message;
-        const retry = document.createElement("button");
-        retry.type = "button";
-        retry.className = "btn btn-secondary btn-sm";
-        retry.textContent = "重新读取";
-        retry.addEventListener("click", () => loadNodes(group));
-        panel.appendChild(retry);
+        message.textContent = err.message;
+        if (!picker.groups.length) {
+          list.innerHTML = '<div class="network-node-empty"><button class="btn btn-secondary btn-sm" data-picker-retry>重新读取</button></div>';
+        }
+      } finally {
+        loading = false;
+        if (isOpen()) renderControls();
       }
     }
 
+    policies.addEventListener("click", (event) => {
+      const group = event.target.closest("[data-policy]")?.dataset.policy;
+      if (group && group !== picker.group) loadNodes(group);
+    });
+
+    list.addEventListener("click", async (event) => {
+      if (event.target.closest("[data-picker-retry]")) return loadNodes("");
+      const button = event.target.closest("[data-node-index]");
+      if (!button || button.disabled || networkBusy || loading) return;
+      const node = picker.nodes[Number(button.dataset.nodeIndex)];
+      networkBusy = "switch";
+      renderAll();
+      renderControls();
+      message.textContent = "正在切换节点并检测延迟…";
+      try {
+        await callHost("switchNetworkNode", { group: picker.group, node: node.name });
+        if (isOpen()) closeModal();
+        showToast("已切换到 " + node.name);
+      } catch (err) {
+        if (isOpen()) message.textContent = err.message;
+        else showToast(err.message, true);
+      } finally {
+        networkBusy = "";
+        renderAll();
+        if (isOpen()) renderControls();
+      }
+    });
+
+    probe.addEventListener("click", async () => {
+      if (loading || networkBusy || !picker.nodes.length) return;
+      networkBusy = "batch";
+      onNetworkPickerClose = () => postAction("cancelNetworkBatch");
+      renderAll();
+      renderControls();
+      message.textContent = "正在准备测速…";
+      let checked = 0;
+      let completed = false;
+      try {
+        await callHost("measureNetworkGroup", { group: picker.group }, (update) => {
+          if (!isOpen()) return;
+          if (update.nodes) {
+            picker.nodes = update.nodes;
+            renderNodes();
+            renderControls();
+          } else {
+            const node = picker.nodes.find((item) => item.name === update.name);
+            const row = rows.get(update.name);
+            if (!node || !row) return;
+            node.state = update.state;
+            node.delay = update.delay ?? null;
+            row.dataset.nodeState = node.state;
+            row.textContent = latency(node);
+            if (node.state !== "testing") checked += 1;
+          }
+          message.textContent = `正在测速 ${checked} / ${picker.nodes.length}`;
+        });
+        completed = true;
+      } catch (err) {
+        if (isOpen()) message.textContent = err.message;
+      } finally {
+        onNetworkPickerClose = null;
+        networkBusy = "";
+        renderAll();
+        if (isOpen()) {
+          renderNodes();
+          renderControls();
+          if (completed) message.textContent = `测速完成 ${checked} / ${picker.nodes.length}`;
+        }
+      }
+    });
+
+    renderNodes("正在读取节点…");
     loadNodes("");
   }
 
@@ -1272,7 +1346,7 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest("#popover-menu") && !e.target.closest('[data-act="openMoreMenu"]')) closePopover();
+    if (!e.target.closest("#popover-menu") && !e.target.closest('[data-act="openMoreMenu"], [data-act="openNetworkMenu"]')) closePopover();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
     if (e.target === $("#cmdk-backdrop")) return closeCmdk();
 
@@ -1300,9 +1374,11 @@
     else if (act === "refreshUsage") postAction("refreshUsage", { id });
     else if (act === "measureNetwork") measureNetwork();
     else if (act === "openNetworkPicker") openNetworkPicker();
-    else if (act === "proxyOpen") postAction("proxyOpen");
-    else if (act === "proxyRestart") postAction("proxyRestart");
-    else if (act === "proxyStop") postAction("proxyStop");
+    else if (act === "openNetworkMenu") openNetworkMenu(actBtn);
+    else if (["proxyOpen", "proxyRestart", "proxyStop"].includes(act)) {
+      closePopover();
+      postAction(act);
+    }
     else if (act === "launchAccount") postAction("launchAccount", { id });
     else if (act === "stopAccount") postAction("stopAccount", { id });
     else if (act === "calibrate5Days") postAction("calibrate5Days", { id });
@@ -1427,6 +1503,9 @@
       } else if (msg.type === "windowState") {
         const isMax = !!msg.payload?.maximized;
         $("#win-max").title = isMax ? "还原" : "最大化";
+      } else if (msg.type === "networkProbeProgress") {
+        const p = msg.payload;
+        pendingReqs.get(p.reqId)?.onProgress?.(p.update);
       } else if (msg.type === "reply") {
         const p = msg.payload || {};
         const h = pendingReqs.get(p.reqId);
