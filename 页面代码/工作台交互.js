@@ -14,7 +14,6 @@
 
   const ICONS = {
     refresh: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
-    refreshXs: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
     plus: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
     play: '<svg class="ic ic-xs" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none"/></svg>',
     more: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>',
@@ -27,6 +26,7 @@
     ext: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>',
     scan: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>',
     crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
+    mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
     key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
   };
 
@@ -111,7 +111,13 @@
     const level = (expired || remainMs <= 48 * 3600000) ? "danger" : (remainMs <= 5 * 86400000 ? "warn" : "ok");
     const p2 = (n) => String(n).padStart(2, "0");
     const compact = expired ? `已超期 ${d}天 ${p2(h)}:${p2(m)}:${p2(s)}` : `${d}天 ${p2(h)}时 ${p2(m)}分 ${p2(s)}秒`;
-    return { expired, remainMs, pct, level, compact, targetShort: fmtDate(acc.recycle_at, true), targetFull: fmtDate(acc.recycle_at) };
+    return { expired, pct, level, compact, targetShort: fmtDate(acc.recycle_at, true) };
+  }
+
+  function recycleStatus(cd) {
+    if (cd.expired) return "回收已超期";
+    if (cd.level === "danger") return "临近回收";
+    return cd.level === "warn" ? "即将回收" : "回收倒计时";
   }
 
   function renderGradientBar(pct, tone, fillAttr = "") {
@@ -150,7 +156,9 @@
     const sections = appState.tool_sections || [];
     const chromes = appState.chrome_profiles || [];
 
-    const runningCodex = accounts.filter((a) => a.running).length;
+    const runningCodex = accounts.filter((a) => a.running);
+    const visibleCodex = runningCodex.filter((a) => a.window_visible === true).length;
+    const backgroundCodex = runningCodex.length - visibleCodex;
     let runningOtherApps = 0;
     sections.forEach((s) => (s.items || []).forEach((it) => {
       if (it.uninstall_hint !== "OpenAI.Codex" && it.running) runningOtherApps++;
@@ -158,12 +166,11 @@
 
     const shotHk = appState.screenshot?.hotkey || "Ctrl+Shift+A";
     $("#view-title").textContent = "工作台";
-    $("#view-sub").textContent = `网络通道${proxy.running ? "在线" : "未启动"} · Codex ${runningCodex}/${accounts.length} · 应用 ${runningOtherApps} 运行中`;
+    $("#view-sub").textContent = `网络通道${proxy.running ? "在线" : "未启动"} · ${runningOtherApps + (runningCodex.length ? 1 : 0)} 个工具运行中`;
     $("#header-actions").innerHTML = `
       ${appState.pending_update ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : ""}
       <button class="btn btn-secondary btn-sm" data-act="startScreenshot" title="快捷截图与提字 (${esc(shotHk)})">${ICONS.crop} 截图</button>
-      <button class="btn btn-secondary btn-sm" data-act="refreshAllUsage">${ICONS.refresh} 刷新额度</button>
-      <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加 Codex 账号</button>
+      ${appState.voice_recorder_hotkey ? `<button class="btn btn-secondary btn-sm" data-act="startVoiceRecorder" title="打开微信输入法 AI 录音笔 (${esc(appState.voice_recorder_hotkey)})">${ICONS.mic} AI 录音笔</button>` : ""}
     `;
 
     // LAYER 1: Clash Verge Priority Network Channel
@@ -205,32 +212,28 @@
       </div>
     `;
 
-    // LAYER 2: OpenAI · Codex Multi-Account & Precision Hardware Quota Meters
-    const recycled = accounts
-      .map((a) => ({ a, cd: computeCountdown(a) }))
-      .filter((x) => x.cd)
-      .sort((x, y) => x.cd.remainMs - y.cd.remainMs);
-
-    if (recycled.length > 0) {
-      const { a, cd } = recycled[0];
-      const kicker = cd.expired ? "已超期 · 请尽快处理" : (cd.level === "danger" ? "临近回收（不足 48 小时）" : (cd.level === "warn" ? "即将进入回收期（不足 5 天）" : "周期回收倒计时"));
-      html += `
-        <div class="urgent-banner level-${cd.level}">
-          <div>
-            <div style="font-size:13px;font-weight:700;">${kicker} · ${esc(a.name)}</div>
-            <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px;">截止时刻：${esc(cd.targetFull)}</div>
+    html += `
+      <div class="sec-heading"><span class="sec-title">AI 工作工具</span></div>
+      <section class="surface-card codex-tool" aria-labelledby="codex-tool-title">
+        <header class="codex-tool-header">
+          <div class="app-left">
+            <img class="app-icon" src="https://icons.aihub.local/chatgpt.png" alt="" />
+            <div class="app-info">
+              <h2 id="codex-tool-title" class="app-name">Codex</h2>
+              <div class="status-inline ${runningCodex.length ? "running" : ""}">
+                <span class="status-dot"></span>${accounts.length} 个账号 · ${visibleCodex} 个窗口已打开${backgroundCodex ? ` · ${backgroundCodex} 个后台运行` : ""}
+              </div>
+            </div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span class="urgent-clock" data-cd-banner="${esc(a.id)}">${esc(cd.compact)}</span>
-            ${cd.level === "danger"
-              ? `<button class="btn btn-danger btn-sm" data-act="openWipe" data-id="${esc(a.id)}">退号清空</button>`
-              : `<button class="btn btn-secondary btn-sm" data-act="openEditAccount" data-id="${esc(a.id)}">校准时间</button>`}
+          <div class="codex-tool-actions">
+            <button class="btn btn-secondary btn-sm" data-act="refreshAllUsage" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
+            <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
           </div>
-        </div>
-      `;
-    }
-
-    html += `<div class="sec-heading"><span class="sec-title">OpenAI · Codex 账号与额度 (${accounts.length})</span></div>`;
+        </header>
+        <div class="codex-accounts">
+          <h3 class="sec-title">账号</h3>
+          ${accounts.length ? "" : '<div class="quota-feedback">暂无账号</div>'}
+    `;
 
     for (const acc of accounts) {
       const cd = computeCountdown(acc);
@@ -248,25 +251,19 @@
       } else if (auth.can_fetch_usage === false) {
         meterBlocks = `<div style="font-size:12px;color:var(--text-muted);">当前登录方式未提供可读取的额度</div>`;
       } else if (!acc.usage) {
-        meterBlocks = `
-          <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text-muted);">
-            <span>${acc.usage_loading ? "正在查询剩余额度..." : "点击右侧刷新按钮获取最新额度"}</span>
-            <button class="meter-refresh-btn" data-act="refreshUsage" data-id="${esc(acc.id)}" title="刷新额度" ${acc.usage_loading ? "disabled" : ""}>${ICONS.refreshXs}</button>
-          </div>
-        `;
+        meterBlocks = `<div class="quota-feedback">${acc.usage_loading ? "正在查询额度…" : "暂无额度数据"}</div>`;
       } else if (!acc.usage.success) {
         meterBlocks = `
-          <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text-muted);">
-            <span>${esc(acc.usage.error || "额度查询失败")}</span>
-            <button class="meter-refresh-btn" data-act="refreshUsage" data-id="${esc(acc.id)}" title="重试刷新额度" ${acc.usage_loading ? "disabled" : ""}>${ICONS.refreshXs}</button>
+          <div class="quota-feedback">
+            <span>${acc.usage_loading ? "正在重试额度…" : esc(acc.usage.error || "额度查询失败")}</span>
+            <button class="btn btn-secondary btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(acc.name)} 的额度查询" ${acc.usage_loading ? "disabled" : ""}>重试</button>
           </div>
         `;
       } else {
         const windows = [acc.usage.primary, acc.usage.secondary].filter(Boolean);
-        windows.forEach((w, idx) => {
+        for (const w of windows) {
           const pct = Math.max(0, Math.min(100, Number(w.left_percent) || 0));
           const tone = pct <= 10 ? "danger" : (pct <= 30 ? "warn" : "ok");
-          const showRefresh = idx === windows.length - 1;
           meterBlocks += `
             <div class="meter-block">
               <div class="meter-head">
@@ -277,13 +274,12 @@
                 <div class="meter-head-right">
                   <span class="meter-pct tone-${tone}">${pct}%</span>
                   <span style="font-size:11px;color:var(--text-muted);">剩余</span>
-                  ${showRefresh ? `<button class="meter-refresh-btn" data-act="refreshUsage" data-id="${esc(acc.id)}" title="刷新额度" ${acc.usage_loading ? "disabled" : ""}>${ICONS.refreshXs}</button>` : ""}
                 </div>
               </div>
               ${renderGradientBar(pct, tone)}
             </div>
           `;
-        });
+        }
         if (windows.length === 0) {
           meterBlocks = `<div style="font-size:12px;color:var(--text-muted);">当前套餐暂无独立额度窗口</div>`;
         }
@@ -298,8 +294,8 @@
           <div class="meter-block">
             <div class="meter-head">
               <div class="meter-head-left">
-                <span class="meter-name">${cd.expired ? "回收已超期" : "回收倒计时"}</span>
-                <span class="meter-reset">截止 ${esc(cd.targetShort)}</span>
+                <span class="meter-name" data-cd-status="${esc(acc.id)}">${recycleStatus(cd)}</span>
+                <span class="meter-reset" title="${esc(fmtDate(acc.recycle_at))}">截止 ${esc(cd.targetShort)}</span>
               </div>
               <div class="meter-head-right">
                 <span class="meter-pct tone-${cd.level}" data-cd-clock="${esc(acc.id)}">${esc(cd.compact)}</span>
@@ -336,11 +332,14 @@
         </article>
       `;
     }
+    html += `</div></section>`;
 
     // LAYER 3: Other Desktop AI Apps in Compact 2-Column Grid (Filtering out duplicate ChatGPT / Codex!)
+    let hasRenderedToolSection = false;
     for (const sec of sections) {
       const visibleItems = (sec.items || []).filter((it) => it.uninstall_hint !== "OpenAI.Codex");
       if (visibleItems.length === 0) continue;
+      const underWorkToolsHeading = !hasRenderedToolSection && sec.id === "sec-desktop-ai" && sec.title === "桌面 AI 应用";
 
       const tiles = visibleItems.map((it) => `
         <div class="app-tile">
@@ -365,9 +364,10 @@
       `).join("");
 
       html += `
-        <div class="sec-heading" style="margin-top:6px;"><span class="sec-title">${esc(sec.title)}</span></div>
+        ${underWorkToolsHeading ? "" : `<div class="sec-heading" style="margin-top:6px;"><span class="sec-title">${esc(sec.title)}</span></div>`}
         <div class="app-grid-2">${tiles}</div>
       `;
+      hasRenderedToolSection = true;
     }
 
     // LAYER 4: Google Web Accounts (Chrome Profiles) in Compact 2-Column Grid
@@ -1195,6 +1195,7 @@
     else if (act === "openChangelog") openChangelogModal();
     else if (act === "forceQuit") postAction("forceQuit");
     else if (act === "startScreenshot") postAction("startScreenshot");
+    else if (act === "startVoiceRecorder") postAction("startVoiceRecorder");
     else if (act === "reregisterHotkey") postAction("reregisterHotkey");
     else if (act === "setScreenshotHotkey") postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: actBtn.dataset.hk });
     else if (act === "hideAllAiShortcuts") postAction("hideAllDesktopShortcuts", { category: "ai" });
@@ -1273,11 +1274,18 @@
       const cd = computeCountdown(acc);
       if (!cd) continue;
       const clock = document.querySelector(`[data-cd-clock="${CSS.escape(acc.id)}"]`);
-      const banner = document.querySelector(`[data-cd-banner="${CSS.escape(acc.id)}"]`);
       const fill = document.querySelector(`[data-cd-fill="${CSS.escape(acc.id)}"]`);
-      if (clock) clock.textContent = cd.compact;
-      if (banner) banner.textContent = cd.compact;
-      if (fill) fill.style.width = `${cd.pct <= 0 ? 0 : Math.max(2, cd.pct).toFixed(1)}%`;
+      const status = document.querySelector(`[data-cd-status="${CSS.escape(acc.id)}"]`);
+      const label = recycleStatus(cd);
+      if (status && status.textContent !== label) status.textContent = label;
+      if (clock) {
+        clock.textContent = cd.compact;
+        clock.className = `meter-pct tone-${cd.level}`;
+      }
+      if (fill) {
+        fill.className = `grad-fill tone-${cd.level}`;
+        fill.style.width = `${cd.pct <= 0 ? 0 : Math.max(2, cd.pct).toFixed(1)}%`;
+      }
     }
   }, 1000);
 

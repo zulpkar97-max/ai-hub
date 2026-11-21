@@ -1,10 +1,13 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Globalization;
 using Windows.Graphics.Imaging;
@@ -33,7 +36,7 @@ namespace CodexLauncher
             }
         }
 
-        public static string RecognizeBitmap(Bitmap bmp)
+        public static string RecognizeBitmap(Bitmap bmp, out string engineName)
         {
             if (bmp == null) throw new ArgumentNullException("bmp");
 
@@ -44,6 +47,72 @@ namespace CodexLauncher
                 pngBytes = ms.ToArray();
             }
 
+            string text = TryRecognizeWithPaddle(pngBytes);
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                engineName = "PaddleOCR（PP-OCRv6）";
+                return text;
+            }
+
+            engineName = "Windows OCR（回退）";
+            return RecognizeWithWindows(pngBytes);
+        }
+
+        private static string TryRecognizeWithPaddle(byte[] pngBytes)
+        {
+            string environment = Path.Combine(CoreService.DataDir, "ocr", "rapidocr-3.10.0");
+            string python = Path.Combine(environment, "Scripts", "python.exe");
+            string script = Path.Combine(CoreService.BaseDir, "资源", "OCR", "识别.py");
+            if (!File.Exists(python) || !File.Exists(script)) return null;
+
+            var start = new ProcessStartInfo
+            {
+                FileName = python,
+                Arguments = "-I -B \"" + script + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8
+            };
+
+            try
+            {
+                using (var process = Process.Start(start))
+                {
+                    if (process == null) return null;
+                    process.BeginErrorReadLine();
+                    Task<string> output = process.StandardOutput.ReadToEndAsync();
+                    var input = SendImageAsync(process.StandardInput.BaseStream, pngBytes);
+                    if (!process.WaitForExit(45000))
+                    {
+                        if (!process.HasExited) process.Kill();
+                        return null;
+                    }
+
+                    if (process.ExitCode != 0 || !input.GetAwaiter().GetResult()) return null;
+                    return output.GetAwaiter().GetResult().Trim();
+                }
+            }
+            catch (Win32Exception) { return null; }
+            catch (IOException) { return null; }
+            catch (InvalidOperationException) { return null; }
+        }
+
+        private static async Task<bool> SendImageAsync(Stream input, byte[] pngBytes)
+        {
+            try
+            {
+                using (input) await input.WriteAsync(pngBytes, 0, pngBytes.Length).ConfigureAwait(false);
+                return true;
+            }
+            catch (IOException) { return false; }
+            catch (ObjectDisposedException) { return false; }
+        }
+
+        private static string RecognizeWithWindows(byte[] pngBytes)
+        {
             using (var ras = new InMemoryRandomAccessStream())
             {
                 using (var writer = new DataWriter(ras.GetOutputStreamAt(0)))

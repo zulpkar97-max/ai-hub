@@ -7,6 +7,7 @@ $csc  = Join-Path $net 'csc.exe'
 $wpf  = Join-Path $net 'WPF'
 $lib  = Join-Path $root '资源\第三方'
 $ico  = Join-Path $root '资源\aihub.ico'
+$manifest = Join-Path $root '资源\AIHub.manifest'
 $live = Join-Path $root 'CodexLauncher.exe'
 $pending = Join-Path $root 'CodexLauncher.next.exe'
 $stage = if ($PrepareUpdate) { Join-Path $root ('.aihub-build-' + [guid]::NewGuid().ToString('N') + '.tmp') }
@@ -34,6 +35,7 @@ try {
     "/resource:$ui\界面样式.css,AIHub.Ui.界面样式.css" `
     "/resource:$ui\工作台交互.js,AIHub.Ui.工作台交互.js" `
     "/win32icon:$ico" `
+    "/win32manifest:$manifest" `
     "/out:$out" `
     "/r:$net\System.dll" `
     "/r:$net\System.Core.dll" `

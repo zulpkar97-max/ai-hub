@@ -767,6 +767,7 @@ namespace CodexLauncher
                 { "safe_profile_actions", true },
                 { "pending_update", LocalUpdate.IsPending },
                 { "brand_icon", "https://icons.aihub.local/aihub.png" },
+                { "voice_recorder_hotkey", VoiceRecorderShortcut.Display },
                 { "settings", new Dictionary<string, object>
                     {
                         { "minimize_to_tray", _store.settings.minimize_to_tray },
@@ -1331,6 +1332,18 @@ namespace CodexLauncher
                     case "startScreenshot":
                         {
                             StartScreenshotNow(140);
+                            break;
+                        }
+
+                    case "startVoiceRecorder":
+                        {
+                            uint screenshotModifiers, screenshotKey, recorderModifiers, recorderKey;
+                            if (_hotkeyRegistered
+                                && HotkeyHelper.TryParse(_store.settings.screenshot_hotkey, out screenshotModifiers, out screenshotKey)
+                                && HotkeyHelper.TryParse(VoiceRecorderShortcut.Display, out recorderModifiers, out recorderKey)
+                                && screenshotModifiers == recorderModifiers && screenshotKey == recorderKey)
+                                throw new InvalidOperationException("AI Hub 截图正在使用录音笔的快捷键，请先更换截图快捷键。");
+                            VoiceRecorderShortcut.Send();
                             break;
                         }
 

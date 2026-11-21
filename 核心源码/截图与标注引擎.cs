@@ -12,6 +12,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -120,13 +121,11 @@ namespace CodexLauncher
             public int Y;
         }
 
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        public struct MONITORINFO
+        internal struct DisplayMonitor
         {
-            public int cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
+            public RECT Bounds;
+            public string Device;
+            public int ScalePercent;
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -140,28 +139,25 @@ namespace CodexLauncher
             public string device;
         }
 
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(POINT point, uint flags);
-
         [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode, ExactSpelling = true)]
         private static extern bool GetMonitorDevice(IntPtr monitor, ref MONITORINFOEX info);
 
         [DllImport("gdi32.dll", EntryPoint = "CreateDCW", CharSet = CharSet.Unicode, ExactSpelling = true)]
         private static extern IntPtr CreateDisplayDC(string driver, string device, IntPtr port, IntPtr devmode);
 
-        [DllImport("dwmapi.dll")]
-        internal static extern int DwmFlush();
-
         public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
 
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+
+        [DllImport("shcore.dll")]
+        private static extern int GetScaleFactorForMonitor(IntPtr monitor, out int scalePercent);
 
         [DllImport("user32.dll")]
-        public static extern bool GetCursorPos(out POINT lpPoint);
+        public static extern bool GetPhysicalCursorPos(out POINT lpPoint);
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetDC(IntPtr hWnd);
@@ -186,6 +182,9 @@ namespace CodexLauncher
 
         [DllImport("gdi32.dll")]
         public static extern bool DeleteDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll")]
+        private static extern int GetDeviceCaps(IntPtr hdc, int index);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -212,6 +211,15 @@ namespace CodexLauncher
         public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
         [DllImport("user32.dll")]
+        internal static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+
+        [DllImport("user32.dll")]
+        internal static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
+
+        [DllImport("user32.dll")]
+        internal static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
         [DllImport("dwmapi.dll")]
@@ -223,7 +231,9 @@ namespace CodexLauncher
         public const int SRCCOPY = 0x00CC0020;
         public const int CAPTUREBLT = 0x40000000;
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        internal static readonly IntPtr PerMonitorV2 = new IntPtr(-4);
         public const uint SWP_NOACTIVATE = 0x0010;
+        internal const uint SWP_SHOWWINDOW = 0x0040;
         private const uint GW_HWNDNEXT = 2;
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -231,17 +241,21 @@ namespace CodexLauncher
         private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
         private const int DWMWA_CLOAKED = 14;
 
-        public static List<RECT> GetAllMonitors()
+        public static List<DisplayMonitor> GetAllMonitors()
         {
-            var list = new List<RECT>();
+            var list = new List<DisplayMonitor>();
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hMon, IntPtr hdc, ref RECT rc, IntPtr data) =>
             {
-                var mi = new MONITORINFO();
-                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
-                if (GetMonitorInfo(hMon, ref mi))
-                    list.Add(mi.rcMonitor);
-                else
-                    list.Add(rc);
+                var info = new MONITORINFOEX { cbSize = Marshal.SizeOf(typeof(MONITORINFOEX)) };
+                bool hasInfo = GetMonitorDevice(hMon, ref info);
+                int scalePercent;
+                GetScaleFactorForMonitor(hMon, out scalePercent);
+                list.Add(new DisplayMonitor
+                {
+                    Bounds = hasInfo ? info.rcMonitor : rc,
+                    Device = hasInfo ? info.device : null,
+                    ScalePercent = scalePercent
+                });
                 return true;
             }, IntPtr.Zero);
             return list;
@@ -273,67 +287,85 @@ namespace CodexLauncher
             return rects;
         }
 
-        public static Bitmap CaptureRect(RECT r)
+        public static Bitmap CaptureMonitor(DisplayMonitor monitor)
         {
+            var r = monitor.Bounds;
             if (r.Width <= 0 || r.Height <= 0) throw new ArgumentException("屏幕范围无效。");
 
             Bitmap frame = null;
-            Exception desktopError = null;
+            Exception captureError = null;
+            double blank = 1;
+            try
+            {
+                frame = CaptureFromMonitor(monitor);
+                if (frame != null) blank = BlankBorderFraction(frame);
+                if (frame != null && blank < 0.25) return frame;
+            }
+            catch (Exception ex) { captureError = ex; }
+
+            Bitmap alternate = null;
             IntPtr desktop = GetDC(IntPtr.Zero);
             if (desktop != IntPtr.Zero)
             {
                 try
                 {
-                    frame = CaptureFromDC(desktop, r.Left, r.Top, r.Width, r.Height);
-                    if (HasVisibleSample(frame)) return frame;
+                    alternate = CaptureFromDC(desktop, r.Left, r.Top, r.Width, r.Height);
+                    if (frame == null || BlankBorderFraction(alternate) < blank)
+                    {
+                        if (frame != null) frame.Dispose();
+                        var result = alternate;
+                        alternate = null;
+                        return result;
+                    }
                 }
-                catch (Exception ex) { desktopError = ex; }
-                finally { ReleaseDC(IntPtr.Zero, desktop); }
-            }
-
-            Bitmap alternate = null;
-            try
-            {
-                alternate = CaptureFromMonitor(r);
-                if (alternate != null && (frame == null || HasVisibleSample(alternate)))
+                catch (Exception ex) { captureError = ex; }
+                finally
                 {
-                    if (frame != null) frame.Dispose();
-                    var result = alternate;
-                    alternate = null;
-                    return result;
+                    if (alternate != null) alternate.Dispose();
+                    ReleaseDC(IntPtr.Zero, desktop);
                 }
             }
-            catch (Exception ex)
-            {
-                if (desktopError == null) desktopError = ex;
-            }
-            finally { if (alternate != null) alternate.Dispose(); }
 
-            // Keep an otherwise valid dark image, even if both sources return it.
             if (frame != null) return frame;
-            throw new InvalidOperationException("无法抓取该屏幕。", desktopError);
+            throw new InvalidOperationException("无法抓取该屏幕。", captureError);
         }
 
-        private static Bitmap CaptureFromMonitor(RECT r)
+        private static Bitmap CaptureFromMonitor(DisplayMonitor monitor)
         {
-            IntPtr monitor = MonitorFromPoint(new POINT { X = r.Left, Y = r.Top }, 0);
-            var info = new MONITORINFOEX { cbSize = Marshal.SizeOf(typeof(MONITORINFOEX)) };
-            if (monitor == IntPtr.Zero || !GetMonitorDevice(monitor, ref info) || string.IsNullOrEmpty(info.device)) return null;
-            IntPtr display = CreateDisplayDC("DISPLAY", info.device, IntPtr.Zero, IntPtr.Zero);
+            if (string.IsNullOrEmpty(monitor.Device)) return null;
+            IntPtr display = CreateDisplayDC(monitor.Device, null, IntPtr.Zero, IntPtr.Zero);
             if (display == IntPtr.Zero) return null;
-            try { return CaptureFromDC(display, r.Left - info.rcMonitor.Left, r.Top - info.rcMonitor.Top, r.Width, r.Height); }
+            try
+            {
+                var bounds = monitor.Bounds;
+                const int horzRes = 8, vertRes = 10;
+                if (GetDeviceCaps(display, horzRes) != bounds.Width || GetDeviceCaps(display, vertRes) != bounds.Height)
+                    return null;
+                return CaptureFromDC(display, 0, 0, bounds.Width, bounds.Height);
+            }
             finally { DeleteDC(display); }
         }
 
-        private static bool HasVisibleSample(Bitmap bitmap)
+        private static double BlankBorderFraction(Bitmap bitmap)
         {
-            for (int i = 1; i <= 16; i++)
-            for (int j = 1; j <= 12; j++)
+            var rows = new bool[12];
+            var columns = new bool[16];
+            for (int y = 0; y < rows.Length; y++)
+            for (int x = 0; x < columns.Length; x++)
             {
-                var pixel = bitmap.GetPixel(bitmap.Width * i / 17, bitmap.Height * j / 13);
-                if (pixel.R > 3 || pixel.G > 3 || pixel.B > 3) return true;
+                var pixel = bitmap.GetPixel((2 * x + 1) * bitmap.Width / (2 * columns.Length),
+                    (2 * y + 1) * bitmap.Height / (2 * rows.Length));
+                if (pixel.R > 3 || pixel.G > 3 || pixel.B > 3) rows[y] = columns[x] = true;
             }
-            return false;
+            return Math.Max(BlankEdge(rows), BlankEdge(columns));
+        }
+
+        private static double BlankEdge(bool[] occupied)
+        {
+            int first = Array.IndexOf(occupied, true);
+            if (first < 0) return 1;
+            int last = Array.LastIndexOf(occupied, true);
+            return (double)Math.Max(first, occupied.Length - 1 - last) / occupied.Length;
         }
 
         private static Bitmap CaptureFromDC(IntPtr source, int x, int y, int width, int height)
@@ -385,7 +417,7 @@ namespace CodexLauncher
     public static class ScreenshotSession
     {
         private static bool _active = false;
-        private static readonly List<ScreenshotOverlayWindow> ActiveOverlays = new List<ScreenshotOverlayWindow>();
+        private static ScreenshotOverlayWindow _overlay;
         private static Action<string, bool> _notifyCallback;
 
         public static bool IsActive { get { return _active; } }
@@ -396,67 +428,62 @@ namespace CodexLauncher
             _active = true;
             _notifyCallback = onNotify;
 
+            IntPtr previousContext = IntPtr.Zero;
             try
             {
+                previousContext = NativeScreen.SetThreadDpiAwarenessContext(NativeScreen.PerMonitorV2);
+                if (previousContext == IntPtr.Zero)
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "无法启用截图所需的每屏 DPI 坐标。");
                 var monitors = NativeScreen.GetAllMonitors();
                 var winRects = NativeScreen.GetVisibleTopWindowRects();
                 if (monitors.Count == 0) throw new InvalidOperationException("未找到可用的显示器。");
 
-                ActiveOverlays.Clear();
-                var failures = new List<string>();
-
-                foreach (var mon in monitors)
+                var desktopBounds = new NativeScreen.RECT
                 {
-                    Bitmap bmp = null;
-                    try
-                    {
-                        bmp = NativeScreen.CaptureRect(mon);
-                        var localWins = new List<NativeScreen.RECT>();
-                        foreach (var wr in winRects)
-                        {
-                            int l = Math.Max(mon.Left, wr.Left) - mon.Left;
-                            int t = Math.Max(mon.Top, wr.Top) - mon.Top;
-                            int r = Math.Min(mon.Right, wr.Right) - mon.Left;
-                            int b = Math.Min(mon.Bottom, wr.Bottom) - mon.Top;
-                            if (r > l && b > t)
-                                localWins.Add(new NativeScreen.RECT { Left = l, Top = t, Right = r, Bottom = b });
-                        }
+                    Left = monitors.Min(m => m.Bounds.Left), Top = monitors.Min(m => m.Bounds.Top),
+                    Right = monitors.Max(m => m.Bounds.Right), Bottom = monitors.Max(m => m.Bounds.Bottom)
+                };
 
-                        var overlay = new ScreenshotOverlayWindow(mon, bmp, localWins, CloseAll, Notify);
-                        ActiveOverlays.Add(overlay);
-                        bmp = null;
-                    }
-                    catch (Exception ex) { failures.Add(ex.Message); }
-                    finally { if (bmp != null) bmp.Dispose(); }
-                }
-
-                // Use completed image buffers before exposing any topmost windows.
-                foreach (var overlay in ActiveOverlays.ToList())
+                // One desktop snapshot and one input window share the same pixel origin.
+                Bitmap desktop = CaptureDesktop(desktopBounds, monitors);
+                try
                 {
-                    try { overlay.ShowOverlay(); }
-                    catch (Exception ex)
-                    {
-                        overlay.ForceClose();
-                        ActiveOverlays.Remove(overlay);
-                        failures.Add(ex.Message);
-                    }
+                    _overlay = new ScreenshotOverlayWindow(desktopBounds, desktop, monitors, winRects, CloseAll, Notify);
+                    desktop = null;
+                    _overlay.ShowOverlay();
                 }
-                if (ActiveOverlays.Count == 0) CloseAll();
-                else
-                {
-                    var focus = ActiveOverlays.FirstOrDefault(overlay => overlay.PreviewCursorWindow()) ?? ActiveOverlays[0];
-                    focus.Activate();
-                    focus.Focus();
-                }
-
-                if (failures.Count > 0)
-                    Notify("有 " + failures.Count + " 块屏幕无法截图，已跳过：" + failures[0], true);
+                finally { if (desktop != null) desktop.Dispose(); }
             }
             catch (Exception ex)
             {
                 CloseAll();
                 Notify("启动截图失败：" + ex.Message, true);
             }
+            finally
+            {
+                if (previousContext != IntPtr.Zero) NativeScreen.SetThreadDpiAwarenessContext(previousContext);
+            }
+        }
+
+        private static Bitmap CaptureDesktop(NativeScreen.RECT bounds, List<NativeScreen.DisplayMonitor> monitors)
+        {
+            if (monitors.Count == 1) return NativeScreen.CaptureMonitor(monitors[0]);
+
+            var desktop = new Bitmap(bounds.Width, bounds.Height, System.Drawing.Imaging.PixelFormat.Format32bppRgb);
+            try
+            {
+                using (var g = Graphics.FromImage(desktop))
+                {
+                    g.Clear(GdiColor.Black);
+                    foreach (var monitor in monitors)
+                    using (var frame = NativeScreen.CaptureMonitor(monitor))
+                    {
+                        g.DrawImageUnscaled(frame, monitor.Bounds.Left - bounds.Left, monitor.Bounds.Top - bounds.Top);
+                    }
+                }
+                return desktop;
+            }
+            catch { desktop.Dispose(); throw; }
         }
 
         private static void Notify(string msg, bool isError)
@@ -467,22 +494,12 @@ namespace CodexLauncher
             }
         }
 
-        internal static Bitmap CaptureSelection(NativeScreen.RECT selection)
-        {
-            foreach (var overlay in ActiveOverlays) overlay.Hide();
-            NativeScreen.DwmFlush();
-            return NativeScreen.CaptureRect(selection);
-        }
-
         public static void CloseAll()
         {
-            var copy = ActiveOverlays.ToList();
-            ActiveOverlays.Clear();
-            foreach (var ov in copy)
-            {
-                try { ov.ForceClose(); } catch { }
-            }
+            var overlay = _overlay;
+            _overlay = null;
             _active = false;
+            if (overlay != null) overlay.ForceClose();
         }
     }
 
@@ -508,80 +525,68 @@ namespace CodexLauncher
         public double FontSize;
     }
 
-    internal sealed class DragOutline : IDisposable
+    internal sealed class SelectionShade : FrameworkElement
     {
-        private sealed class Edge : WinForms.Form
+        private readonly DrawingVisual _visual = new DrawingVisual();
+        private readonly SolidColorBrush _shade = new SolidColorBrush(WpfColor.FromArgb(0x6E, 0x09, 0x0D, 0x16));
+
+        internal SelectionShade()
         {
-            public Edge()
-            {
-                ShowInTaskbar = false;
-                TopMost = true;
-                FormBorderStyle = WinForms.FormBorderStyle.None;
-                StartPosition = WinForms.FormStartPosition.Manual;
-                BackColor = GdiColor.FromArgb(16, 185, 129);
-            }
+            _shade.Freeze();
+            IsHitTestVisible = false;
+            AddVisualChild(_visual);
+        }
 
-            protected override bool ShowWithoutActivation { get { return true; } }
+        protected override int VisualChildrenCount { get { return 1; } }
+        protected override Visual GetVisualChild(int index)
+        {
+            if (index != 0) throw new ArgumentOutOfRangeException("index");
+            return _visual;
+        }
 
-            protected override WinForms.CreateParams CreateParams
+        internal void Paint(WpfRect monitor, WpfRect opening, System.Windows.Media.Pen outline = null)
+        {
+            using (var drawing = _visual.RenderOpen())
             {
-                get
+                if (monitor.IsEmpty) return;
+
+                var cutout = WpfRect.Intersect(monitor, opening);
+                if (cutout.IsEmpty || cutout.Width == 0 || cutout.Height == 0)
                 {
-                    var parameters = base.CreateParams;
-                    parameters.ExStyle |= 0x080000A0; // no activation, tool window, transparent to hit testing
-                    return parameters;
+                    drawing.DrawRectangle(_shade, null, monitor);
+                    return;
+                }
+
+                drawing.DrawRectangle(_shade, null, new WpfRect(monitor.Left, monitor.Top, monitor.Width, cutout.Top - monitor.Top));
+                drawing.DrawRectangle(_shade, null, new WpfRect(monitor.Left, cutout.Bottom, monitor.Width, monitor.Bottom - cutout.Bottom));
+                drawing.DrawRectangle(_shade, null, new WpfRect(monitor.Left, cutout.Top, cutout.Left - monitor.Left, cutout.Height));
+                drawing.DrawRectangle(_shade, null, new WpfRect(cutout.Right, cutout.Top, monitor.Right - cutout.Right, cutout.Height));
+                if (outline != null)
+                {
+                    double inset = outline.Thickness / 2;
+                    if (cutout.Width > outline.Thickness && cutout.Height > outline.Thickness)
+                    {
+                        cutout.Inflate(-inset, -inset);
+                        drawing.DrawRectangle(null, outline, cutout);
+                    }
                 }
             }
-
-            internal void MoveEdge(int x, int y, int width, int height)
-            {
-                if (!Visible)
-                {
-                    NativeScreen.SetWindowPos(Handle, NativeScreen.HWND_TOPMOST, x, y, width, height, NativeScreen.SWP_NOACTIVATE);
-                    Show();
-                }
-                NativeScreen.SetWindowPos(Handle, NativeScreen.HWND_TOPMOST, x, y, width, height, NativeScreen.SWP_NOACTIVATE);
-            }
-        }
-
-        private readonly Edge[] _edges = { new Edge(), new Edge(), new Edge(), new Edge() };
-        private GdiRect _last;
-
-        internal void Move(int left, int top, int right, int bottom)
-        {
-            const int thickness = 2;
-            var next = GdiRect.FromLTRB(left, top, right, bottom);
-            if (next.Width < thickness || next.Height < thickness) { Hide(); return; }
-            if (_last == next) return;
-            _last = next;
-            _edges[0].MoveEdge(left, top, next.Width, thickness);
-            _edges[1].MoveEdge(left, bottom - thickness, next.Width, thickness);
-            _edges[2].MoveEdge(left, top, thickness, next.Height);
-            _edges[3].MoveEdge(right - thickness, top, thickness, next.Height);
-        }
-
-        internal void Hide()
-        {
-            _last = GdiRect.Empty;
-            foreach (var edge in _edges) if (edge.Visible) edge.Hide();
-        }
-
-        public void Dispose()
-        {
-            foreach (var edge in _edges) edge.Dispose();
         }
     }
 
-    internal class ScreenshotOverlayWindow : Window
+    internal sealed class ScreenshotOverlayWindow
     {
         private readonly NativeScreen.RECT _physRect;
         private Bitmap _rawBmp;
+        private readonly List<NativeScreen.DisplayMonitor> _monitors;
         private readonly List<NativeScreen.RECT> _windowRects;
         private readonly Action _closeSession;
         private readonly Action<string, bool> _notify;
 
+        private Grid _root;
+        private HwndSource _source;
         private Canvas _canvas;
-        private WpfRectangle _dimTop, _dimBottom, _dimLeft, _dimRight;
+        private SelectionShade _shade;
         private Border _selFrame;
         private Border _hoverFrame;
         private Border _sizePill;
@@ -610,6 +615,9 @@ namespace CodexLauncher
         // State
         private bool _hasSelection = false;
         private WpfRect _selRect;
+        private WpfRect _selectionMonitor;
+        private double _selectionUiScale = 1;
+        private WpfRect _hoverMonitor = WpfRect.Empty;
         private WpfRect? _hoverWinRect = null;
         private bool _isDraggingSelection = false;
         private bool _isMovingSelection = false;
@@ -627,9 +635,10 @@ namespace CodexLauncher
         private WpfPoint _activeTextPos;
 
         private bool _closing = false;
-        private readonly DispatcherTimer _pointerFrame;
+        private bool _displayChanging;
+        private bool _pointerFrameQueued;
         private WpfPoint _latestPointer;
-        private DragOutline _dragOutline;
+        private System.Windows.Media.Pen _dragPen;
         private bool _outlineActive;
 
         private static readonly WpfColor[] PaletteColors = new[]
@@ -647,106 +656,194 @@ namespace CodexLauncher
         public ScreenshotOverlayWindow(
             NativeScreen.RECT physRect,
             Bitmap rawBmp,
+            List<NativeScreen.DisplayMonitor> monitors,
             List<NativeScreen.RECT> windowRects,
             Action closeSession,
             Action<string, bool> notify)
         {
             _physRect = physRect;
             _rawBmp = rawBmp;
-            _windowRects = windowRects ?? new List<NativeScreen.RECT>();
+            _monitors = monitors;
+            _windowRects = windowRects;
             _closeSession = closeSession;
             _notify = notify;
 
-            WindowStyle = WindowStyle.None;
-            ResizeMode = ResizeMode.NoResize;
-            ShowInTaskbar = false;
-            ShowActivated = false;
-            WindowStartupLocation = WindowStartupLocation.Manual;
-            Topmost = true;
-            AllowsTransparency = true;
-            // Keep the undimmed selection hit-testable without hiding the desktop.
-            Background = new SolidColorBrush(WpfColor.FromArgb(1, 0, 0, 0));
-            Cursor = Cursors.Cross;
-            FontFamily = UiHelpers.MainFont;
-
             BuildVisualTree();
-            _pointerFrame = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
-            _pointerFrame.Tick += (s, e) =>
-            {
-                _pointerFrame.Stop();
-                PaintPointerFrame();
-            };
 
-            SizeChanged += (s, e) =>
+            _root.SizeChanged += (s, e) =>
             {
+                _shade.Width = e.NewSize.Width;
+                _shade.Height = e.NewSize.Height;
                 if (!_hasSelection && !_isDraggingSelection) PreviewCursorWindow();
                 UpdateDimLayout();
             };
-            PreviewKeyDown += OnPreviewKeyDown;
-            PreviewKeyUp += (s, e) =>
+            _root.PreviewKeyDown += OnPreviewKeyDown;
+            _root.PreviewKeyUp += (s, e) =>
             {
                 if ((Keyboard.Modifiers & ModifierKeys.Alt) == 0)
                     _loupeCard.Visibility = Visibility.Collapsed;
             };
-            PreviewMouseWheel += OnPreviewMouseWheel;
+            _root.PreviewMouseWheel += OnPreviewMouseWheel;
         }
 
         internal void ShowOverlay()
         {
-            // Fix the hidden HWND to the monitor before WPF's first visible layout.
-            IntPtr hwnd = new WindowInteropHelper(this).EnsureHandle();
-            var source = HwndSource.FromHwnd(hwnd);
-            if (source != null) source.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
-            PositionOverlay(hwnd);
-            Show();
-            PositionOverlay(hwnd);
-            UpdateLayout();
-            NativeScreen.RECT windowRect;
-            if (!NativeScreen.GetWindowRect(hwnd, out windowRect) || windowRect.Left != _physRect.Left
-                || windowRect.Top != _physRect.Top || windowRect.Width != _physRect.Width || windowRect.Height != _physRect.Height)
-                throw new InvalidOperationException("截图遮罩未能对齐显示器。");
-            UpdateDimLayout();
-        }
-
-        private void PositionOverlay(IntPtr hwnd)
-        {
+            const int wsPopup = unchecked((int)0x80000000);
+            const int wsExTopmost = 0x00000008, wsExToolWindow = 0x00000080;
+            var placement = new HwndSourceParameters("AI Hub 截图", _physRect.Width, _physRect.Height)
+            {
+                PositionX = _physRect.Left,
+                PositionY = _physRect.Top,
+                WindowStyle = wsPopup,
+                ExtendedWindowStyle = wsExTopmost | wsExToolWindow,
+                TreatAsInputRoot = true,
+                HwndSourceHook = OverlayMessage
+            };
+            _source = new HwndSource(placement);
+            _source.Disposed += (s, e) => { if (!_closing) _closeSession(); };
+            _source.RootVisual = _root;
+            var hwnd = _source.Handle;
             if (!NativeScreen.SetWindowPos(hwnd, NativeScreen.HWND_TOPMOST, _physRect.Left, _physRect.Top,
-                _physRect.Width, _physRect.Height, NativeScreen.SWP_NOACTIVATE))
+                _physRect.Width, _physRect.Height, NativeScreen.SWP_NOACTIVATE | NativeScreen.SWP_SHOWWINDOW))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "无法定位截图遮罩。");
+
+            _root.UpdateLayout();
+            NativeScreen.RECT client;
+            var origin = new NativeScreen.POINT();
+            if (!NativeScreen.GetClientRect(hwnd, out client) || !NativeScreen.ClientToScreen(hwnd, ref origin)
+                || origin.X != _physRect.Left || origin.Y != _physRect.Top
+                || client.Width != _physRect.Width || client.Height != _physRect.Height
+                || Math.Abs(_root.ActualWidth * ScaleX - client.Width) > 1
+                || Math.Abs(_root.ActualHeight * ScaleY - client.Height) > 1)
+                throw new InvalidOperationException("截图遮罩的像素位置与桌面不一致。");
+
+            _source.DpiChanged += (s, e) => EndForDisplayChange();
+            PreviewCursorWindow();
+            NativeScreen.SetForegroundWindow(hwnd);
+            Keyboard.Focus(_root);
         }
 
-        internal bool PreviewCursorWindow()
+        private IntPtr OverlayMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int wmDisplayChange = 0x007E;
+            if (message == wmDisplayChange) EndForDisplayChange();
+            return IntPtr.Zero;
+        }
+
+        private void EndForDisplayChange()
+        {
+            if (_closing || _displayChanging) return;
+            _displayChanging = true;
+            _root.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_closing) return;
+                _closeSession();
+                _notify("显示设置已变化，请重新开始截图。", true);
+            }));
+        }
+
+        private void PreviewCursorWindow()
         {
             NativeScreen.POINT cursor;
-            if (!IsVisible || !NativeScreen.GetCursorPos(out cursor) || cursor.X < _physRect.Left || cursor.X >= _physRect.Right
-                || cursor.Y < _physRect.Top || cursor.Y >= _physRect.Bottom || ActualWidth <= 0 || ActualHeight <= 0)
-                return false;
+            if (_source == null || !NativeScreen.GetPhysicalCursorPos(out cursor)
+                || cursor.X < _physRect.Left || cursor.X >= _physRect.Right
+                || cursor.Y < _physRect.Top || cursor.Y >= _physRect.Bottom || _root.ActualWidth <= 0 || _root.ActualHeight <= 0)
+                return;
 
-            _latestPointer = new WpfPoint((cursor.X - _physRect.Left) / ScaleX, (cursor.Y - _physRect.Top) / ScaleY);
+            _latestPointer = ToCanvasPoint(cursor);
             UpdateHoverWindow(_latestPointer);
-            return true;
         }
 
         public void ForceClose()
         {
             if (_closing) return;
             _closing = true;
-            _pointerFrame.Stop();
-            if (_dragOutline != null) _dragOutline.Dispose();
-            try { Close(); } catch { }
+            CancelPointerFrame();
+            var source = _source;
+            _source = null;
             try
+            {
+                if (source != null && !source.IsDisposed) source.Dispose();
+            }
+            finally
             {
                 if (_rawBmp != null) { _rawBmp.Dispose(); _rawBmp = null; }
             }
-            catch { }
         }
 
-        private double ScaleX { get { return ActualWidth > 0 && _rawBmp != null ? _rawBmp.Width / ActualWidth : 1.0; } }
-        private double ScaleY { get { return ActualHeight > 0 && _rawBmp != null ? _rawBmp.Height / ActualHeight : 1.0; } }
+        private double ScaleX { get { return _source.CompositionTarget.TransformToDevice.M11; } }
+        private double ScaleY { get { return _source.CompositionTarget.TransformToDevice.M22; } }
+
+        private WpfPoint ToCanvasPoint(NativeScreen.POINT cursor)
+        {
+            return new WpfPoint((cursor.X - _physRect.Left) / ScaleX, (cursor.Y - _physRect.Top) / ScaleY);
+        }
+
+        private WpfRect ToCanvasRect(NativeScreen.RECT rect)
+        {
+            return new WpfRect((rect.Left - _physRect.Left) / ScaleX, (rect.Top - _physRect.Top) / ScaleY,
+                rect.Width / ScaleX, rect.Height / ScaleY);
+        }
+
+        private WpfRect MonitorAt(WpfPoint point, out double uiScale)
+        {
+            double deviceScale = ScaleX;
+            double x = _physRect.Left + Math.Round(point.X * deviceScale);
+            double y = _physRect.Top + Math.Round(point.Y * ScaleY);
+            uiScale = 1;
+            foreach (var monitor in _monitors)
+            {
+                var bounds = monitor.Bounds;
+                if (x < bounds.Left || x >= bounds.Right || y < bounds.Top || y >= bounds.Bottom) continue;
+                // Selection geometry stays in the desktop host's coordinate space.
+                if (monitor.ScalePercent > 0) uiScale = monitor.ScalePercent / (100.0 * deviceScale);
+                return ToCanvasRect(bounds);
+            }
+            return WpfRect.Empty;
+        }
+
+        private void ScaleSelectionControls(double scale)
+        {
+            if (_selectionUiScale == scale) return;
+            _selectionUiScale = scale;
+            var transform = new ScaleTransform(scale, scale);
+            transform.Freeze();
+            _toolbar.LayoutTransform = _subBar.LayoutTransform = _sizePill.LayoutTransform = _strokeHudWrap.LayoutTransform = transform;
+            foreach (var handle in _handles) handle.LayoutTransform = transform;
+            _selFrame.BorderThickness = new Thickness(1.5 * scale);
+        }
+
+        private WpfPoint PointerPosition(MouseEventArgs e)
+        {
+            NativeScreen.POINT cursor;
+            if (NativeScreen.GetPhysicalCursorPos(out cursor)) return ToCanvasPoint(cursor);
+            return e == null ? Mouse.GetPosition(_canvas) : e.GetPosition(_canvas);
+        }
+
+        private GdiRect ToBitmapRect(WpfRect rect)
+        {
+            double scaleX = ScaleX, scaleY = ScaleY;
+            int left = Math.Max(0, Math.Min(_physRect.Width, (int)Math.Round(rect.Left * scaleX)));
+            int top = Math.Max(0, Math.Min(_physRect.Height, (int)Math.Round(rect.Top * scaleY)));
+            int right = Math.Max(left, Math.Min(_physRect.Width, (int)Math.Round(rect.Right * scaleX)));
+            int bottom = Math.Max(top, Math.Min(_physRect.Height, (int)Math.Round(rect.Bottom * scaleY)));
+            return GdiRect.FromLTRB(left, top, right, bottom);
+        }
 
         private void BuildVisualTree()
         {
-            var root = new Grid();
+            var root = new Grid { Background = WpfBrushes.Black, Cursor = Cursors.Cross, Focusable = true };
+            TextElement.SetFontFamily(root, UiHelpers.MainFont);
+            _root = root;
+
+            var desktop = new System.Windows.Controls.Image
+            {
+                Source = NativeScreen.ToBitmapSource(_rawBmp),
+                Stretch = Stretch.Fill,
+                IsHitTestVisible = false
+            };
+            RenderOptions.SetBitmapScalingMode(desktop, BitmapScalingMode.NearestNeighbor);
+            root.Children.Add(desktop);
 
             // 2. Interactive canvas
             _canvas = new Canvas { Background = WpfBrushes.Transparent, ClipToBounds = true };
@@ -755,13 +852,15 @@ namespace CodexLauncher
             _canvas.MouseLeave += (s, e) =>
             {
                 if (_hasSelection || _isDraggingSelection) return;
-                _pointerFrame.Stop();
+                CancelPointerFrame();
                 _hoverWinRect = null;
+                _hoverMonitor = WpfRect.Empty;
                 _hoverFrame.Visibility = Visibility.Collapsed;
                 _loupeCard.Visibility = Visibility.Collapsed;
                 UpdateDimLayout();
             };
             _canvas.MouseLeftButtonUp += OnCanvasMouseUp;
+            _canvas.LostMouseCapture += OnCanvasLostMouseCapture;
             _canvas.MouseRightButtonUp += OnCanvasRightUp;
             root.Children.Add(_canvas);
 
@@ -769,16 +868,9 @@ namespace CodexLauncher
             _annotCanvas = new Canvas { IsHitTestVisible = false };
             _canvas.Children.Add(_annotCanvas);
 
-            // 4. Four dark dim panels surrounding selection
-            var dimBrush = new SolidColorBrush(WpfColor.FromArgb(0x6E, 0x09, 0x0D, 0x16));
-            _dimTop = new WpfRectangle { Fill = dimBrush, IsHitTestVisible = false };
-            _dimBottom = new WpfRectangle { Fill = dimBrush, IsHitTestVisible = false };
-            _dimLeft = new WpfRectangle { Fill = dimBrush, IsHitTestVisible = false };
-            _dimRight = new WpfRectangle { Fill = dimBrush, IsHitTestVisible = false };
-            _canvas.Children.Add(_dimTop);
-            _canvas.Children.Add(_dimBottom);
-            _canvas.Children.Add(_dimLeft);
-            _canvas.Children.Add(_dimRight);
+            // 4. The shade and moving outline share one visual.
+            _shade = new SelectionShade();
+            _canvas.Children.Add(_shade);
 
             // 5. Smart window hover highlight frame
             _hoverFrame = new Border
@@ -825,11 +917,11 @@ namespace CodexLauncher
                 {
                     if (_activeTool != DrawTool.None) return;
                     CommitActiveTextBox();
+                    if (!_canvas.CaptureMouse()) return;
                     _activeHandle = idx;
-                    _dragAnchor = e.GetPosition(_canvas);
+                    _dragAnchor = PointerPosition(e);
                     _dragOrigRect = _selRect;
                     BeginOutline();
-                    _canvas.CaptureMouse();
                     e.Handled = true;
                 };
                 _handles[i] = h;
@@ -877,7 +969,6 @@ namespace CodexLauncher
             _canvas.Children.Add(_toolbar);
             _canvas.Children.Add(_subBar);
 
-            Content = root;
         }
 
         private void BuildLoupe()
@@ -1190,7 +1281,7 @@ namespace CodexLauncher
                         : new SolidColorBrush(WpfColor.FromRgb(0x33, 0x41, 0x55));
                 }
             }
-            Cursor = tool == DrawTool.None ? Cursors.Arrow : (tool == DrawTool.Text ? Cursors.IBeam : Cursors.Cross);
+            _root.Cursor = tool == DrawTool.None ? Cursors.Arrow : (tool == DrawTool.Text ? Cursors.IBeam : Cursors.Cross);
             UpdateToolbarPositions();
         }
 
@@ -1221,16 +1312,19 @@ namespace CodexLauncher
         {
             if (IsMouseOverUi(e.OriginalSource as DependencyObject)) return;
 
-            WpfPoint pt = e.GetPosition(_canvas);
+            WpfPoint pt = PointerPosition(e);
             CommitActiveTextBox();
 
             if (!_hasSelection)
             {
+                double uiScale;
+                _selectionMonitor = MonitorAt(pt, out uiScale);
+                if (_selectionMonitor.IsEmpty || !_canvas.CaptureMouse()) return;
+                ScaleSelectionControls(uiScale);
                 _isDraggingSelection = true;
                 _dragAnchor = pt;
                 _selRect = new WpfRect(pt, pt);
                 BeginOutline();
-                _canvas.CaptureMouse();
                 return;
             }
 
@@ -1243,13 +1337,12 @@ namespace CodexLauncher
 
             if (_activeTool == DrawTool.None)
             {
-                if (_selRect.Contains(pt))
+                if (_selRect.Contains(pt) && _canvas.CaptureMouse())
                 {
                     _isMovingSelection = true;
                     _dragAnchor = pt;
                     _dragOrigRect = _selRect;
                     BeginOutline();
-                    _canvas.CaptureMouse();
                 }
                 return;
             }
@@ -1279,34 +1372,32 @@ namespace CodexLauncher
         private void BeginOutline()
         {
             _outlineActive = true;
-            _pointerFrame.Stop();
+            CancelPointerFrame();
             _hoverWinRect = null;
             _hoverFrame.Visibility = Visibility.Collapsed;
             _loupeCard.Visibility = Visibility.Collapsed;
-            _dimTop.Visibility = _dimBottom.Visibility = _dimLeft.Visibility = _dimRight.Visibility = Visibility.Collapsed;
             _selFrame.Visibility = _sizePill.Visibility = _toolbar.Visibility = _subBar.Visibility = Visibility.Collapsed;
             foreach (var handle in _handles) handle.Visibility = Visibility.Collapsed;
-        }
 
-        private void EndOutline()
-        {
-            _outlineActive = false;
-            if (_dragOutline != null) _dragOutline.Hide();
-            _dimTop.Visibility = _dimBottom.Visibility = _dimLeft.Visibility = _dimRight.Visibility = Visibility.Visible;
+            _dragPen = new System.Windows.Media.Pen(_selFrame.BorderBrush, _selFrame.BorderThickness.Left);
+            _dragPen.Freeze();
+            _shade.Paint(_selectionMonitor, _selRect, _dragPen);
         }
 
         private void UpdateDragGeometry(WpfPoint point)
         {
             if (_isDraggingSelection)
             {
-                var clamped = new WpfPoint(Math.Max(0, Math.Min(ActualWidth, point.X)), Math.Max(0, Math.Min(ActualHeight, point.Y)));
+                var clamped = new WpfPoint(
+                    Math.Max(_selectionMonitor.Left, Math.Min(_selectionMonitor.Right, point.X)),
+                    Math.Max(_selectionMonitor.Top, Math.Min(_selectionMonitor.Bottom, point.Y)));
                 _selRect = MakeRect(_dragAnchor, clamped);
             }
             else if (_activeHandle >= 0) ResizeSelectionByHandle(_activeHandle, point);
             else if (_isMovingSelection)
             {
-                double x = Math.Max(0, Math.Min(ActualWidth - _dragOrigRect.Width, _dragOrigRect.X + point.X - _dragAnchor.X));
-                double y = Math.Max(0, Math.Min(ActualHeight - _dragOrigRect.Height, _dragOrigRect.Y + point.Y - _dragAnchor.Y));
+                double x = Math.Max(_selectionMonitor.Left, Math.Min(_selectionMonitor.Right - _dragOrigRect.Width, _dragOrigRect.X + point.X - _dragAnchor.X));
+                double y = Math.Max(_selectionMonitor.Top, Math.Min(_selectionMonitor.Bottom - _dragOrigRect.Height, _dragOrigRect.Y + point.Y - _dragAnchor.Y));
                 _selRect = new WpfRect(x, y, _dragOrigRect.Width, _dragOrigRect.Height);
             }
         }
@@ -1324,30 +1415,36 @@ namespace CodexLauncher
 
         private void OnCanvasMouseMove(object sender, MouseEventArgs e)
         {
-            _latestPointer = e.GetPosition(_canvas);
+            _latestPointer = PointerPosition(e);
             if (_currentAnnot != null) TrackAnnotation(_latestPointer);
             if (_outlineActive || _currentAnnot != null || !_hasSelection)
             {
-                if (!_pointerFrame.IsEnabled) _pointerFrame.Start();
+                if (_pointerFrameQueued) return;
+                _pointerFrameQueued = true;
+                CompositionTarget.Rendering += OnPointerFrame;
             }
             else if (_activeTool == DrawTool.None)
             {
-                Cursor = _selRect.Contains(_latestPointer) ? Cursors.SizeAll : Cursors.Arrow;
+                _root.Cursor = _selRect.Contains(_latestPointer) ? Cursors.SizeAll : Cursors.Arrow;
             }
         }
 
-        private void PaintPointerFrame()
+        private void CancelPointerFrame()
         {
-            if (_closing) return;
+            if (!_pointerFrameQueued) return;
+            _pointerFrameQueued = false;
+            CompositionTarget.Rendering -= OnPointerFrame;
+        }
+
+        private void OnPointerFrame(object sender, EventArgs e)
+        {
+            CancelPointerFrame();
+            if (_closing || _displayChanging) return;
             if (_outlineActive)
             {
+                var previous = _selRect;
                 UpdateDragGeometry(_latestPointer);
-                if (_dragOutline == null) _dragOutline = new DragOutline();
-                int left = _physRect.Left + (int)Math.Round(_selRect.Left * ScaleX);
-                int top = _physRect.Top + (int)Math.Round(_selRect.Top * ScaleY);
-                int right = _physRect.Left + (int)Math.Round(_selRect.Right * ScaleX);
-                int bottom = _physRect.Top + (int)Math.Round(_selRect.Bottom * ScaleY);
-                _dragOutline.Move(left, top, right, bottom);
+                if (previous != _selRect) _shade.Paint(_selectionMonitor, _selRect, _dragPen);
             }
             else if (_currentAnnot != null) RedrawAnnotations();
             else if (!_hasSelection)
@@ -1359,12 +1456,12 @@ namespace CodexLauncher
 
         private void OnCanvasMouseUp(object sender, MouseButtonEventArgs e)
         {
-            _pointerFrame.Stop();
-            var point = e.GetPosition(_canvas);
+            CancelPointerFrame();
+            var point = PointerPosition(e);
             if (_outlineActive)
             {
                 UpdateDragGeometry(point);
-                EndOutline();
+                _outlineActive = false;
             }
             if (_currentAnnot != null) TrackAnnotation(point);
             if (_canvas.IsMouseCaptured) _canvas.ReleaseMouseCapture();
@@ -1376,7 +1473,7 @@ namespace CodexLauncher
 
                 if (_selRect.Width < 5 && _selRect.Height < 5)
                 {
-                    var target = FindWindowAt(e.GetPosition(_canvas));
+                    var target = FindWindowAt(point, _selectionMonitor);
                     if (target.HasValue)
                     {
                         _selRect = target.Value;
@@ -1393,8 +1490,12 @@ namespace CodexLauncher
                     _hasSelection = true;
                 }
 
-                UpdateDimLayout();
-                UpdateToolbarPositions();
+                if (_hasSelection) UpdateToolbarPositions();
+                else
+                {
+                    PreviewCursorWindow();
+                    UpdateDimLayout();
+                }
                 return;
             }
 
@@ -1423,6 +1524,26 @@ namespace CodexLauncher
             }
         }
 
+        private void OnCanvasLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (_closing || !_outlineActive || _canvas.IsMouseCaptured) return;
+
+            CancelPointerFrame();
+            _outlineActive = _isDraggingSelection = _isMovingSelection = false;
+            _activeHandle = -1;
+            if (_hasSelection)
+            {
+                _selRect = _dragOrigRect;
+                UpdateToolbarPositions();
+            }
+            else
+            {
+                _selRect = WpfRect.Empty;
+                PreviewCursorWindow();
+                UpdateDimLayout();
+            }
+        }
+
         private void OnCanvasRightUp(object sender, MouseButtonEventArgs e)
         {
             if (_activeTextBox != null)
@@ -1446,7 +1567,7 @@ namespace CodexLauncher
                 _selFrame.Visibility = Visibility.Collapsed;
                 _sizePill.Visibility = Visibility.Collapsed;
                 for (int i = 0; i < 8; i++) _handles[i].Visibility = Visibility.Collapsed;
-                Cursor = Cursors.Cross;
+                _root.Cursor = Cursors.Cross;
                 PreviewCursorWindow();
                 UpdateDimLayout();
                 return;
@@ -1468,8 +1589,11 @@ namespace CodexLauncher
         {
             _strokeHud.Text = text;
             _strokeHudWrap.Visibility = Visibility.Visible;
-            Canvas.SetLeft(_strokeHudWrap, Math.Max(10, _selRect.Left + _selRect.Width / 2 - 48));
-            Canvas.SetTop(_strokeHudWrap, Math.Max(10, _selRect.Top + 10));
+            _strokeHudWrap.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+            double margin = 10 * _selectionUiScale;
+            double center = _selRect.Left + _selRect.Width / 2;
+            Canvas.SetLeft(_strokeHudWrap, Math.Max(_selectionMonitor.Left + margin, center - _strokeHudWrap.DesiredSize.Width / 2));
+            Canvas.SetTop(_strokeHudWrap, _selRect.Top + margin);
             var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
             t.Tick += (s, ev) => { t.Stop(); _strokeHudWrap.Visibility = Visibility.Collapsed; };
             t.Start();
@@ -1478,7 +1602,7 @@ namespace CodexLauncher
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (!_hasSelection && !_outlineActive && (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt))
-                UpdateLoupe(Mouse.GetPosition(_canvas));
+                UpdateLoupe(PointerPosition(null));
             if (_activeTextBox != null)
             {
                 if (e.Key == Key.Escape)
@@ -1504,7 +1628,7 @@ namespace CodexLauncher
 
             if (!_hasSelection && e.Key == Key.C)
             {
-                UpdateLoupe(Mouse.GetPosition(_canvas));
+                UpdateLoupe(PointerPosition(null));
                 try { Clipboard.SetText(_lastHexColor); } catch { }
                 _closeSession();
                 _notify("已复制色值 " + _lastHexColor, false);
@@ -1540,27 +1664,32 @@ namespace CodexLauncher
 
         // ==================== LAYOUT, HOVER & LOUPE ====================
 
-        private WpfRect? FindWindowAt(WpfPoint point)
+        private WpfRect? FindWindowAt(WpfPoint point, WpfRect monitor)
         {
-            double px = point.X * ScaleX;
-            double py = point.Y * ScaleY;
+            if (monitor.IsEmpty || !monitor.Contains(point)) return null;
             foreach (var rect in _windowRects)
             {
-                if (px >= rect.Left && px < rect.Right && py >= rect.Top && py < rect.Bottom)
-                    return new WpfRect(rect.Left / ScaleX, rect.Top / ScaleY, rect.Width / ScaleX, rect.Height / ScaleY);
+                var target = WpfRect.Intersect(monitor, ToCanvasRect(rect));
+                if (!target.IsEmpty && target.Width > 0 && target.Height > 0
+                    && point.X >= target.Left && point.X < target.Right && point.Y >= target.Top && point.Y < target.Bottom)
+                    return target;
             }
             return null;
         }
 
         private void UpdateHoverWindow(WpfPoint pt)
         {
-            var match = FindWindowAt(pt);
-            if (match == _hoverWinRect && (!match.HasValue || _hoverFrame.Visibility == Visibility.Visible)) return;
+            double uiScale;
+            var monitor = MonitorAt(pt, out uiScale);
+            var match = FindWindowAt(pt, monitor);
+            if (monitor == _hoverMonitor && match == _hoverWinRect && (!match.HasValue || _hoverFrame.Visibility == Visibility.Visible)) return;
+            _hoverMonitor = monitor;
             _hoverWinRect = match;
             UpdateDimLayout();
             if (match.HasValue)
             {
                 var r = match.Value;
+                _hoverFrame.BorderThickness = new Thickness(2.2 * uiScale);
                 _hoverFrame.Width = Math.Max(0, r.Width);
                 _hoverFrame.Height = Math.Max(0, r.Height);
                 Canvas.SetLeft(_hoverFrame, r.Left);
@@ -1575,7 +1704,10 @@ namespace CodexLauncher
 
         private void UpdateLoupe(WpfPoint pt)
         {
-            if (_rawBmp == null || ActualWidth <= 0 || ActualHeight <= 0) return;
+            if (_rawBmp == null || _root.ActualWidth <= 0 || _root.ActualHeight <= 0) return;
+            double uiScale;
+            var monitor = MonitorAt(pt, out uiScale);
+            if (monitor.IsEmpty) return;
 
             int px = Math.Max(0, Math.Min(_rawBmp.Width - 1, (int)Math.Round(pt.X * ScaleX)));
             int py = Math.Max(0, Math.Min(_rawBmp.Height - 1, (int)Math.Round(pt.Y * ScaleY)));
@@ -1585,9 +1717,8 @@ namespace CodexLauncher
             _loupeColorDot.Background = new SolidColorBrush(WpfColor.FromRgb(c.R, c.G, c.B));
             if (_isDraggingSelection)
             {
-                int sw = (int)Math.Round(_selRect.Width * ScaleX);
-                int sh = (int)Math.Round(_selRect.Height * ScaleY);
-                _loupeInfoText.Text = string.Format("{0}×{1}  {2}", sw, sh, _lastHexColor);
+                GdiRect pixels = ToBitmapRect(_selRect);
+                _loupeInfoText.Text = string.Format("{0}×{1}  {2}", pixels.Width, pixels.Height, _lastHexColor);
             }
             else
             {
@@ -1614,34 +1745,32 @@ namespace CodexLauncher
                 _loupeImg.Source = NativeScreen.ToBitmapSource(mini);
             }
 
-            double lx = pt.X + 18;
-            double ly = pt.Y + 18;
-            if (lx + 145 > ActualWidth) lx = pt.X - 155;
-            if (ly + 170 > ActualHeight) ly = pt.Y - 175;
-            Canvas.SetLeft(_loupeCard, Math.Max(6, lx));
-            Canvas.SetTop(_loupeCard, Math.Max(6, ly));
+            var transform = _loupeCard.LayoutTransform as ScaleTransform;
+            if (transform == null || transform.ScaleX != uiScale)
+                _loupeCard.LayoutTransform = new ScaleTransform(uiScale, uiScale);
+            double lx = pt.X + 18 * uiScale;
+            double ly = pt.Y + 18 * uiScale;
+            if (lx + 145 * uiScale > monitor.Right) lx = pt.X - 155 * uiScale;
+            if (ly + 170 * uiScale > monitor.Bottom) ly = pt.Y - 175 * uiScale;
+            Canvas.SetLeft(_loupeCard, Math.Max(monitor.Left + 6 * uiScale, lx));
+            Canvas.SetTop(_loupeCard, Math.Max(monitor.Top + 6 * uiScale, ly));
             _loupeCard.Visibility = Visibility.Visible;
         }
 
         private void UpdateDimLayout()
         {
-            double w = ActualWidth;
-            double h = ActualHeight;
-            if (_outlineActive || w <= 0 || h <= 0) return;
+            if (_outlineActive || _source == null || _root.ActualWidth <= 0 || _root.ActualHeight <= 0) return;
 
             bool selecting = _hasSelection || _isDraggingSelection;
-            WpfRect highlight = selecting ? _selRect : (_hoverWinRect ?? new WpfRect(0, h, 0, 0));
+            var monitor = selecting ? _selectionMonitor : _hoverMonitor;
+            WpfRect highlight = selecting ? _selRect : (_hoverWinRect ?? WpfRect.Empty);
+            _shade.Paint(monitor, highlight);
+            if (!selecting || monitor.IsEmpty) return;
 
-            double l = Math.Max(0, Math.Min(w, highlight.Left));
-            double t = Math.Max(0, Math.Min(h, highlight.Top));
-            double r = Math.Max(l, Math.Min(w, highlight.Right));
-            double b = Math.Max(t, Math.Min(h, highlight.Bottom));
-
-            SetRect(_dimTop, 0, 0, w, t);
-            SetRect(_dimBottom, 0, b, w, h - b);
-            SetRect(_dimLeft, 0, t, l, b - t);
-            SetRect(_dimRight, r, t, w - r, b - t);
-            if (!selecting) return;
+            double l = Math.Max(monitor.Left, Math.Min(monitor.Right, highlight.Left));
+            double t = Math.Max(monitor.Top, Math.Min(monitor.Bottom, highlight.Top));
+            double r = Math.Max(l, Math.Min(monitor.Right, highlight.Right));
+            double b = Math.Max(t, Math.Min(monitor.Bottom, highlight.Bottom));
 
             _selFrame.Width = Math.Max(0, r - l);
             _selFrame.Height = Math.Max(0, b - t);
@@ -1650,10 +1779,11 @@ namespace CodexLauncher
             _selFrame.Visibility = Visibility.Visible;
 
             // Size badge
-            int pw = Math.Max(1, (int)Math.Round((r - l) * ScaleX));
-            int ph = Math.Max(1, (int)Math.Round((b - t) * ScaleY));
-            _sizeText.Text = string.Format("{0} × {1}", pw, ph);
-            double py = t - 26 >= 6 ? t - 26 : t + 6;
+            GdiRect pixels = ToBitmapRect(_selRect);
+            _sizeText.Text = string.Format("{0} × {1}", pixels.Width, pixels.Height);
+            double margin = 6 * _selectionUiScale;
+            double above = t - 26 * _selectionUiScale;
+            double py = above >= _selectionMonitor.Top + margin ? above : t + margin;
             Canvas.SetLeft(_sizePill, l);
             Canvas.SetTop(_sizePill, py);
             _sizePill.Visibility = Visibility.Visible;
@@ -1672,8 +1802,8 @@ namespace CodexLauncher
                 _handles[i].Visibility = showHandles ? Visibility.Visible : Visibility.Collapsed;
                 if (showHandles)
                 {
-                    Canvas.SetLeft(_handles[i], pts[i].X - 4.5);
-                    Canvas.SetTop(_handles[i], pts[i].Y - 4.5);
+                    Canvas.SetLeft(_handles[i], pts[i].X - 4.5 * _selectionUiScale);
+                    Canvas.SetTop(_handles[i], pts[i].Y - 4.5 * _selectionUiScale);
                 }
             }
         }
@@ -1692,15 +1822,17 @@ namespace CodexLauncher
             double tbW = _toolbar.DesiredSize.Width;
             double tbH = _toolbar.DesiredSize.Height;
 
-            double left = _selRect.Right - tbW;
-            if (left < 8) left = Math.Max(8, _selRect.Left);
-            if (left + tbW > ActualWidth - 8) left = Math.Max(8, ActualWidth - tbW - 8);
+            double scale = _selectionUiScale;
+            double margin = 8 * scale;
+            double minX = _selectionMonitor.Left + margin, maxX = _selectionMonitor.Right - margin;
+            double minY = _selectionMonitor.Top + margin, maxY = _selectionMonitor.Bottom - margin;
+            double left = Math.Max(minX, Math.Min(maxX - tbW, _selRect.Right - tbW));
 
-            bool below = _selRect.Bottom + tbH + 46 <= ActualHeight;
+            bool below = _selRect.Bottom + tbH + 38 * scale <= maxY;
             double top;
-            if (below) top = _selRect.Bottom + 8;
-            else if (_selRect.Top - tbH - 46 >= 8) top = _selRect.Top - tbH - 8;
-            else top = Math.Max(8, _selRect.Bottom - tbH - 10);
+            if (below) top = _selRect.Bottom + margin;
+            else if (_selRect.Top - tbH - 46 * scale >= minY) top = _selRect.Top - tbH - margin;
+            else top = Math.Max(minY, _selRect.Bottom - tbH - 10 * scale);
 
             Canvas.SetLeft(_toolbar, left);
             Canvas.SetTop(_toolbar, top);
@@ -1712,8 +1844,10 @@ namespace CodexLauncher
                 _subBar.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
                 double sbW = _subBar.DesiredSize.Width;
                 double sbH = _subBar.DesiredSize.Height;
-                double sLeft = Math.Max(8, Math.Min(ActualWidth - sbW - 8, left));
-                double sTop = (top + tbH + 6 + sbH <= ActualHeight - 4) ? (top + tbH + 6) : Math.Max(8, top - sbH - 6);
+                double sLeft = Math.Max(minX, Math.Min(maxX - sbW, left));
+                double gap = 6 * scale;
+                double belowToolbar = top + tbH + gap;
+                double sTop = belowToolbar + sbH <= maxY + 4 * scale ? belowToolbar : Math.Max(minY, top - sbH - gap);
                 Canvas.SetLeft(_subBar, sLeft);
                 Canvas.SetTop(_subBar, sTop);
             }
@@ -1724,22 +1858,16 @@ namespace CodexLauncher
         private void ResizeSelectionByHandle(int idx, WpfPoint pt)
         {
             double l = _dragOrigRect.Left, t = _dragOrigRect.Top, r = _dragOrigRect.Right, b = _dragOrigRect.Bottom;
-            double x = Math.Max(0, Math.Min(ActualWidth, pt.X));
-            double y = Math.Max(0, Math.Min(ActualHeight, pt.Y));
+            double x = Math.Max(_selectionMonitor.Left, Math.Min(_selectionMonitor.Right, pt.X));
+            double y = Math.Max(_selectionMonitor.Top, Math.Min(_selectionMonitor.Bottom, pt.Y));
+            double minWidth = Math.Min(12, _dragOrigRect.Width);
+            double minHeight = Math.Min(12, _dragOrigRect.Height);
 
-            if (idx == 0 || idx == 6 || idx == 7) l = Math.Min(x, r - 12);
-            if (idx == 2 || idx == 3 || idx == 4) r = Math.Max(x, l + 12);
-            if (idx == 0 || idx == 1 || idx == 2) t = Math.Min(y, b - 12);
-            if (idx == 4 || idx == 5 || idx == 6) b = Math.Max(y, t + 12);
-            _selRect = new WpfRect(l, t, Math.Max(12, r - l), Math.Max(12, b - t));
-        }
-
-        private static void SetRect(WpfRectangle rect, double x, double y, double w, double h)
-        {
-            Canvas.SetLeft(rect, x);
-            Canvas.SetTop(rect, y);
-            rect.Width = Math.Max(0, w);
-            rect.Height = Math.Max(0, h);
+            if (idx == 0 || idx == 6 || idx == 7) l = Math.Min(x, r - minWidth);
+            if (idx == 2 || idx == 3 || idx == 4) r = Math.Max(x, l + minWidth);
+            if (idx == 0 || idx == 1 || idx == 2) t = Math.Min(y, b - minHeight);
+            if (idx == 4 || idx == 5 || idx == 6) b = Math.Max(y, t + minHeight);
+            _selRect = new WpfRect(l, t, r - l, b - t);
         }
 
         private static WpfRect MakeRect(WpfPoint a, WpfPoint b)
@@ -1940,20 +2068,17 @@ namespace CodexLauncher
         private BitmapSource BuildMosaicPreview(WpfRect dipRect)
         {
             if (_rawBmp == null) return null;
-            int sx = Math.Max(0, (int)Math.Floor(dipRect.Left * ScaleX));
-            int sy = Math.Max(0, (int)Math.Floor(dipRect.Top * ScaleY));
-            int sw = Math.Min(_rawBmp.Width - sx, Math.Max(1, (int)Math.Ceiling(dipRect.Width * ScaleX)));
-            int sh = Math.Min(_rawBmp.Height - sy, Math.Max(1, (int)Math.Ceiling(dipRect.Height * ScaleY)));
-            if (sw <= 1 || sh <= 1) return null;
+            GdiRect pixels = ToBitmapRect(dipRect);
+            if (pixels.Width <= 1 || pixels.Height <= 1) return null;
 
             int block = Math.Max(8, (int)Math.Round(10 * ScaleX));
-            int gw = Math.Max(1, sw / block);
-            int gh = Math.Max(1, sh / block);
+            int gw = Math.Max(1, pixels.Width / block);
+            int gh = Math.Max(1, pixels.Height / block);
             using (var tiny = new Bitmap(gw, gh))
             using (var g = Graphics.FromImage(tiny))
             {
                 g.InterpolationMode = InterpolationMode.Bilinear;
-                g.DrawImage(_rawBmp, new GdiRect(0, 0, gw, gh), new GdiRect(sx, sy, sw, sh), GraphicsUnit.Pixel);
+                g.DrawImage(_rawBmp, new GdiRect(0, 0, gw, gh), pixels, GraphicsUnit.Pixel);
                 return NativeScreen.ToBitmapSource(tiny);
             }
         }
@@ -1962,19 +2087,21 @@ namespace CodexLauncher
 
         private Bitmap BuildFinalBitmap()
         {
+            if (_displayChanging) throw new InvalidOperationException("显示设置已变化，请重新开始截图。");
             CommitActiveTextBox();
-            int cx = Math.Max(0, (int)Math.Round(_selRect.Left * ScaleX));
-            int cy = Math.Max(0, (int)Math.Round(_selRect.Top * ScaleY));
-            int cw = Math.Min(_rawBmp.Width - cx, Math.Max(1, (int)Math.Round(_selRect.Width * ScaleX)));
-            int ch = Math.Min(_rawBmp.Height - cy, Math.Max(1, (int)Math.Round(_selRect.Height * ScaleY)));
+            GdiRect crop = ToBitmapRect(_selRect);
+            if (crop.Width <= 0 || crop.Height <= 0) throw new InvalidOperationException("请选择有面积的截图区域。");
 
-            var result = ScreenshotSession.CaptureSelection(new NativeScreen.RECT
-            {
-                Left = _physRect.Left + cx,
-                Top = _physRect.Top + cy,
-                Right = _physRect.Left + cx + cw,
-                Bottom = _physRect.Top + cy + ch
-            });
+            // The overlay shows this exact frame, even if the desktop has changed underneath it.
+            var result = _rawBmp.Clone(crop, _rawBmp.PixelFormat);
+            try { DrawFinalAnnotations(result, crop); }
+            catch { result.Dispose(); throw; }
+            return result;
+        }
+
+        private void DrawFinalAnnotations(Bitmap result, GdiRect crop)
+        {
+            if (_annotations.Count == 0) return;
             using (var g = Graphics.FromImage(result))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -1983,8 +2110,8 @@ namespace CodexLauncher
 
                 double sx = ScaleX;
                 double sy = ScaleY;
-                double ox = _selRect.Left;
-                double oy = _selRect.Top;
+                double ox = crop.Left / sx;
+                double oy = crop.Top / sy;
 
                 foreach (var item in _annotations)
                 {
@@ -2024,21 +2151,20 @@ namespace CodexLauncher
                     else if (item.Tool == DrawTool.Mosaic)
                     {
                         var r = MakeRect(item.Start, item.End);
-                        int mx = Math.Max(0, (int)Math.Floor((r.Left - ox) * sx));
-                        int my = Math.Max(0, (int)Math.Floor((r.Top - oy) * sy));
-                        int mw = Math.Min(cw - mx, Math.Max(1, (int)Math.Ceiling(r.Width * sx)));
-                        int mh = Math.Min(ch - my, Math.Max(1, (int)Math.Ceiling(r.Height * sy)));
+                        GdiRect pixels = GdiRect.Intersect(crop, ToBitmapRect(r));
+                        if (pixels.Width <= 0 || pixels.Height <= 0) continue;
+                        var output = new GdiRect(pixels.Left - crop.Left, pixels.Top - crop.Top, pixels.Width, pixels.Height);
                         int block = Math.Max(8, (int)Math.Round(10 * sx));
-                        int gw = Math.Max(1, mw / block);
-                        int gh = Math.Max(1, mh / block);
+                        int gw = Math.Max(1, output.Width / block);
+                        int gh = Math.Max(1, output.Height / block);
                         using (var tiny = new Bitmap(gw, gh))
                         using (var gt = Graphics.FromImage(tiny))
                         {
                             gt.InterpolationMode = InterpolationMode.Bilinear;
-                            gt.DrawImage(result, new GdiRect(0, 0, gw, gh), new GdiRect(mx, my, mw, mh), GraphicsUnit.Pixel);
+                            gt.DrawImage(result, new GdiRect(0, 0, gw, gh), output, GraphicsUnit.Pixel);
                             var prevInterp = g.InterpolationMode;
                             g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                            g.DrawImage(tiny, new GdiRect(mx, my, mw, mh), new GdiRect(0, 0, gw, gh), GraphicsUnit.Pixel);
+                            g.DrawImage(tiny, output, new GdiRect(0, 0, gw, gh), GraphicsUnit.Pixel);
                             g.InterpolationMode = prevInterp;
                         }
                     }
@@ -2057,7 +2183,6 @@ namespace CodexLauncher
                     }
                 }
             }
-            return result;
         }
 
         private void CopyAndFinish()
@@ -2256,7 +2381,7 @@ namespace CodexLauncher
     }
 
     /// <summary>
-    /// Modern floating dialog showing Windows 11 local offline OCR results.
+    /// Displays the text returned by the local OCR engine.
     /// </summary>
     internal class OcrResultWindow : Window
     {
@@ -2288,7 +2413,7 @@ namespace CodexLauncher
 
             _statusText = new TextBlock
             {
-                Text = "正在通过 Windows 11 本机引擎识别中英文文字...",
+                Text = "正在本机识别中英文文字…",
                 FontSize = 12.5,
                 Foreground = new SolidColorBrush(WpfColor.FromRgb(0x64, 0x74, 0x8B)),
                 Margin = new Thickness(0, 0, 0, 10)
@@ -2367,22 +2492,26 @@ namespace CodexLauncher
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            Bitmap bmpCopy = _bmp;
+            Bitmap input = _bmp;
+            if (input == null) return;
+            _bmp = null;
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
-                    string text = OcrService.RecognizeBitmap(bmpCopy);
+                    string engine, text;
+                    using (input) text = OcrService.RecognizeBitmap(input, out engine);
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
+                        if (!IsVisible) return;
                         if (string.IsNullOrWhiteSpace(text))
                         {
-                            _statusText.Text = "未在选区内识别到清晰文字";
+                            _statusText.Text = engine + " · 未在选区内识别到清晰文字";
                             _textBox.Text = "";
                         }
                         else
                         {
-                            _statusText.Text = string.Format("识别完成 · 共 {0} 个字符（可直接编辑或一键复制）", text.Length);
+                            _statusText.Text = string.Format("{0} · 共 {1} 个字符，可编辑或复制", engine, text.Length);
                             _textBox.Text = text;
                             _textBox.Focus();
                         }
@@ -2392,7 +2521,7 @@ namespace CodexLauncher
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        _statusText.Text = "识别失败：" + ex.Message;
+                        if (IsVisible) _statusText.Text = "识别失败：" + ex.Message;
                     }));
                 }
             });

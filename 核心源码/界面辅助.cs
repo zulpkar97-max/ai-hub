@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -18,6 +19,81 @@ using Size = System.Windows.Size;
 
 namespace CodexLauncher
 {
+    internal static class VoiceRecorderShortcut
+    {
+        internal const string Display = "Ctrl + Win + A";
+        private const ushort VkControl = 0x11, VkShift = 0x10, VkAlt = 0x12;
+        private const ushort VkLeftControl = 0xA2, VkLeftWin = 0x5B, VkRightWin = 0x5C, VkA = 0x41;
+        private const uint KeyUp = 0x0002, ExtendedKey = 0x0001;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KeyboardInput
+        {
+            public ushort VirtualKey, ScanCode;
+            public uint Flags, Time;
+            public IntPtr ExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MouseInput
+        {
+            public int X, Y;
+            public uint MouseData, Flags, Time;
+            public IntPtr ExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        private struct InputData
+        {
+            [FieldOffset(0)] public KeyboardInput Keyboard;
+            [FieldOffset(0)] public MouseInput Mouse;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Input
+        {
+            public uint Type;
+            public InputData Data;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint SendInput(uint count, [In] Input[] inputs, int size);
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int virtualKey);
+
+        private static Input Key(ushort virtualKey, uint flags = 0)
+        {
+            return new Input { Type = 1, Data = new InputData { Keyboard = new KeyboardInput { VirtualKey = virtualKey, Flags = flags } } };
+        }
+
+        internal static void Send()
+        {
+            foreach (var key in new[] { VkControl, VkShift, VkAlt, VkLeftWin, VkRightWin, VkA })
+            {
+                if ((GetAsyncKeyState(key) & 0x8000) != 0)
+                    throw new InvalidOperationException("请松开快捷键相关按键后再打开录音笔。");
+            }
+
+            var inputs = new[]
+            {
+                Key(VkLeftControl), Key(VkLeftWin, ExtendedKey), Key(VkA),
+                Key(VkA, KeyUp), Key(VkLeftWin, ExtendedKey | KeyUp), Key(VkLeftControl, KeyUp)
+            };
+            int size = Marshal.SizeOf(typeof(Input));
+            uint sent = SendInput((uint)inputs.Length, inputs, size);
+            if (sent == inputs.Length) return;
+
+            int error = Marshal.GetLastWin32Error();
+            var release = new List<Input>();
+            if (sent == 3) release.Add(inputs[3]);
+            if (sent >= 2 && sent < 5) release.Add(inputs[4]);
+            if (sent >= 1) release.Add(inputs[5]);
+            if (release.Count > 0) SendInput((uint)release.Count, release.ToArray(), size);
+            throw new Win32Exception(error, "无法发送微信输入法的录音笔快捷键。");
+        }
+    }
+
     public static class UiHelpers
     {
         public static readonly FontFamily MainFont = new FontFamily("Microsoft YaHei UI, Segoe UI Variable, Segoe UI, sans-serif");

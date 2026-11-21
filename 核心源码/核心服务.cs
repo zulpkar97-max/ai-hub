@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.2";
+        public const string AppVersion = "v5.2.7";
 
         private static readonly object StoreLock = new object();
         private static readonly object ProfileLifecycleLock = new object();

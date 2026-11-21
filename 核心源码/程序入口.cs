@@ -15,15 +15,11 @@ namespace CodexLauncher
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool SetDllDirectory(string lpPathName);
 
-        [DllImport("user32.dll")]
-        private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
-
         [STAThread]
         public static int Main(string[] args)
         {
-            // Let WPF relayout each overlay at the target monitor's scale.
+            // The embedded manifest opts in to PerMonitorV2 before any HWND is created.
             AppContext.SetSwitch("Switch.System.Windows.DoNotScaleForDpiChanges", false);
-            try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
             ConfigureNativeAndManagedLibs();
             CoreService.EnsureDirs();
 

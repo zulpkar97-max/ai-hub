@@ -22,6 +22,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
 
 修改 `页面代码/` 下的界面结构、样式或交互逻辑时，运行中的窗口通过内置文件监听自动热重载刷新，无需重新编译。
 
+## 离线提字
+
+「提字」优先使用 RapidOCR 提供的 PP-OCRv6 模型，通过 ONNX Runtime 在本机识别。安装 Python 3.12 后，在 PowerShell 中为 AI Hub 安装独立环境：
+
+```powershell
+$ocrEnv = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.codex-launcher\ocr\rapidocr-3.10.0'
+py -3.12 -m venv $ocrEnv
+& (Join-Path $ocrEnv 'Scripts\python.exe') -I -m pip --isolated install --index-url https://pypi.org/simple rapidocr==3.10.0 onnxruntime==1.32.0
+```
+
+模型随 RapidOCR 包安装。未安装该环境、模型启动失败或未识别到文字时，AI Hub 会使用 Windows OCR。结果窗口会显示所用引擎。
+
 ## 目录
 
 - `页面代码/`：前端界面层，包含 `index.html`、`界面样式.css`、`工作台交互.js` 与 `协议版本.txt`。
@@ -31,7 +43,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
   - `核心服务.cs`：Codex 三隔离目录多开、主号配置克隆/软链接、实时额度查询、Clash Verge 状态探测与软件扫描。
   - `数据模型.cs`：账号存储结构、JWT 凭证解析、内置 `auth.json` 会话合成与精确倒计时计算。
   - `截图与标注引擎.cs`：多屏异倍 DPI 物理像素截图、窗口自动吸附、放大镜取色、矩形/箭头/画笔/马赛克/文字标注与桌面置顶贴图。
-  - `离线文字识别.cs`：直接调用 Windows 11 原生 `Windows.Media.Ocr` 引擎的本机离线中英文文字提取。
+  - `离线文字识别.cs`：在本机调用 PP-OCRv6 或 Windows OCR 提取中英文文字。
   - `桌面图标收纳.cs`：将已收纳软件的桌面 `.lnk` 快捷方式安全转移至本地收纳夹，支持一键隐藏与随时恢复。
   - `托盘与浮窗.cs`：自定义圆角托盘右键菜单与内置独立网页登录自动取号窗口。
   - `界面辅助.cs` 与 `热更新协调.cs`：WPF 视觉辅助与无损热更新切换。
