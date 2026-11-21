@@ -29,7 +29,6 @@
   --text-secondary: var(--ink-muted);
   --text-muted: var(--ink-faint);
   --primary: var(--ink-btn);
-  --accent: #076644;
 
   --ok: #0A8458;
   --ok-fill: #0FA972;
@@ -722,13 +721,6 @@ kbd {
   max-width: 400px;
 }
 
-.app-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
 /* Inline Status Dot (Left-aligned next to name!) */
 .status-inline {
   display: inline-flex;
@@ -1294,14 +1286,6 @@ input:focus, select:focus {
 
 .cmdk-item-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .cmdk-item-sub { font-size: 11.5px; color: var(--text-muted); }
-
-/* Changelog typography */
-.cl-h1 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
-.cl-h2 { font-size: 14px; font-weight: 700; margin: 12px 0 4px; color: var(--text); }
-.cl-h3 { font-size: 12px; font-weight: 600; margin: 8px 0 3px; color: var(--accent); }
-.cl-li { font-size: 12.5px; color: var(--text-secondary); padding-left: 12px; position: relative; margin: 2px 0; }
-.cl-li::before { content: "•"; position: absolute; left: 0; color: var(--text-muted); }
-.cl-hr { height: 1px; background: var(--hairline); margin: 10px 0; }
 
 /* Toast */
 .toast-host {

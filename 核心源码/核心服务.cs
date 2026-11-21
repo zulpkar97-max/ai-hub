@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.5.2";
+        public const string AppVersion = "v5.5.3";
         private const string BrandIconFile = "aihub-v5.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -45,10 +45,6 @@ namespace CodexLauncher
         public static readonly string BundledIcon = Path.Combine(BaseDir, "资源", "aihub.ico");
         public static readonly string BundledPng256 = Path.Combine(BaseDir, "资源", "aihub-256.png");
         public static readonly string BundledChatGptPng = Path.Combine(BaseDir, "资源", "chatgpt-256.png");
-        public static readonly string PermanentChatGptIcon = Path.Combine(DataDir, "chatgpt-v2.ico");
-
-        [DllImport("shell32.dll")]
-        private static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindowAsync(IntPtr hwnd, int command);
@@ -279,43 +275,6 @@ namespace CodexLauncher
                 items = DiscoverInstalledAiApps()
             };
             return new List<ToolSection> { sec };
-        }
-
-        public static List<string> RescanInstalledAiTools(AccountsStore store)
-        {
-            var discovered = DiscoverInstalledAiApps();
-            if (store.tool_sections == null || store.tool_sections.Count == 0)
-            {
-                store.tool_sections = new List<ToolSection>
-                {
-                    new ToolSection { id = "sec-desktop-ai", title = "桌面 AI 应用" }
-                };
-            }
-
-            var existingTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var existingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var sec in store.tool_sections)
-            {
-                foreach (var it in sec.items)
-                {
-                    if (!string.IsNullOrEmpty(it.target)) existingTargets.Add(it.target);
-                    if (!string.IsNullOrEmpty(it.id)) existingIds.Add(it.id);
-                }
-            }
-
-            var added = new List<string>();
-            var firstSec = store.tool_sections[0];
-            foreach (var app in discovered)
-            {
-                if (!existingTargets.Contains(app.target) && !existingIds.Contains(app.id))
-                {
-                    firstSec.items.Add(app);
-                    added.Add(app.name);
-                }
-            }
-
-            if (added.Count > 0) SaveStore(store);
-            return added;
         }
 
         public static string FindCodexExecutable()
@@ -839,15 +798,6 @@ namespace CodexLauncher
             }
             catch { }
             return killed;
-        }
-
-        public static string DescribeUninstallMethod(ToolItem item)
-        {
-            if (item == null) return "";
-            if (item.kind == "msix") return "调用 Windows 系统包管理（Remove-AppxPackage）卸载";
-            string cmd = FindRegistryUninstallCommand(item.uninstall_hint ?? item.name, item.target);
-            if (!string.IsNullOrEmpty(cmd)) return "调用该软件注册的官方卸载程序";
-            return "打开 Windows「已安装的应用」页面进行卸载";
         }
 
         public static string UninstallSoftware(ToolItem item)
@@ -1580,66 +1530,5 @@ namespace CodexLauncher
             }
             return "未找到 更新日志.md 文件。";
         }
-
-        public static string CreateDesktopShortcut(string profileId, string accountName)
-        {
-            EnsureDirs();
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            string exePath = Assembly.GetExecutingAssembly().Location;
-
-            string shortcutName;
-            string arguments;
-            string desc;
-            string iconPath;
-
-            if (string.IsNullOrEmpty(profileId))
-            {
-                // Replace legacy "ChatGPT 启动器.lnk" cleanly with new "AI Hub.lnk"
-                try
-                {
-                    string legacy = Path.Combine(desktop, "ChatGPT 启动器.lnk");
-                    if (File.Exists(legacy)) File.Delete(legacy);
-                }
-                catch { }
-
-                shortcutName = "AI Hub.lnk";
-                arguments = "";
-                desc = "AI Hub · 本地 AI 聚合启动器";
-                iconPath = File.Exists(PermanentIcon) ? PermanentIcon : exePath;
-            }
-            else if (profileId == "default")
-            {
-                shortcutName = "ChatGPT (主账号).lnk";
-                arguments = "--launch default";
-                desc = "启动 ChatGPT / Codex 原生主账号";
-                iconPath = File.Exists(PermanentChatGptIcon) ? PermanentChatGptIcon : PermanentIcon;
-            }
-            else
-            {
-                string safe = Regex.Replace(accountName ?? profileId, @"[\\/:*?""<>|]+", "_").Trim();
-                if (string.IsNullOrEmpty(safe)) safe = profileId;
-                shortcutName = "ChatGPT - " + safe + ".lnk";
-                arguments = "--launch " + profileId;
-                desc = "启动 ChatGPT / Codex 账号：" + accountName;
-                iconPath = File.Exists(PermanentChatGptIcon) ? PermanentChatGptIcon : PermanentIcon;
-            }
-
-            string lnkPath = Path.Combine(desktop, shortcutName);
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-            object shell = Activator.CreateInstance(shellType);
-            object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { lnkPath });
-
-            Type scType = shortcut.GetType();
-            scType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { exePath });
-            scType.InvokeMember("Arguments", BindingFlags.SetProperty, null, shortcut, new object[] { arguments });
-            scType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { BaseDir });
-            scType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { desc });
-            scType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, new object[] { iconPath + ",0" });
-            scType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
-
-            try { SHChangeNotify(0x08000000, 0x0000, IntPtr.Zero, IntPtr.Zero); } catch { }
-            return lnkPath;
-        }
-
     }
 }
