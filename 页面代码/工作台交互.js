@@ -8,6 +8,7 @@
   let activeTab = "workspace";
   let sidebarToolsKey;
   let settingsRenderKey;
+  let workspaceRenderKey;
   const expandedSettings = new Set();
   let cmdkItems = [];
   let cmdkSelected = 0;
@@ -16,6 +17,8 @@
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const layerExits = new WeakMap();
 
   const ICONS = {
     power: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
@@ -33,6 +36,7 @@
     crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
     mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
     ledger: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3"/></svg>',
+    changelog: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h5"/></svg>',
     chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
   };
@@ -67,12 +71,7 @@
     el.className = "toast" + (isError ? " err" : "");
     el.textContent = text;
     host.appendChild(el);
-    setTimeout(() => {
-      el.style.opacity = "0";
-      el.style.transform = "translateY(4px)";
-      el.style.transition = "all 0.18s ease";
-      setTimeout(() => el.remove(), 200);
-    }, 3000);
+    setTimeout(() => dismissLayer(el, () => el.remove()), 3000);
   }
 
   // ==================== DATE & COUNTDOWN ====================
@@ -149,7 +148,6 @@
 
   function renderAll() {
     if (!appState) return;
-    $("#version-label").textContent = appState.version || "v5.5.1";
     renderSidebarTools();
 
     const pending = !!appState.pending_update;
@@ -175,7 +173,17 @@
     activeTab = tab;
     expandedSettings.clear();
     renderAll();
-    $("#view-content").scrollTop = 0;
+    const view = $("#view-content");
+    view.scrollTop = 0;
+    if (!reducedMotion.matches) {
+      view.classList.remove("view-entering");
+      void view.offsetWidth;
+      view.classList.add("view-entering");
+      [...view.querySelectorAll(".surface-card")].slice(0, 4).forEach((card, index) => {
+        card.style.setProperty("--card-delay", `${index * 25}ms`);
+        card.classList.add("view-card-entering");
+      });
+    }
     if (tab === "manage") postAction("refreshInstalledApps");
   }
 
@@ -189,7 +197,8 @@
     const shotKey = shot?.enabled && shot.registered ? shot.hotkey : "";
     const voiceKey = appState.voice_recorder_hotkey || "";
     const ledger = appState.quick_ledger_forms?.[0];
-    const key = JSON.stringify([shotKey, voiceKey, ledger]);
+    const version = appState.version || "v5.5.2";
+    const key = JSON.stringify([shotKey, voiceKey, ledger, version]);
     if (key === sidebarToolsKey) return;
     sidebarToolsKey = key;
     $("#sidebar-tools").innerHTML = `
@@ -202,7 +211,10 @@
       </button>
       ${ledger ? `<button class="btn btn-paper sidebar-tool" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
         ${ICONS.ledger}<span>记账</span><span class="sidebar-tool-external">${ICONS.ext}</span>
-      </button>` : ""}`;
+      </button>` : ""}
+      <button class="btn btn-paper sidebar-tool" data-act="openChangelog">
+        ${ICONS.changelog}<span>更新日志</span><kbd>${esc(version)}</kbd>
+      </button>`;
   }
 
   function iconButton(action, label, glyph, { disabled = false, danger = false, spinning = false, attrs = "" } = {}) {
@@ -363,6 +375,7 @@
             : bucket?.disabled ? "不可用" : (typeof bucket?.remaining_amount === "number" ? Number(bucket.remaining_amount).toLocaleString("zh-CN") : "—");
           return renderQuotaMeter({ title, value, when: bucket ? timeToReset(bucket.reset_time) : "暂不可读取",
             percent, tone: percent == null ? "" : quotaTone(percent),
+            fillAttrs: `data-quota-fill="antigravity:${esc(key)}"`,
             timeAttrs: bucket?.reset_time ? `title="${esc(fmtDate(bucket.reset_time))}"` : "" });
         }).join("")}</div>
       </div>`).join("") : "";
@@ -379,7 +392,8 @@
            ${usage?.email ? `<span class="tool-identity-email">${esc(usage.email)}</span>` : ""}`)}
         <div class="tool-actions">
           ${updatedAtHtml(usage?.fetched_at, tool.automatic)}
-          <button class="btn btn-soft btn-sm" data-act="refreshAntigravity" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-soft btn-sm${tool.loading ? " is-spinning" : ""}" data-act="refreshAntigravity"
+            aria-busy="${!!tool.loading}" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>
           ${desktopActions(tool, "Antigravity", "launchTool", "stopTool")}
         </div>
       </header>
@@ -452,11 +466,12 @@
   }
 
   function renderCodex(accounts) {
+    const loading = accounts.some((account) => account.usage_loading);
     return `<section class="surface-card tool-card codex-tool" aria-labelledby="codex-tool-title">
       <header class="tool-card-header">
         ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "Codex", accounts.length + " 个账号")}
         <div class="tool-actions">
-          <button class="btn btn-soft btn-sm" data-act="refreshAllUsage" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-soft btn-sm${loading ? " is-spinning" : ""}" data-act="refreshAllUsage" aria-busy="${loading}" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
           <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
         </div>
       </header>
@@ -470,7 +485,7 @@
     const name = acc.is_default ? "主账号" : acc.name;
     const email = auth.logged_in ? (auth.email || auth.display_name || "已登录") : "尚未登录";
     const usage = acc.usage;
-    const windows = usage?.success ? [usage.primary, usage.secondary].filter(Boolean) : [];
+    const windows = usage?.success ? [["primary", usage.primary], ["secondary", usage.secondary]].filter(([, meter]) => meter) : [];
     let feedback = "";
     if (!auth.logged_in) feedback = quotaMessage("登录后可读取剩余额度");
     else if (auth.can_fetch_usage === false) feedback = quotaMessage("当前登录方式未提供额度");
@@ -479,11 +494,11 @@
       `<button class="btn btn-soft btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
     else if (!windows.length) feedback = quotaMessage(usage ? "当前套餐暂无独立额度窗口" : "暂无额度数据");
 
-    const meters = windows.map((w) => {
+    const meters = windows.map(([slot, w]) => {
       const percent = Math.max(0, Math.min(100, Number(w.left_percent) || 0));
       return renderQuotaMeter({ title: String(w.label).replace("限额", "额度"), value: percent + "%",
         when: w.reset_text || "重置时间未知", percent, tone: quotaTone(percent),
-        valueAttrs: `aria-label="剩余 ${percent}%"` });
+        valueAttrs: `aria-label="剩余 ${percent}%"`, fillAttrs: `data-quota-fill="codex:${esc(acc.id)}:${slot}"` });
     });
     const officialEnd = new Date(auth.subscription_until || "").getTime();
     const recycleEnd = new Date(acc.recycle_at || "").getTime();
@@ -534,6 +549,26 @@
 
     const view = $("#view-content");
     if (view.querySelector("[data-web-identity]:focus")) return;
+    const network = appState.network || {};
+    const key = JSON.stringify([
+      proxy.running, proxy.installed, networkBusy, appState.network_status_refresh, appState.network_japan_picker,
+      network.state, network.delay, network.delay_stale, network.mode, network.group, network.node, network.can_select,
+      network.subscription?.used_bytes, network.subscription?.total_bytes, network.subscription?.expires_at,
+      accounts.map(({ id, name, is_default, account_type, started_at, recycle_at, recycle_days, running, auth, usage, usage_loading, usage_error }) =>
+        [id, name, is_default, account_type, started_at, recycle_at, recycle_days, running, auth, usage, usage_loading, usage_error]),
+      appState.antigravity, Object.values(appState.antigravity?.usage?.quota || {}).map((bucket) => timeToReset(bucket?.reset_time)),
+      design, appState.chrome_available, chromes
+    ]);
+    if (view.dataset.page === "workspace" && key === workspaceRenderKey) return;
+    const previousQuotas = new Map();
+    if (!reducedMotion.matches && view.dataset.page === "workspace") {
+      for (const fill of view.querySelectorAll("[data-quota-fill]")) {
+        const width = fill.parentElement.clientWidth;
+        if (width) previousQuotas.set(fill.dataset.quotaFill, fill.getBoundingClientRect().width / width * 100);
+      }
+    }
+    workspaceRenderKey = key;
+    view.dataset.page = "workspace";
     view.innerHTML = `
       ${renderNetwork(proxy)}
       <div class="sec-heading"><h2 class="sec-title work-tools-title">AI 工作工具</h2></div>
@@ -544,6 +579,25 @@
         ${webTools.map((tool) => renderWebTool(tool, chromes)).join("")}
         ${renderOpenDesign(design)}
       </div>`;
+    if (previousQuotas.size) animateQuotaWidths(view, previousQuotas);
+  }
+
+  function animateQuotaWidths(view, previousQuotas) {
+    const changes = [];
+    for (const fill of view.querySelectorAll("[data-quota-fill]")) {
+      const previous = previousQuotas.get(fill.dataset.quotaFill);
+      const target = fill.style.width;
+      if (previous == null || Math.abs(previous - parseFloat(target)) < 0.5) continue;
+      fill.style.width = `${previous}%`;
+      changes.push([fill, target]);
+    }
+    if (!changes.length) return;
+    void view.offsetWidth;
+    requestAnimationFrame(() => {
+      for (const [fill, target] of changes) {
+        if (fill.isConnected) fill.style.width = target;
+      }
+    });
   }
 
   function settingSwitch(key, label, checked) {
@@ -559,21 +613,66 @@
       data-collapsed-label="${label}" aria-controls="${id}" aria-expanded="${open}"><span>${open ? "收起" : label}</span>${ICONS.chevronDown}</button>`;
   }
 
+  function disclosurePanel(id, open, content) {
+    return `<div id="${id}" class="disclosure-panel${open ? " is-expanded" : ""}" ${open ? "" : "inert"}>
+      <div class="disclosure-content">${content}</div>
+    </div>`;
+  }
+
+  function toggleDisclosure(button) {
+    const panel = document.getElementById(button.getAttribute("aria-controls"));
+    if (!panel) return null;
+    const open = panel.classList.toggle("is-expanded", !panel.classList.contains("is-expanded"));
+    panel.inert = !open;
+    button.setAttribute("aria-expanded", String(open));
+    return open;
+  }
+
+  function syncSettingsFields(view, settings, shot, shortcuts) {
+    const values = { ...settings, screenshot_enabled: !!shot.enabled, quota_auto_refresh: settings.quota_auto_refresh !== false };
+    for (const input of view.querySelectorAll("[data-setting]")) input.checked = !!values[input.dataset.setting];
+    for (const button of view.querySelectorAll("[data-hk]")) {
+      const active = button.dataset.hk === shot.hotkey;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    const status = view.querySelector("#settings-hotkey-status");
+    status.className = "tag" + (shot.enabled ? shot.registered ? " tag-ok" : " tag-warn" : "");
+    status.textContent = !shot.enabled ? "快捷键已关闭" : shot.registered ? "热键已生效" : "热键被占用";
+    const alert = view.querySelector("#settings-hotkey-alert");
+    alert.hidden = !(shot.enabled && !shot.registered && shot.error);
+    alert.querySelector("span").textContent = shot.error || "";
+
+    const byId = new Map(shortcuts.map((shortcut) => [shortcut.id, shortcut]));
+    for (const input of view.querySelectorAll("[data-stash-id]")) {
+      const hidden = !!byId.get(input.dataset.stashId)?.hidden;
+      input.checked = hidden;
+      const label = input.closest(".stash-right").querySelector(".stash-state");
+      label.classList.toggle("hidden-on", hidden);
+      label.textContent = hidden ? "已隐藏" : "桌面显示中";
+    }
+    const hiddenCount = shortcuts.filter((shortcut) => shortcut.hidden).length;
+    view.querySelector("#stash-count").textContent = `已隐藏 ${hiddenCount}/${shortcuts.length}`;
+    view.querySelector('[data-act="hideAllAiShortcuts"]').disabled = !shortcuts.some((shortcut) => shortcut.category === "ai" && !shortcut.hidden);
+    view.querySelector('[data-act="restoreAllShortcuts"]').disabled = hiddenCount === 0;
+  }
+
   function renderManage() {
     const settings = appState.settings || {};
     const shot = appState.screenshot || {};
     const shortcuts = appState.desktop_shortcuts || [];
     const apps = appState.installed_apps || [];
-    const hiddenCount = shortcuts.filter((sc) => sc.hidden).length;
     const view = $("#view-content");
     $("#view-title").textContent = "设置";
     $("#view-sub").textContent = "";
-    const key = JSON.stringify([settings, shot, shortcuts, apps]);
-    if (key === settingsRenderKey && view.firstElementChild?.classList.contains("settings-page")) return;
+    const key = JSON.stringify([shortcuts.map(({ id, name, requires_admin }) => [id, name, requires_admin]), apps]);
+    if (key === settingsRenderKey && view.dataset.page === "manage") {
+      syncSettingsFields(view, settings, shot, shortcuts);
+      return;
+    }
     settingsRenderKey = key;
+    view.dataset.page = "manage";
 
-    const hotkeyStatus = !shot.enabled ? '<span class="tag">快捷键已关闭</span>'
-      : shot.registered ? '<span class="tag tag-ok">热键已生效</span>' : '<span class="tag tag-warn">热键被占用</span>';
     const hotkeyPresets = ["Ctrl+Shift+A", "Alt+A", "Ctrl+Alt+A", "F1"];
     const hotkeyPills = hotkeyPresets.map((value) =>
       `<button class="hotkey-pill${shot.hotkey === value ? " active" : ""}" data-act="setScreenshotHotkey"
@@ -607,15 +706,15 @@
         <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
         <div class="surface-card">
           <div class="setting-row">
-            <div class="setting-label">全局截图快捷键 ${hotkeyStatus}</div>
+            <div class="setting-label">全局截图快捷键 <span id="settings-hotkey-status" class="tag"></span></div>
             <div class="setting-actions">
               <div class="hotkey-pills">${hotkeyPills}</div>
               ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
             </div>
           </div>
-          ${shot.enabled && !shot.registered && shot.error ? `<div class="hotkey-alert">
-            <span>${esc(shot.error)}</span><button class="btn btn-soft btn-sm" data-act="reregisterHotkey">重新注册</button>
-          </div>` : ""}
+          <div id="settings-hotkey-alert" class="hotkey-alert" hidden>
+            <span></span><button class="btn btn-soft btn-sm" data-act="reregisterHotkey">重新注册</button>
+          </div>
           <div class="setting-row">
             <div class="setting-label">额度自动刷新与回满提醒</div>
             ${settingSwitch("quota_auto_refresh", "额度自动刷新与回满提醒", settings.quota_auto_refresh !== false)}
@@ -631,26 +730,26 @@
         <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
         <div class="surface-card">
           <header class="group-header settings-card-header">
-            <div class="setting-label"><h3 class="group-title">桌面图标收纳</h3><span class="group-sub">已隐藏 ${hiddenCount}/${shortcuts.length}</span></div>
+            <div class="setting-label"><h3 class="group-title">桌面图标收纳</h3><span id="stash-count" class="group-sub"></span></div>
             <div class="setting-actions">
-              <button class="btn btn-soft btn-sm" data-act="hideAllAiShortcuts" ${shortcuts.some((sc) => sc.category === "ai" && !sc.hidden) ? "" : "disabled"}>一键隐藏 AI 图标</button>
-              <button class="btn btn-soft btn-sm" data-act="restoreAllShortcuts" ${hiddenCount ? "" : "disabled"}>全部恢复</button>
+              <button class="btn btn-soft btn-sm" data-act="hideAllAiShortcuts">一键隐藏 AI 图标</button>
+              <button class="btn btn-soft btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
               ${settingsDisclosure("stash-details", "展开明细")}
             </div>
           </header>
-          <div id="stash-details" ${expandedSettings.has("stash-details") ? "" : "hidden"}>
+          ${disclosurePanel("stash-details", expandedSettings.has("stash-details"), `
             ${stashRows || '<div class="setting-row">未检测到可收纳的快捷方式</div>'}
             ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
-          </div>
+          `)}
         </div>
         <div class="surface-card">
           <header class="group-header settings-card-header">
             <div class="setting-label"><h3 class="group-title">软件卸载</h3><span class="group-sub">已检测 ${apps.length} 个</span></div>
             ${settingsDisclosure("uninstall-details", "展开列表")}
           </header>
-          <div id="uninstall-details" ${expandedSettings.has("uninstall-details") ? "" : "hidden"}>
+          ${disclosurePanel("uninstall-details", expandedSettings.has("uninstall-details"), `
             ${uninstallRows || '<div class="setting-row">未检测到支持卸载的桌面应用</div>'}
-          </div>
+          `)}
         </div>
       </section>
 
@@ -665,12 +764,48 @@
         </div>
       </section>
     </div>`;
+    syncSettingsFields(view, settings, shot, shortcuts);
   }
 
   // ==================== POPOVER & MODALS ====================
 
+  function layerIsOpen(layer) {
+    return !layer.classList.contains("hidden") && !layer.classList.contains("is-closing");
+  }
+
+  function showLayer(layer) {
+    layerExits.get(layer)?.();
+    layer.classList.remove("hidden", "is-closing");
+    layer.inert = false;
+  }
+
+  function dismissLayer(layer, after = () => layer.classList.add("hidden")) {
+    if (!layerIsOpen(layer)) return;
+    layer.inert = true;
+    if (reducedMotion.matches) {
+      after();
+      return;
+    }
+
+    layer.classList.add("is-closing");
+    const finish = () => {
+      cancel();
+      after();
+      layer.classList.remove("is-closing");
+    };
+    const onEnd = (event) => { if (event.target === layer && event.animationName.endsWith("Out")) finish(); };
+    const timer = setTimeout(finish, 160);
+    const cancel = () => {
+      clearTimeout(timer);
+      layer.removeEventListener("animationend", onEnd);
+      layerExits.delete(layer);
+    };
+    layerExits.set(layer, cancel);
+    layer.addEventListener("animationend", onEnd);
+  }
+
   function closePopover() {
-    $("#popover-menu").classList.add("hidden");
+    dismissLayer($("#popover-menu"));
   }
 
   function openAccountMoreMenu(anchor, acc) {
@@ -686,7 +821,7 @@
   }
 
   function positionPopover(pop, anchorBtn) {
-    pop.classList.remove("hidden");
+    showLayer(pop);
 
     const rect = anchorBtn.getBoundingClientRect();
     const popW = pop.offsetWidth;
@@ -694,23 +829,27 @@
     let left = rect.right - popW;
     let top = rect.bottom + 6;
     if (left < 10) left = 10;
-    if (top + popH > window.innerHeight - 10) top = rect.top - popH - 6;
+    const opensUp = top + popH > window.innerHeight - 10;
+    if (opensUp) top = Math.max(10, rect.top - popH - 6);
+    pop.dataset.direction = opensUp ? "up" : "down";
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
   }
 
   function openModal(html, wide = false) {
     closePopover();
-    onNetworkPickerClose?.();
+    closeModal();
     const dlg = $("#modal-dialog");
     dlg.className = "modal-dialog" + (wide ? " modal-wide" : "");
     dlg.innerHTML = html;
-    $("#modal-backdrop").classList.remove("hidden");
+    showLayer($("#modal-backdrop"));
   }
 
   function closeModal() {
-    onNetworkPickerClose?.();
-    $("#modal-backdrop").classList.add("hidden");
+    const cancelPicker = onNetworkPickerClose;
+    onNetworkPickerClose = null;
+    cancelPicker?.();
+    dismissLayer($("#modal-backdrop"));
   }
 
   async function refreshNetwork() {
@@ -753,7 +892,7 @@
     const message = panel.querySelector("[data-picker-status]");
     const list = panel.querySelector(".network-node-list");
     const probe = $("#network-probe-all");
-    const isOpen = () => panel.isConnected && !$("#modal-backdrop").classList.contains("hidden");
+    const isOpen = () => panel.isConnected && layerIsOpen($("#modal-backdrop"));
     const latencyLabels = { testing: "测试中…", timeout: "超时", unavailable: "不可用", controller: "检测失败" };
     let picker = { group: "", groups: [], nodes: [] };
     let loading = false;
@@ -1226,17 +1365,22 @@
         ${dates.length ? dates.map((day, index) => {
           const [year, month, date] = day.date.split("-");
           const newest = day.versions[0], oldest = day.versions.at(-1);
-          return `<details class="changelog-day" ${index === 0 ? "open" : ""}>
-            <summary>
+          const sectionId = `changelog-day-${index}`;
+          return `<section class="changelog-day">
+            <button type="button" class="changelog-day-toggle" data-act="toggleChangelogDay"
+              aria-expanded="${index === 0}" aria-controls="${sectionId}">
+              ${ICONS.chevronDown}
               <span class="changelog-date">${year} 年 ${Number(month)} 月 ${Number(date)} 日</span>
               <span class="changelog-version">${oldest === newest ? esc(newest) : `${esc(oldest)} → ${esc(newest)}`}</span>
-            </summary>
+            </button>
+            ${disclosurePanel(sectionId, index === 0, `
             ${summaries[day.date] ? `<p class="changelog-summary">${esc(summaries[day.date])}</p>` : ""}
             <div class="changelog-entries">${day.updates.map((update) => `<div class="changelog-entry">
               <span class="changelog-type ${categories[update.type]}">${update.type}</span>
               <span>${esc(update.body)}</span><small>${esc(update.version)}</small>
             </div>`).join("")}</div>
-          </details>`;
+            `)}
+          </section>`;
         }).join("") : quotaMessage("暂时无法读取更新日志", "quota-error")}
       </div>`, true);
   }
@@ -1314,12 +1458,12 @@
     cmdkSelected = 0;
     $("#cmdk-input").value = "";
     renderCmdkList("");
-    $("#cmdk-backdrop").classList.remove("hidden");
+    showLayer($("#cmdk-backdrop"));
     $("#cmdk-input").focus();
   }
 
   function closeCmdk() {
-    $("#cmdk-backdrop").classList.add("hidden");
+    dismissLayer($("#cmdk-backdrop"));
   }
 
   // ==================== EVENTS & WIRING ====================
@@ -1343,6 +1487,11 @@
 
   $$(".nav-item").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
+  $("#view-content").addEventListener("animationend", (event) => {
+    if (event.animationName === "viewEnter") event.target.classList.remove("view-entering");
+    if (event.animationName === "viewCardEnter") event.target.classList.remove("view-card-entering");
+  });
+
   $("#btn-batch-exit").addEventListener("click", openBatchExitModal);
 
   $("#cmdk-input").addEventListener("input", (e) => { cmdkSelected = 0; renderCmdkList(e.target.value); });
@@ -1356,8 +1505,8 @@
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
-      if ($("#cmdk-backdrop").classList.contains("hidden")) openCmdk();
-      else closeCmdk();
+      if (layerIsOpen($("#cmdk-backdrop"))) closeCmdk();
+      else openCmdk();
     } else if (e.key === "Escape") {
       closeCmdk();
       closeModal();
@@ -1418,14 +1567,13 @@
     else if (act === "startScreenshot") postAction("startScreenshot");
     else if (act === "startVoiceRecorder") postAction("startVoiceRecorder");
     else if (act === "openLedgerForm") postAction("openLedgerForm", { id });
+    else if (act === "toggleChangelogDay") toggleDisclosure(actBtn);
     else if (act === "toggleSettingsDetails") {
-      const panel = document.getElementById(id);
-      if (!panel) return;
-      if (panel.hidden) expandedSettings.add(id);
+      const expanded = toggleDisclosure(actBtn);
+      if (expanded === null) return;
+      if (expanded) expandedSettings.add(id);
       else expandedSettings.delete(id);
-      panel.hidden = !expandedSettings.has(id);
-      actBtn.setAttribute("aria-expanded", String(!panel.hidden));
-      actBtn.querySelector("span").textContent = panel.hidden ? actBtn.dataset.collapsedLabel : "收起";
+      actBtn.querySelector("span").textContent = expanded ? "收起" : actBtn.dataset.collapsedLabel;
     }
     else if (act === "reregisterHotkey") postAction("reregisterHotkey");
     else if (act === "setScreenshotHotkey") postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: actBtn.dataset.hk });

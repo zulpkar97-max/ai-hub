@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using WinForms = System.Windows.Forms;
 
@@ -50,7 +51,17 @@ namespace CodexLauncher
             Content = card;
 
             Deactivated += (s, e) => { try { Close(); } catch { } };
-            Loaded += (s, e) => PositionNearCursor();
+            Loaded += (s, e) =>
+            {
+                PositionNearCursor();
+                if (!SystemParameters.ClientAreaAnimation) return;
+                var offset = new TranslateTransform();
+                card.RenderTransform = offset;
+                var duration = new Duration(TimeSpan.FromMilliseconds(120));
+                var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+                card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
+                offset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(6, 0, duration) { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
+            };
         }
 
         private Border MakeSep()
