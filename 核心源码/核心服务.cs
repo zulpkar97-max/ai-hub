@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.4.4";
+        public const string AppVersion = "v5.5.0";
         private const string BrandIconFile = "aihub-v5.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -49,6 +49,9 @@ namespace CodexLauncher
 
         [DllImport("shell32.dll")]
         private static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindowAsync(IntPtr hwnd, int command);
 
         static CoreService()
         {
@@ -122,12 +125,6 @@ namespace CodexLauncher
                 AccountsStore store = File.Exists(AccountsFile) ? ReadAccountsStore() : new AccountsStore();
                 if (store.settings == null) store.settings = new LauncherSettings();
 
-                // Migrate older store to v4/v5 defaults (tray always visible + screenshot hotkey enabled)
-                if (store.version < 4)
-                {
-                    store.settings.hide_tray_when_open = false;
-                    migrated = true;
-                }
                 if (store.version < 5)
                 {
                     store.settings.screenshot_enabled = true;
@@ -175,6 +172,17 @@ namespace CodexLauncher
                 EnsureDirs();
                 if (File.Exists(AccountsFile)) ReadAccountsStore();
                 WriteTextAtomically(AccountsFile, Json.Serialize(store), true);
+            }
+        }
+
+        internal static LauncherSettings UpdateLauncherSettings(Action<LauncherSettings> update)
+        {
+            lock (StoreLock)
+            {
+                var store = LoadStore();
+                update(store.settings);
+                SaveStore(store);
+                return store.settings;
             }
         }
 
@@ -422,7 +430,11 @@ namespace CodexLauncher
                 var sec = AuthParser.GetDict(rateLimit, "secondary_window");
                 if (prim != null) snap.Primary = ParseWindow(prim, "周期限额");
                 if (sec != null) snap.Secondary = ParseWindow(sec, "长周期限额");
+                if ((prim != null || sec != null) && snap.Primary == null && snap.Secondary == null)
+                    return new UsageSnapshot { Success = false, ErrorMessage = "额度返回缺少有效的剩余比例" };
             }
+            else if (string.IsNullOrEmpty(snap.PlanType))
+                return new UsageSnapshot { Success = false, ErrorMessage = "无法解析用量数据" };
 
             if (snap.Primary == null && snap.Secondary == null)
                 snap.ErrorMessage = "当前账号暂无用量窗口数据";
@@ -431,7 +443,9 @@ namespace CodexLauncher
 
         private static UsageWindowInfo ParseWindow(Dictionary<string, object> w, string fallbackLabel)
         {
-            double used = AuthParser.GetDouble(w, "used_percent") ?? 0.0;
+            double? usage = AuthParser.GetDouble(w, "used_percent");
+            if (!usage.HasValue || double.IsNaN(usage.Value) || double.IsInfinity(usage.Value)) return null;
+            double used = usage.Value;
             double left = Math.Max(0.0, Math.Min(100.0, 100.0 - used));
             int winSec = (int)(AuthParser.GetDouble(w, "limit_window_seconds") ?? 0);
             int resetAfter = (int)(AuthParser.GetDouble(w, "reset_after_seconds") ?? 0);
@@ -708,9 +722,31 @@ namespace CodexLauncher
                 LaunchProfile("default");
                 return;
             }
+            string processName = string.IsNullOrEmpty(item.process_name) ? Path.GetFileNameWithoutExtension(item.target) : item.process_name;
+            bool focused = false;
+            if (!string.IsNullOrEmpty(processName))
+            {
+                foreach (var process in Process.GetProcessesByName(processName))
+                    using (process) if (!focused) focused = TryFocusWindow(process);
+            }
+            if (focused) return;
             var psi = new ProcessStartInfo { FileName = item.target, Arguments = item.arguments ?? "", UseShellExecute = true };
             if (File.Exists(item.target)) psi.WorkingDirectory = Path.GetDirectoryName(item.target);
             Process.Start(psi);
+        }
+
+        private static bool TryFocusWindow(Process process)
+        {
+            try
+            {
+                IntPtr window = process.MainWindowHandle;
+                if (window == IntPtr.Zero) return false;
+                if (NativeScreen.IsIconic(window)) ShowWindowAsync(window, 9); // SW_RESTORE
+                NativeScreen.SetForegroundWindow(window);
+                return true;
+            }
+            catch (InvalidOperationException) { return false; }
+            catch (System.ComponentModel.Win32Exception) { return false; }
         }
 
         public static Dictionary<string, string> ReadQuickLedgerForms()
@@ -720,7 +756,7 @@ namespace CodexLauncher
             {
                 string path = Path.Combine(DataDir, "quick-ledger.json");
                 if (!File.Exists(path)) return forms;
-                var entries = Json.Deserialize<Dictionary<string, string>>(File.ReadAllText(path, Encoding.UTF8));
+                var entries = new JavaScriptSerializer().Deserialize<Dictionary<string, string>>(File.ReadAllText(path, Encoding.UTF8));
                 if (entries == null) return forms;
                 foreach (var entry in entries)
                 {
@@ -729,8 +765,7 @@ namespace CodexLauncher
                     if (name.Length == 0 || !Uri.TryCreate(entry.Value, UriKind.Absolute, out url)
                         || url.Scheme != Uri.UriSchemeHttps || !url.IsDefaultPort || url.UserInfo.Length != 0
                         || !url.Host.EndsWith(".feishu.cn", StringComparison.OrdinalIgnoreCase)
-                        || !url.AbsolutePath.StartsWith("/base/add/", StringComparison.Ordinal)
-                        || url.AbsolutePath.Length == "/base/add/".Length) continue;
+                        || !IsFeishuLedgerPath(url.AbsolutePath)) continue;
                     forms[name] = url.AbsoluteUri;
                 }
             }
@@ -739,6 +774,48 @@ namespace CodexLauncher
             catch (ArgumentException) { }
             catch (InvalidOperationException) { }
             return forms;
+        }
+
+        private static bool IsFeishuLedgerPath(string path)
+        {
+            int separator = path.IndexOf('/', 1);
+            if (separator < 0 || string.IsNullOrWhiteSpace(path.Substring(separator + 1).Trim('/'))) return false;
+            switch (path.Substring(0, separator))
+            {
+                case "/wiki":
+                case "/base":
+                case "/sheets":
+                case "/docx": return true;
+                default: return false;
+            }
+        }
+
+        private static readonly string QuotaRefillsFile = Path.Combine(DataDir, "quota-refills.json");
+
+        internal static Dictionary<string, long> ReadQuotaRefillHistory()
+        {
+            try
+            {
+                if (File.Exists(QuotaRefillsFile))
+                {
+                    var stored = new JavaScriptSerializer().Deserialize<Dictionary<string, long>>(File.ReadAllText(QuotaRefillsFile, Encoding.UTF8));
+                    long cutoff = DateTime.UtcNow.AddDays(-7).Ticks;
+                    if (stored != null) return stored.Where(item => item.Value >= cutoff).ToDictionary(item => item.Key, item => item.Value);
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
+            return new Dictionary<string, long>();
+        }
+
+        internal static void SaveQuotaRefillHistory(Dictionary<string, long> history)
+        {
+            try { WriteTextAtomically(QuotaRefillsFile, new JavaScriptSerializer().Serialize(history), false); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (InvalidOperationException) { }
         }
 
         public static int StopToolItem(ToolItem item)
@@ -753,7 +830,12 @@ namespace CodexLauncher
             try
             {
                 foreach (var p in Process.GetProcessesByName(pname))
-                    try { p.Kill(); killed++; } catch { }
+                    using (p)
+                    {
+                        try { p.Kill(); if (p.WaitForExit(1500)) killed++; }
+                        catch (InvalidOperationException) { }
+                        catch (System.ComponentModel.Win32Exception) { }
+                    }
             }
             catch { }
             return killed;
@@ -1309,22 +1391,64 @@ namespace CodexLauncher
             return rec;
         }
 
-        public static void UpdateAccount(AccountRecord updated)
+        public static void UpdateAccount(AccountRecord updated, string permissionMode = null)
         {
             if (updated == null || updated.id == "default") return;
+            lock (ProfileLifecycleLock)
             lock (StoreLock)
             {
                 var store = LoadStore();
                 int idx = store.accounts.FindIndex(a => a.id == updated.id);
                 if (idx < 0) throw new InvalidOperationException("未找到该账号记录。");
+                string configPath = null;
+                string priorConfig = null;
+                if (!string.IsNullOrEmpty(permissionMode))
+                {
+                    if (!Regex.IsMatch(updated.id, @"\Aacc-[0-9a-f]{8}\z", RegexOptions.IgnoreCase))
+                        throw new InvalidOperationException("未找到该账号。");
+                    string codexHome = Path.Combine(ProfilesDir, updated.id, "codex-home");
+                    configPath = Path.Combine(codexHome, "config.toml");
+                    priorConfig = File.Exists(configPath) ? File.ReadAllText(configPath, Encoding.UTF8) : null;
+                    ApplyProfilePermissionMode(codexHome, permissionMode);
+                }
                 store.accounts[idx] = updated;
-                SaveStore(store);
+                try { SaveStore(store); }
+                catch
+                {
+                    if (configPath != null)
+                    {
+                        if (priorConfig == null) File.Delete(configPath);
+                        else WriteTextAtomically(configPath, priorConfig, false);
+                    }
+                    throw;
+                }
             }
         }
 
         public static void LaunchProfile(string profileId)
         {
             lock (ProfileLifecycleLock) LaunchProfileCore(profileId);
+        }
+
+        internal static void OpenRunningProfile(string profileId)
+        {
+            lock (ProfileLifecycleLock)
+            {
+                string userData = profileId == "default" ? DefaultUserData : Path.Combine(ProfilesDir, profileId, "user-data");
+                var processes = ScanCodexProcesses(true);
+                var pids = new HashSet<int>(GetProfilePids(profileId, userData, processes));
+                foreach (var candidate in processes.Where(p => pids.Contains(p.ProcessId)
+                    && string.Equals(p.Name, "ChatGPT.exe", StringComparison.OrdinalIgnoreCase)))
+                {
+                    try
+                    {
+                        using (var process = Process.GetProcessById(candidate.ProcessId))
+                            if (TryFocusWindow(process)) return;
+                    }
+                    catch (ArgumentException) { }
+                }
+                LaunchProfileCore(profileId);
+            }
         }
 
         private static void LaunchProfileCore(string profileId)

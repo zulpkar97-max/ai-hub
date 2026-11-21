@@ -1,12 +1,8 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
-using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 
 namespace CodexLauncher
@@ -16,16 +12,7 @@ namespace CodexLauncher
     /// </summary>
     public class TrayPopupWindow : Window
     {
-        public TrayPopupWindow(
-            List<AccountViewModel> accounts,
-            ProxyStatusInfo proxy,
-            string screenshotHotkey,
-            Action onOpenMain,
-            Action onScreenshot,
-            Action<string> onLaunchAccount,
-            Action onOpenProxy,
-            Action onBatchExit,
-            Action onQuit)
+        public TrayPopupWindow(Action onBatchExit, Action onQuit)
         {
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
@@ -38,57 +25,17 @@ namespace CodexLauncher
 
             var card = new Border
             {
-                Width = 248,
+                Width = 196,
                 Background = UiHelpers.MainBg,
-                BorderBrush = UiHelpers.BorderSubtle,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(6),
                 Margin = new Thickness(10),
-                Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 18, ShadowDepth = 4, Opacity = 0.16 }
+                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 2, ShadowDepth = 3, Direction = 315, Opacity = 0.22 }
             };
 
             var stack = new StackPanel();
-
-            var openBtn = UiHelpers.MakeMenuRowButton("打开 AI Hub", null, "normal", true);
-            openBtn.Click += (s, e) => { Close(); onOpenMain(); };
-            stack.Children.Add(openBtn);
-
-            string shotLabel = string.IsNullOrEmpty(screenshotHotkey)
-                ? "快捷截图与提字"
-                : string.Format("快捷截图（{0}）", screenshotHotkey);
-            var shotBtn = UiHelpers.MakeMenuRowButton(shotLabel, UiHelpers.OkRing, "normal", false);
-            shotBtn.Click += (s, e) => { Close(); onScreenshot(); };
-            stack.Children.Add(shotBtn);
-
-            if (accounts != null && accounts.Count > 0)
-            {
-                stack.Children.Add(MakeSep());
-                stack.Children.Add(new TextBlock
-                {
-                    Text = "快速启动 Codex 账号",
-                    FontSize = 10.5,
-                    Foreground = UiHelpers.TextMuted,
-                    Margin = new Thickness(10, 2, 8, 3)
-                });
-                foreach (var vm in accounts)
-                {
-                    string id = vm.Record.id;
-                    var dot = vm.Running ? UiHelpers.OkRing : UiHelpers.BorderStrong;
-                    var b = UiHelpers.MakeMenuRowButton(vm.Record.name, dot, "normal", false);
-                    b.Click += (s, e) => { Close(); onLaunchAccount(id); };
-                    stack.Children.Add(b);
-                }
-            }
-
-            stack.Children.Add(MakeSep());
-            bool pRun = proxy != null && proxy.Running;
-            var pBtn = UiHelpers.MakeMenuRowButton(
-                pRun ? "Clash Verge · 运行中（打开面板）" : "Clash Verge · 未启动（启动代理）",
-                pRun ? UiHelpers.OkRing : UiHelpers.BorderStrong,
-                "normal", false);
-            pBtn.Click += (s, e) => { Close(); onOpenProxy(); };
-            stack.Children.Add(pBtn);
 
             var batchBtn = UiHelpers.MakeMenuRowButton("一键全部退出", null, "danger", true);
             batchBtn.Click += (s, e) => { Close(); onBatchExit(); };

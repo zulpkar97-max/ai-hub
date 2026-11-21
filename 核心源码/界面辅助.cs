@@ -115,41 +115,41 @@ namespace CodexLauncher
         }
 
         // Refined Light-Mode Palette
-        public static readonly SolidColorBrush SidebarBg = BrushFromHex("#F7F7F8");
-        public static readonly SolidColorBrush MainBg = BrushFromHex("#FFFFFF");
-        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#FAFAFB");
-        public static readonly SolidColorBrush HoverBg = BrushFromHex("#F1F2F4");
-        public static readonly SolidColorBrush ActiveNavBg = BrushFromHex("#EAECEF");
+        public static readonly SolidColorBrush SidebarBg = BrushFromHex("#E6EAEF");
+        public static readonly SolidColorBrush MainBg = BrushFromHex("#F2F4F7");
+        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#F6F8FA");
+        public static readonly SolidColorBrush HoverBg = BrushFromHex("#E6EAEF");
+        public static readonly SolidColorBrush ActiveNavBg = BrushFromHex("#FFFFFF");
 
-        public static readonly SolidColorBrush Hairline = BrushFromHex("#EAECEF");
-        public static readonly SolidColorBrush BorderSubtle = BrushFromHex("#E2E4E9");
-        public static readonly SolidColorBrush BorderStrong = BrushFromHex("#D0D4DC");
+        public static readonly SolidColorBrush Hairline = BrushFromHex("#D9DFE8");
+        public static readonly SolidColorBrush BorderSubtle = BrushFromHex("#C2CBD6");
+        public static readonly SolidColorBrush BorderStrong = BrushFromHex("#232B35");
 
-        public static readonly SolidColorBrush TextPrimary = BrushFromHex("#111827");
-        public static readonly SolidColorBrush TextSecondary = BrushFromHex("#4B5563");
-        public static readonly SolidColorBrush TextMuted = BrushFromHex("#8A909E");
+        public static readonly SolidColorBrush TextPrimary = BrushFromHex("#141920");
+        public static readonly SolidColorBrush TextSecondary = BrushFromHex("#505B6A");
+        public static readonly SolidColorBrush TextMuted = BrushFromHex("#7A8696");
 
-        public static readonly SolidColorBrush PrimaryBg = BrushFromHex("#18181B");
-        public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#2E2E33");
+        public static readonly SolidColorBrush PrimaryBg = BrushFromHex("#1D242E");
+        public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#2E3745");
 
-        public static readonly SolidColorBrush AccentBg = BrushFromHex("#0F766E");
-        public static readonly SolidColorBrush AccentHover = BrushFromHex("#115E59");
+        public static readonly SolidColorBrush AccentBg = BrushFromHex("#0A8458");
+        public static readonly SolidColorBrush AccentHover = BrushFromHex("#076644");
 
-        public static readonly SolidColorBrush OkText = BrushFromHex("#047857");
-        public static readonly SolidColorBrush OkBg = BrushFromHex("#ECFDF5");
-        public static readonly SolidColorBrush OkBorder = BrushFromHex("#BBF7D0");
-        public static readonly SolidColorBrush OkRing = BrushFromHex("#10B981");
+        public static readonly SolidColorBrush OkText = BrushFromHex("#0A8458");
+        public static readonly SolidColorBrush OkBg = BrushFromHex("#E6F7EF");
+        public static readonly SolidColorBrush OkBorder = BrushFromHex("#0F8B5F");
+        public static readonly SolidColorBrush OkRing = BrushFromHex("#0FA972");
 
-        public static readonly SolidColorBrush WarnText = BrushFromHex("#B45309");
-        public static readonly SolidColorBrush WarnBg = BrushFromHex("#FFFBEB");
-        public static readonly SolidColorBrush WarnBorder = BrushFromHex("#FDE68A");
-        public static readonly SolidColorBrush WarnRing = BrushFromHex("#D97706");
+        public static readonly SolidColorBrush WarnText = BrushFromHex("#B45C08");
+        public static readonly SolidColorBrush WarnBg = BrushFromHex("#FFF5E7");
+        public static readonly SolidColorBrush WarnBorder = BrushFromHex("#E0B477");
+        public static readonly SolidColorBrush WarnRing = BrushFromHex("#DC820E");
 
-        public static readonly SolidColorBrush DangerText = BrushFromHex("#B91C1C");
-        public static readonly SolidColorBrush DangerBg = BrushFromHex("#FEF2F2");
-        public static readonly SolidColorBrush DangerBorder = BrushFromHex("#FECACA");
-        public static readonly SolidColorBrush DangerBtnBg = BrushFromHex("#DC2626");
-        public static readonly SolidColorBrush DangerBtnHover = BrushFromHex("#B91C1C");
+        public static readonly SolidColorBrush DangerText = BrushFromHex("#C52828");
+        public static readonly SolidColorBrush DangerBg = BrushFromHex("#FDF1F1");
+        public static readonly SolidColorBrush DangerBorder = BrushFromHex("#C52828");
+        public static readonly SolidColorBrush DangerBtnBg = BrushFromHex("#C52828");
+        public static readonly SolidColorBrush DangerBtnHover = BrushFromHex("#A91F1F");
 
         public static readonly SolidColorBrush ProText = BrushFromHex("#4338CA");
         public static readonly SolidColorBrush ProBg = BrushFromHex("#EEF2FF");
@@ -164,9 +164,9 @@ namespace CodexLauncher
                     IntPtr hwnd = new WindowInteropHelper(win).Handle;
                     int captionColor = 0x00F8F7F7;
                     DwmSetWindowAttribute(hwnd, 35, ref captionColor, sizeof(int));
-                    int textColor = 0x00271811;
+                    int textColor = 0x00201914;
                     DwmSetWindowAttribute(hwnd, 36, ref textColor, sizeof(int));
-                    int borderColor = 0x00E9E4E2;
+                    int borderColor = 0x00352B23;
                     DwmSetWindowAttribute(hwnd, 34, ref borderColor, sizeof(int));
                 }
                 catch { }

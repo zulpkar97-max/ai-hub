@@ -47,16 +47,16 @@ namespace CodexLauncher
     public class LauncherSettings
     {
         public bool minimize_to_tray { get; set; }
-        public bool hide_tray_when_open { get; set; }
         public bool expiry_balloon_alert { get; set; }
+        public bool quota_auto_refresh { get; set; }
         public bool screenshot_enabled { get; set; }
         public string screenshot_hotkey { get; set; }
 
         public LauncherSettings()
         {
             minimize_to_tray = true;
-            hide_tray_when_open = false;
             expiry_balloon_alert = true;
+            quota_auto_refresh = true;
             screenshot_enabled = true;
             screenshot_hotkey = "Ctrl+Shift+A";
         }
@@ -149,6 +149,62 @@ namespace CodexLauncher
         public UsageWindowInfo Primary { get; set; }
         public UsageWindowInfo Secondary { get; set; }
         public DateTimeOffset FetchedAt { get; set; }
+    }
+
+    internal sealed class QuotaBucketSnapshot
+    {
+        internal string Label;
+        internal double? Percent;
+        internal DateTimeOffset? ResetAt;
+    }
+
+    internal sealed class QuotaRefreshState
+    {
+        private DateTimeOffset _lastAttempt;
+        private DateTimeOffset _retryAfter;
+        internal bool LastSuccessWasAutomatic;
+
+        internal bool IsDue(DateTimeOffset now, DateTimeOffset? fetchedAt, IEnumerable<QuotaBucketSnapshot> buckets,
+            TimeSpan maximumAge, bool onlyNonFullResets)
+        {
+            if (now < _retryAfter || now - _lastAttempt < TimeSpan.FromMinutes(1)) return false;
+            if (!fetchedAt.HasValue || now - fetchedAt.Value >= maximumAge) return true;
+            foreach (var bucket in buckets)
+            {
+                if (bucket.ResetAt.HasValue && fetchedAt.Value < bucket.ResetAt.Value
+                    && now - bucket.ResetAt.Value >= TimeSpan.FromMinutes(1)
+                    && (!onlyNonFullResets || (bucket.Percent.HasValue && bucket.Percent.Value < 99.5))) return true;
+            }
+            return false;
+        }
+
+        internal void Begin(DateTimeOffset now) { _lastAttempt = now; }
+
+        internal void Finish(DateTimeOffset now, bool success, bool automatic)
+        {
+            _retryAfter = success ? DateTimeOffset.MinValue : now.AddMinutes(10);
+            if (success) LastSuccessWasAutomatic = automatic;
+        }
+
+        internal static List<string> CollectRefilled(string owner, Dictionary<string, long> notified,
+            Dictionary<string, QuotaBucketSnapshot> before, Dictionary<string, QuotaBucketSnapshot> after)
+        {
+            var labels = new List<string>();
+            foreach (var entry in after)
+            {
+                var current = entry.Value;
+                QuotaBucketSnapshot previous;
+                if (!current.ResetAt.HasValue || !current.Percent.HasValue || current.Percent.Value < 99.5
+                    || !before.TryGetValue(entry.Key, out previous) || !previous.Percent.HasValue || previous.Percent.Value >= 80) continue;
+                string key = owner + "/" + entry.Key;
+                long resetTicks = current.ResetAt.Value.UtcDateTime.Ticks;
+                long last;
+                if (notified.TryGetValue(key, out last) && last >= resetTicks) continue;
+                notified[key] = resetTicks;
+                labels.Add(current.Label);
+            }
+            return labels;
+        }
     }
 
     public class ProxyStatusInfo

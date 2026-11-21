@@ -6,7 +6,9 @@
   let appState = null;
   let uiReadySent = false;
   let activeTab = "workspace";
-  let toolsRenderKey;
+  let sidebarToolsKey;
+  let settingsRenderKey;
+  const expandedSettings = new Set();
   let cmdkItems = [];
   let cmdkSelected = 0;
   let networkBusy = "";
@@ -25,16 +27,12 @@
     edit: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     sync: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>',
     monitor: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
-    folder: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
     trash: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
     close: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>',
     ext: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>',
-    scan: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>',
     crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
     mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
-    receipt: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-3.5-2-3.5 2-3.5-2L5 21zM9 8h6M9 12h6"/></svg>',
     chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
-    chevronRight: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
     key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
   };
 
@@ -105,7 +103,9 @@
     if (!acc || acc.account_type !== "recycled" || !acc.recycle_at) return null;
     const endMs = new Date(acc.recycle_at).getTime();
     if (Number.isNaN(endMs)) return null;
-    const startMs = acc.started_at ? new Date(acc.started_at).getTime() : (endMs - (acc.recycle_days || 25) * 86400000);
+    const savedStart = new Date(acc.started_at || "").getTime();
+    const days = Number(acc.recycle_days);
+    const startMs = Number.isFinite(savedStart) ? savedStart : endMs - (Number.isFinite(days) && days > 0 ? days : 25) * 86400000;
     const totalMs = Math.max(1000, endMs - startMs);
     const remainMs = endMs - Date.now();
     const expired = remainMs <= 0;
@@ -131,8 +131,7 @@
 
   function renderGradientBar(pct, tone, fillAttr = "") {
     const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
-    const visualWidth = clamped <= 0 ? 0 : Math.max(2, clamped);
-    return `<div class="grad-track"><div class="grad-fill tone-${tone}" ${fillAttr} style="width:${visualWidth.toFixed(1)}%"></div></div>`;
+    return `<div class="grad-track"><div class="grad-fill tone-${tone}${clamped > 0 && clamped < 100 ? " is-partial" : ""}" ${fillAttr} style="width:${clamped}%"></div></div>`;
   }
 
   function planTagHtml(auth) {
@@ -149,12 +148,13 @@
 
   function renderAll() {
     if (!appState) return;
-    $("#nav-workspace-dot").classList.toggle("hidden", appState.network?.state !== "reachable" || !appState.proxy?.running);
+    $("#version-label").textContent = appState.version || "v5.5.0";
+    renderSidebarTools();
 
-    const pending = appState.pending_update;
+    const pending = !!appState.pending_update;
     const headerActions = $("#header-actions");
     if (pending !== (headerActions.dataset.pending === "true")) {
-      headerActions.innerHTML = pending ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : "";
+      headerActions.innerHTML = pending ? '<button class="btn btn-soft btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : "";
       headerActions.dataset.pending = String(!!pending);
     }
     $$(".nav-item").forEach((el) => {
@@ -165,7 +165,6 @@
     });
 
     if (activeTab === "workspace") renderUnifiedWorkspace();
-    else if (activeTab === "tools") renderTools();
     else renderManage();
   }
 
@@ -173,8 +172,36 @@
     closePopover();
     if (activeTab === tab) return;
     activeTab = tab;
+    expandedSettings.clear();
     renderAll();
     $("#view-content").scrollTop = 0;
+    if (tab === "manage") postAction("refreshInstalledApps");
+  }
+
+  function shortcutLabel(hotkey) {
+    const modifiers = { Ctrl: "⌃", Shift: "⇧", Win: "⊞", Alt: "⌥" };
+    return hotkey.split("+").map((key) => modifiers[key] || key).join("");
+  }
+
+  function renderSidebarTools() {
+    const shot = appState.screenshot;
+    const shotKey = shot?.enabled && shot.registered ? shot.hotkey : "";
+    const voiceKey = appState.voice_recorder_hotkey || "";
+    const forms = appState.quick_ledger_forms || [];
+    const key = JSON.stringify([shotKey, voiceKey, forms]);
+    if (key === sidebarToolsKey) return;
+    sidebarToolsKey = key;
+    $("#sidebar-tools").innerHTML = `
+      <h2>快捷工具</h2>
+      <button class="btn btn-paper sidebar-tool" data-act="startScreenshot" title="${esc(shotKey || "截图")}">
+        ${ICONS.crop}<span>截图</span>${shotKey ? `<kbd aria-label="${esc(shotKey)}">${esc(shortcutLabel(shotKey))}</kbd>` : ""}
+      </button>
+      <button class="btn btn-paper sidebar-tool" data-act="startVoiceRecorder" title="${esc(voiceKey || "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
+        ${ICONS.mic}<span>AI 录音笔</span>${voiceKey ? `<kbd aria-label="${esc(voiceKey)}">${esc(shortcutLabel(voiceKey))}</kbd>` : ""}
+      </button>
+      ${forms.length ? `<h3>快速记账</h3><div class="ledger-grid">${forms.map((name) =>
+        `<button class="btn btn-paper ledger-btn" data-act="openLedgerForm" data-id="${esc(name)}" title="${esc(name)}"><span>${esc(name)}</span>${ICONS.ext}</button>`
+      ).join("")}</div>` : ""}`;
   }
 
   function iconButton(action, label, glyph, { disabled = false, danger = false, spinning = false, attrs = "" } = {}) {
@@ -186,18 +213,18 @@
     return `<span class="status-inline ${tone}"><span class="status-dot"></span>${esc(label)}</span>`;
   }
 
-  function toolHeading(id, icon, name, description, status = "") {
+  function toolHeading(id, icon, name, description, status = "", metadata = "") {
     return `<div class="tool-identity">
       ${icon ? `<img class="app-icon" src="${esc(icon)}" alt="" />` : `<span class="tool-icon-fallback" aria-hidden="true">${ICONS.monitor}</span>`}
       <div class="app-info">
-        <div class="app-name-line"><h2 class="app-name" id="${id}">${esc(name)}</h2>${status}</div>
-        <div class="tool-purpose">${esc(description)}</div>
+        <div class="app-name-line"><h2 class="app-name" id="${id}">${esc(name)}</h2>${status}${metadata}</div>
+        ${description ? `<div class="tool-purpose">${esc(description)}</div>` : ""}
       </div>
     </div>`;
   }
 
   function quotaTone(percent) {
-    return percent <= 10 ? "danger" : (percent <= 30 ? "warn" : "ok");
+    return percent <= 30 ? "warn" : "ok";
   }
 
   function renderQuotaMeter({ title, value, when, percent, tone = "", labelAttrs = "", valueAttrs = "", fillAttrs = "", timeAttrs = "", action = "" }) {
@@ -214,14 +241,23 @@
     return `<div class="quota-feedback ${type}" role="status"><span>${esc(message)}</span>${action}</div>`;
   }
 
-  function updatedAtHtml(timestamp) {
+  function updatedAtHtml(timestamp, automatic = false) {
     if (!timestamp) return "";
     const date = new Date(timestamp);
     if (Number.isNaN(date.getTime())) return "";
     const label = date.toDateString() === new Date().toDateString()
       ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
       : fmtDate(timestamp, true);
-    return `<time datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(label)}</time>`;
+    return `<time class="quota-updated" datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(label)}${automatic ? " · 自动" : ""}</time>`;
+  }
+
+  function desktopActions(tool, name, launchAction, stopAction, startStyle = "btn-primary") {
+    const id = esc(tool?.id);
+    const attrs = `data-id="${id}"`;
+    const running = !!tool?.running;
+    return `<button class="btn ${running ? "btn-live" : startStyle} btn-sm" data-act="${launchAction}" ${attrs} ${id ? "" : "disabled"}>
+      ${running ? "打开" : ICONS.play + " 启动"}</button>
+      ${running ? iconButton(stopAction, "关闭 " + name, ICONS.power, { danger: true, attrs }) : ""}`;
   }
 
   function timeToReset(timestamp) {
@@ -237,8 +273,8 @@
   }
 
   const webTools = [
-    { id: "gemini", name: "Gemini", icon: "gemini.png", description: "对话、研究与内容创作" },
-    { id: "ai-studio", name: "AI Studio", icon: "ai-studio.png", description: "试用 Gemini 模型与调试提示词" }
+    { id: "gemini", name: "Gemini", icon: "gemini.png" },
+    { id: "ai-studio", name: "AI Studio", icon: "ai-studio.png" }
   ];
   const chosenIdentities = new Map();
 
@@ -260,21 +296,18 @@
     const available = !!profile && appState.chrome_available !== false;
     return `<section class="surface-card tool-card compact-tool" aria-labelledby="tool-${tool.id}">
       <header class="tool-card-header">
-        ${toolHeading("tool-" + tool.id, tool.icon, tool.name, tool.description, statusHtml(available ? "可用" : "不可用", available ? "healthy" : "status-error"))}
+        ${toolHeading("tool-" + tool.id, tool.icon, tool.name, "", statusHtml(available ? "可用" : "不可用", available ? "healthy" : "status-error"))}
         <div class="tool-actions">
-          <button class="btn btn-primary btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
-          ${iconButton("openWorkMore", "更多 " + tool.name + " 操作", ICONS.more, { attrs: `data-id="${tool.id}"` })}
+          <button class="btn btn-paper btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
         </div>
       </header>
       <div class="tool-card-body">
-        <div class="tool-field">
-          <label for="identity-${tool.id}">Google 身份</label>
-          <select id="identity-${tool.id}" data-web-identity="${tool.id}" ${available ? "" : "disabled"}>
+        <div class="compact-identity">
+          <span class="tool-identity-email" data-web-email="${tool.id}" title="${esc(profile?.email)}">${esc(profile?.email || "—")}</span>
+          <select id="identity-${tool.id}" aria-label="${esc(tool.name)} Google 身份" data-web-identity="${tool.id}" ${available ? "" : "disabled"}>
             ${profiles.length ? profiles.map((item) => `<option value="${esc(item.dir)}" ${item.dir === profile?.dir ? "selected" : ""}>${esc(item.name)}</option>`).join("") : "<option>暂无可用身份</option>"}
           </select>
         </div>
-        ${profiles.length ? `<div class="tool-identity-email" data-web-email="${tool.id}">${esc(profile?.email)}</div>` : ""}
-        <div class="tool-field tool-resource"><span>额度</span><span>暂不可读取</span></div>
       </div>
     </section>`;
   }
@@ -283,18 +316,13 @@
     const ready = !!tool;
     return `<section class="surface-card tool-card compact-tool" aria-labelledby="tool-open-design">
       <header class="tool-card-header">
-        ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "设计构思与原型创作",
+        ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "",
           statusHtml(ready ? (tool.running ? "运行中" : "未运行") : "未安装", tool?.running ? "running" : ""))}
         <div class="tool-actions">
-          <button class="btn btn-primary btn-sm" data-act="launchTool" data-id="${esc(tool?.id)}" ${ready ? "" : "disabled"}>${tool?.running ? "打开" : "启动"}</button>
-          ${iconButton("openWorkMore", "更多 Open Design 操作", ICONS.more, { attrs: 'data-id="open-design"' })}
+          ${desktopActions(tool, "Open Design", "launchTool", "stopTool", "btn-paper")}
         </div>
       </header>
-      <div class="tool-card-body">
-        <div class="tool-field"><span>启动方式</span><span>桌面</span></div>
-        <div class="tool-field"><span>身份</span><span>由 Open Design 管理</span></div>
-        <div class="tool-field tool-resource"><span>额度</span><span>暂不可读取</span></div>
-      </div>
+      <div class="tool-card-body compact-purpose">设计构思与原型创作</div>
     </section>`;
   }
 
@@ -338,25 +366,23 @@
         }).join("")}</div>
       </div>`).join("") : "";
     const error = tool.error
-      ? quotaMessage(tool.error, "quota-error", tool.cli_installed ? '<button class="btn btn-secondary btn-sm" data-act="refreshAntigravity">重试</button>' : "")
+      ? quotaMessage(tool.error, "quota-error", tool.cli_installed ? '<button class="btn btn-soft btn-sm" data-act="refreshAntigravity">重试</button>' : "")
       : "";
     const info = tool.loading ? quotaMessage("正在读取额度…")
       : (!groups && !error ? quotaMessage(tool.cli_installed ? "点击刷新额度" : "暂不可读取 · CLI 未安装") : "");
     return `<section class="surface-card tool-card" aria-labelledby="tool-antigravity">
       <header class="tool-card-header">
-        ${toolHeading("tool-antigravity", tool.icon_url, "Antigravity", "在本地项目中开发与调试",
-          statusHtml(tool.id ? (tool.running ? "运行中" : "未运行") : "未安装", tool.running ? "running" : ""))}
+        ${toolHeading("tool-antigravity", tool.icon_url, "Antigravity", "",
+          statusHtml(tool.id ? (tool.running ? "运行中" : "未运行") : "未安装", tool.running ? "running" : ""),
+          `${usage?.plan ? `<span class="tag tag-pro">${esc(usage.plan)}</span>` : ""}
+           ${usage?.email ? `<span class="tool-identity-email">${esc(usage.email)}</span>` : ""}`)}
         <div class="tool-actions">
-          <button class="btn btn-secondary btn-sm" data-act="refreshAntigravity" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>
-          <button class="btn btn-primary btn-sm" data-act="launchTool" data-id="${esc(tool.id)}" ${tool.id ? "" : "disabled"}>${tool.running ? "打开" : "启动"}</button>
-          ${iconButton("openWorkMore", "更多 Antigravity 操作", ICONS.more, { attrs: 'data-id="antigravity"' })}
+          ${updatedAtHtml(usage?.fetched_at, tool.automatic)}
+          <button class="btn btn-soft btn-sm" data-act="refreshAntigravity" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>
+          ${desktopActions(tool, "Antigravity", "launchTool", "stopTool")}
         </div>
       </header>
       <div class="tool-card-body">
-        <div class="tool-resource-meta">
-          <span>${esc(usage?.plan || "Google 身份待读取")}${usage?.email ? ` <span class="tool-identity-email">${esc(usage.email)}</span>` : ""}</span>
-          ${updatedAtHtml(usage?.fetched_at)}
-        </div>
         ${error}${info}
         ${groups ? `<div class="antigravity-quota-grid">${groups}</div>` : ""}
       </div>
@@ -429,7 +455,7 @@
       <header class="tool-card-header">
         ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "Codex", accounts.length + " 个账号")}
         <div class="tool-actions">
-          <button class="btn btn-secondary btn-sm" data-act="refreshAllUsage" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-soft btn-sm" data-act="refreshAllUsage" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
           <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
         </div>
       </header>
@@ -448,8 +474,8 @@
     if (!auth.logged_in) feedback = quotaMessage("登录后可读取剩余额度");
     else if (auth.can_fetch_usage === false) feedback = quotaMessage("当前登录方式未提供额度");
     else if (acc.usage_loading) feedback = quotaMessage("正在查询额度…");
-    else if (usage && !usage.success) feedback = quotaMessage(usage.error || "额度查询失败", "quota-error",
-      `<button class="btn btn-secondary btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
+    else if (acc.usage_error) feedback = quotaMessage(acc.usage_error, "quota-error",
+      `<button class="btn btn-soft btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
     else if (!windows.length) feedback = quotaMessage(usage ? "当前套餐暂无独立额度窗口" : "暂无额度数据");
 
     const meters = windows.map((w) => {
@@ -458,6 +484,10 @@
         when: w.reset_text || "重置时间未知", percent, tone: quotaTone(percent),
         valueAttrs: `aria-label="剩余 ${percent}%"` });
     });
+    const officialEnd = new Date(auth.subscription_until || "").getTime();
+    const recycleEnd = new Date(acc.recycle_at || "").getTime();
+    const needsCalibration = !!cd && !acc.is_default && Number.isFinite(officialEnd) && Number.isFinite(recycleEnd)
+      && Math.abs(recycleEnd - (officialEnd - 5 * 86400000)) > 6 * 3600000;
     if (cd) meters.push(renderQuotaMeter({
       title: recycleStatus(cd), value: cd.meterValue, when: "截止 " + cd.targetShort,
       percent: cd.pct, tone: cd.level,
@@ -465,8 +495,8 @@
       valueAttrs: `data-cd-clock="${esc(acc.id)}" title="${esc(cd.compact)}"`,
       fillAttrs: `data-cd-fill="${esc(acc.id)}"`,
       timeAttrs: `title="${esc(fmtDate(acc.recycle_at))}"`,
-      action: auth.subscription_until
-        ? `<button class="btn btn-secondary meter-calibrate" data-act="calibrate5Days" data-id="${esc(acc.id)}">按到期前 5 天校准</button>` : ""
+      action: needsCalibration
+        ? `<button class="btn btn-soft meter-calibrate" data-act="openEditAccount" data-id="${esc(acc.id)}" title="当前回收时间与到期前 5 天相差超过 6 小时">校准时间</button>` : ""
     }));
 
     return `<article class="codex-account">
@@ -480,18 +510,14 @@
           <div class="app-sub account-email">${esc(email)}</div>
         </div>
         <div class="account-actions">
+          ${updatedAtHtml(usage?.fetched_at, usage?.automatic)}
           ${statusHtml(acc.running ? "运行中" : "未运行", acc.running ? "running" : "")}
-          <button class="btn ${acc.running ? "btn-danger-outline" : "btn-primary"} btn-sm"
-            data-act="${acc.running ? "stopAccount" : "launchAccount"}" data-id="${esc(acc.id)}"
-            ${!acc.running && !auth.logged_in ? 'title="启动 Codex 并登录"' : ""}>
-            ${acc.running ? "关闭" : ICONS.play + " 启动"}
-          </button>
+          ${desktopActions(acc, name, "launchAccount", "stopAccount")}
           ${iconButton("openMoreMenu", "更多 " + name + " 操作", ICONS.more, { attrs: `data-id="${esc(acc.id)}"` })}
         </div>
       </header>
       <div class="account-usage">
         ${feedback}
-        ${usage?.success && usage.fetched_at ? `<div class="account-usage-head">${updatedAtHtml(usage.fetched_at)}</div>` : ""}
         ${meters.length ? `<div class="meter-grid${!cd && windows.length === 1 ? " meter-grid-single" : ""}">${meters.join("")}</div>` : ""}
       </div>
     </article>`;
@@ -512,336 +538,149 @@
       <div class="sec-heading"><h2 class="sec-title work-tools-title">AI 工作工具</h2></div>
       ${renderCodex(accounts)}
       ${renderAntigravity()}
+      <div class="sec-heading"><h2 class="sec-title">快捷入口</h2></div>
       <div class="work-tools-grid">
         ${webTools.map((tool) => renderWebTool(tool, chromes)).join("")}
         ${renderOpenDesign(design)}
       </div>`;
   }
 
-  // TAB 2: MANAGE & SETTINGS
-  function renderTools() {
-    $("#view-title").textContent = "工具";
-    $("#view-sub").textContent = "";
+  function settingSwitch(key, label, checked) {
+    return `<label class="toggle">
+      <input type="checkbox" data-setting="${key}" aria-label="${esc(label)}" ${checked ? "checked" : ""} />
+      <span class="toggle-track"></span><span class="toggle-thumb"></span>
+    </label>`;
+  }
 
-    const screenshot = appState.screenshot;
-    const shotKey = screenshot?.enabled && screenshot.registered ? screenshot.hotkey : "";
-    const voiceKey = appState.voice_recorder_hotkey;
-    const hasForms = !!appState.quick_ledger_forms?.length;
-    const view = $("#view-content");
-    const renderKey = JSON.stringify([shotKey, voiceKey, hasForms, appState.version]);
-    if (renderKey === toolsRenderKey && view.firstElementChild?.classList.contains("tools-page")) return;
-    closePopover();
-    toolsRenderKey = renderKey;
-    view.innerHTML = `
-      <div class="tools-page">
-        <div class="surface-card">
-          <div class="utility-row">
-            <div class="utility-copy">
-              ${ICONS.crop}
-              <div><h2>截图</h2><p>框选、标注与提字</p></div>
-            </div>
-            <div class="utility-action">
-              ${shotKey ? `<kbd>${esc(shotKey)}</kbd>` : ""}
-              <button class="btn btn-primary btn-sm" data-act="startScreenshot">立即截图</button>
-            </div>
-          </div>
-          <div class="utility-row">
-            <div class="utility-copy">
-              ${ICONS.mic}
-              <div><h2>AI 录音笔</h2><p>微信输入法${voiceKey ? "" : " · 当前不可用"}</p></div>
-            </div>
-            <div class="utility-action">
-              ${voiceKey ? `<kbd>${esc(voiceKey)}</kbd>` : ""}
-              <button class="btn btn-secondary btn-sm" data-act="startVoiceRecorder" ${voiceKey ? "" : "disabled"}>打开</button>
-            </div>
-          </div>
-          <div class="utility-row">
-            <div class="utility-copy">
-              ${ICONS.receipt}
-              <div><h2>快速记账</h2><p>${hasForms ? "飞书表单" : "尚未配置飞书表单"}</p></div>
-            </div>
-            ${hasForms
-              ? `<button class="btn btn-secondary btn-sm" data-act="openLedgerMenu" aria-controls="popover-menu" aria-expanded="false">选择表单 ${ICONS.chevronDown}</button>`
-              : '<button class="btn btn-secondary btn-sm" data-act="openDataDir">打开数据目录</button>'}
-          </div>
-        </div>
-        <button class="btn btn-ghost tools-about" data-act="openChangelog">
-          <span>关于 AI Hub <span class="tools-version">${esc(appState.version)}</span></span>
-          <span class="utility-action">更新日志 ${ICONS.chevronRight}</span>
-        </button>
-      </div>`;
+  function settingsDisclosure(id, label) {
+    const open = expandedSettings.has(id);
+    return `<button class="btn btn-soft btn-sm settings-disclosure" data-act="toggleSettingsDetails" data-id="${id}"
+      data-collapsed-label="${label}" aria-controls="${id}" aria-expanded="${open}"><span>${open ? "收起" : label}</span>${ICONS.chevronDown}</button>`;
   }
 
   function renderManage() {
-    const sections = appState.tool_sections || [];
     const settings = appState.settings || {};
-
+    const shot = appState.screenshot || {};
+    const shortcuts = appState.desktop_shortcuts || [];
+    const apps = appState.installed_apps || [];
+    const hiddenCount = shortcuts.filter((sc) => sc.hidden).length;
+    const view = $("#view-content");
     $("#view-title").textContent = "设置";
     $("#view-sub").textContent = "";
+    const key = JSON.stringify([settings, shot, shortcuts, apps]);
+    if (key === settingsRenderKey && view.firstElementChild?.classList.contains("settings-page")) return;
+    settingsRenderKey = key;
 
-    // 1. Software Uninstall Center (includes ChatGPT / Codex MSIX!)
-    const uniqueApps = [];
-    const seen = new Set();
-    sections.forEach((s) => (s.items || []).forEach((it) => {
-      const k = (it.target || it.id).toLowerCase();
-      if (it.kind !== "url" && !seen.has(k)) { seen.add(k); uniqueApps.push(it); }
-    }));
-
-    const uninstRows = uniqueApps.length === 0
-      ? `<div class="app-row"><span style="font-size:12px;color:var(--text-muted);">当前未收纳桌面软件，可点击下方「重新扫描本机 AI 软件」。</span></div>`
-      : uniqueApps.map((app) => `
-          <div class="app-row">
-            <div class="app-left">
-              <img class="app-icon" src="${esc(app.icon_url)}" alt="" />
-              <div class="app-info">
-                <div class="app-name">${esc(app.name)}</div>
-                <div class="app-sub">方式：${esc(app.uninstall_method)}</div>
-              </div>
-            </div>
-            <div class="app-right">
-              <button class="btn btn-danger-outline btn-sm" data-act="confirmUninstall" data-id="${esc(app.id)}">卸载软件</button>
-            </div>
-          </div>
-        `).join("");
-
-    // 2. Sections & Items Organization
-    const secRows = sections.map((sec) => {
-      const childItems = (sec.items || []).filter((it) => it.uninstall_hint !== "OpenAI.Codex").map((it) => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 5px 12px;font-size:12.5px;color:var(--text-secondary);">
-          <span>${esc(it.name)}</span>
-          <button class="btn btn-ghost btn-sm" data-act="confirmHideTool" data-sec="${esc(sec.id)}" data-id="${esc(it.id)}" data-name="${esc(it.name)}">从工作台隐藏</button>
-        </div>
-      `).join("");
-      return `
-        <div style="padding:11px 16px;border-top:1px solid var(--hairline);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <strong style="font-size:12.5px;">${esc(sec.title)}</strong>
-            <button class="btn btn-ghost btn-sm" data-act="confirmDeleteSection" data-id="${esc(sec.id)}" data-title="${esc(sec.title)}">删除分区</button>
-          </div>
-          ${childItems || `<div style="padding:4px 0 4px 12px;font-size:12px;color:var(--text-muted);">暂无可隐藏的独立应用条目</div>`}
-        </div>
-      `;
-    }).join("");
-
-    // 0A. Screenshot & Local OCR Card
-    const shot = appState.screenshot || { enabled: true, hotkey: "Ctrl+Shift+A", registered: false, error: "" };
+    const hotkeyStatus = !shot.enabled ? '<span class="tag">快捷键已关闭</span>'
+      : shot.registered ? '<span class="tag tag-ok">热键已生效</span>' : '<span class="tag tag-warn">热键被占用</span>';
     const hotkeyPresets = ["Ctrl+Shift+A", "Alt+A", "Ctrl+Alt+A", "F1"];
-    const hkPillsHtml = hotkeyPresets.map((hk) => `
-      <button class="hotkey-pill ${shot.hotkey === hk ? "active" : ""}" data-act="setScreenshotHotkey" data-hk="${esc(hk)}">${esc(hk)}</button>
-    `).join("");
-
-    const shotStatusTag = !shot.enabled
-      ? `<span class="tag">快捷键已关闭</span>`
-      : (shot.registered
-          ? `<span class="tag tag-ok">热键已生效</span>`
-          : `<span class="tag tag-warn">热键被占用</span>`);
-
-    const shotConflictBanner = (shot.enabled && !shot.registered && shot.error)
-      ? `
-        <div class="hotkey-alert">
-          <span>${esc(shot.error)}</span>
-          <button class="btn btn-secondary btn-sm" data-act="reregisterHotkey" style="flex-shrink:0;">重新注册</button>
+    const hotkeyPills = hotkeyPresets.map((value) =>
+      `<button class="hotkey-pill${shot.hotkey === value ? " active" : ""}" data-act="setScreenshotHotkey"
+        data-hk="${value}" aria-pressed="${shot.hotkey === value}">${value}</button>`
+    ).join("");
+    const stashRows = shortcuts.map((sc) => `
+      <div class="stash-row">
+        <div class="stash-meta">
+          <strong>${esc(sc.name)}</strong>
+          <span class="tag">${sc.requires_admin ? "公共桌面 · 需提权" : "个人桌面"}</span>
         </div>
-      `
-      : "";
-
-    // 0B. Reversible Desktop Shortcut Stash Card
-    const shortcuts = appState.desktop_shortcuts || [];
-    const hiddenCount = shortcuts.filter((s) => s.hidden).length;
-    const aiVisibleCount = shortcuts.filter((s) => s.category === "ai" && !s.hidden).length;
-    const stashRowsHtml = shortcuts.length === 0
-      ? `<div class="stash-row"><span style="font-size:12px;color:var(--text-muted);">未在桌面检测到可收纳的 AI 应用快捷方式</span></div>`
-      : shortcuts.map((sc) => `
-          <div class="stash-row">
-            <div class="stash-meta">
-              <strong style="font-size:13px;">${esc(sc.name)}</strong>
-              <span class="tag ${sc.category === "ai" ? "tag-dark" : ""}">${sc.category === "ai" ? "AI Hub 已收纳" : "关联工具"}</span>
-              <span class="tag">${sc.requires_admin ? "公共桌面 · 需提权" : "个人桌面"}</span>
-            </div>
-            <div class="stash-right">
-              <span class="stash-state ${sc.hidden ? "hidden-on" : ""}">${sc.hidden ? "已隐藏" : "桌面显示中"}</span>
-              <label class="toggle" title="${sc.hidden ? "点击恢复到桌面" : "点击从桌面隐藏"}">
-                <input type="checkbox" data-stash-id="${esc(sc.id)}" ${sc.hidden ? "checked" : ""} />
-                <span class="toggle-track"></span><span class="toggle-thumb"></span>
-              </label>
-            </div>
-          </div>
-        `).join("");
-
-    $("#view-content").innerHTML = `
-      <section class="settings-group" aria-labelledby="settings-hotkeys">
-      <h2 id="settings-hotkeys" class="settings-heading">快捷键</h2>
-      <div class="surface-card">
-        <div class="setting-row">
-          <div>
-            <div class="setting-label">全局截图快捷键 ${shotStatusTag}</div>
-            <div class="group-sub">缩到系统托盘时也可使用</div>
-          </div>
-          <label class="toggle" aria-label="启用全局截图快捷键">
-            <input type="checkbox" data-setting="screenshot_enabled" ${shot.enabled ? "checked" : ""} />
+        <div class="stash-right">
+          <span class="stash-state ${sc.hidden ? "hidden-on" : ""}">${sc.hidden ? "已隐藏" : "桌面显示中"}</span>
+          <label class="toggle">
+            <input type="checkbox" data-stash-id="${esc(sc.id)}" aria-label="收纳 ${esc(sc.name)}" ${sc.hidden ? "checked" : ""} />
             <span class="toggle-track"></span><span class="toggle-thumb"></span>
           </label>
         </div>
-        <div class="setting-row">
-          <div>
-            <div style="font-size:13px;font-weight:500;">截图快捷键组合</div>
-            <div style="font-size:11.5px;color:var(--text-muted);">如果飞书正在运行会占用 Ctrl+Shift+A，关掉飞书点“重新注册”或直接切其他组合</div>
-          </div>
-          <div class="hotkey-pills">${hkPillsHtml}</div>
+      </div>`).join("");
+    const uninstallRows = apps.map((app) => `
+      <div class="app-row">
+        <div class="app-left">
+          <img class="app-icon" src="${esc(app.icon_url)}" alt="" />
+          <div class="app-info"><div class="app-name">${esc(app.name)}</div><div class="app-sub">${esc(app.uninstall_method)}</div></div>
         </div>
-        ${shotConflictBanner}
-      </div>
+        <button class="btn btn-danger-outline btn-sm" data-act="confirmUninstall" data-id="${esc(app.id)}">卸载软件</button>
+      </div>`).join("");
+
+    view.innerHTML = `<div class="settings-page">
+      <section class="settings-group" aria-labelledby="settings-hotkeys">
+        <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
+        <div class="surface-card">
+          <div class="setting-row">
+            <div class="setting-label">全局截图快捷键 ${hotkeyStatus}</div>
+            <div class="setting-actions">
+              <div class="hotkey-pills">${hotkeyPills}</div>
+              ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
+            </div>
+          </div>
+          ${shot.enabled && !shot.registered && shot.error ? `<div class="hotkey-alert">
+            <span>${esc(shot.error)}</span><button class="btn btn-soft btn-sm" data-act="reregisterHotkey">重新注册</button>
+          </div>` : ""}
+          <div class="setting-row">
+            <div class="setting-label">额度自动刷新与回满提醒</div>
+            ${settingSwitch("quota_auto_refresh", "额度自动刷新与回满提醒", settings.quota_auto_refresh !== false)}
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">周期回收号不足 48 小时提醒</div>
+            ${settingSwitch("expiry_balloon_alert", "周期回收号不足 48 小时提醒", settings.expiry_balloon_alert)}
+          </div>
+        </div>
       </section>
 
       <section class="settings-group" aria-labelledby="settings-apps">
-      <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
-      <div class="surface-card">
-        <div class="group-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <div>
-            <div class="group-title">桌面图标收纳</div>
-            <div class="group-sub">已隐藏 ${hiddenCount}/${shortcuts.length} 个快捷方式，可随时恢复</div>
+        <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
+        <div class="surface-card">
+          <header class="group-header settings-card-header">
+            <div class="setting-label"><h3 class="group-title">桌面图标收纳</h3><span class="group-sub">已隐藏 ${hiddenCount}/${shortcuts.length}</span></div>
+            <div class="setting-actions">
+              <button class="btn btn-soft btn-sm" data-act="hideAllAiShortcuts" ${shortcuts.some((sc) => sc.category === "ai" && !sc.hidden) ? "" : "disabled"}>一键隐藏 AI 图标</button>
+              <button class="btn btn-soft btn-sm" data-act="restoreAllShortcuts" ${hiddenCount ? "" : "disabled"}>全部恢复</button>
+              ${settingsDisclosure("stash-details", "展开明细")}
+            </div>
+          </header>
+          <div id="stash-details" ${expandedSettings.has("stash-details") ? "" : "hidden"}>
+            ${stashRows || '<div class="setting-row">未检测到可收纳的快捷方式</div>'}
+            ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
           </div>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-primary btn-sm" data-act="hideAllAiShortcuts" ${aiVisibleCount === 0 ? "disabled" : ""}>一键隐藏 AI 图标</button>
-            <button class="btn btn-secondary btn-sm" data-act="restoreAllShortcuts" ${hiddenCount === 0 ? "disabled" : ""}>全部恢复到桌面</button>
+        </div>
+        <div class="surface-card">
+          <header class="group-header settings-card-header">
+            <div class="setting-label"><h3 class="group-title">软件卸载</h3><span class="group-sub">已检测 ${apps.length} 个</span></div>
+            ${settingsDisclosure("uninstall-details", "展开列表")}
+          </header>
+          <div id="uninstall-details" ${expandedSettings.has("uninstall-details") ? "" : "hidden"}>
+            ${uninstallRows || '<div class="setting-row">未检测到支持卸载的桌面应用</div>'}
           </div>
         </div>
-        ${stashRowsHtml}
-        <div style="padding:9px 16px;border-top:1px solid var(--hairline);font-size:11.5px;color:var(--text-muted);">
-          提示：「个人桌面」图标切换瞬间生效；「公共桌面」图标（如 Clash Verge、Chrome）由 Windows 保护，切换时会弹一次管理员确认。恢复后图标按系统默认空位排列。
-        </div>
-      </div>
-
-      <div class="surface-card">
-        <div class="group-header">
-          <div class="group-title">软件卸载</div>
-          <div class="group-sub">点击后会先弹窗确认，再调用 Windows 系统或软件官方卸载程序</div>
-        </div>
-        ${uninstRows}
-      </div>
       </section>
 
-      <section class="settings-group" aria-labelledby="settings-layout">
-      <h2 id="settings-layout" class="settings-heading">工作台布局</h2>
-      <div class="surface-card">
-        <div class="group-header">
-          <div class="group-title">分区与条目</div>
-          <div class="group-sub">隐藏条目或删除分区仅影响工作台展示，不会卸载软件；随时可重新扫描找回</div>
+      <section class="settings-group" aria-labelledby="settings-system">
+        <h2 id="settings-system" class="settings-heading">系统</h2>
+        <div class="surface-card">
+          <div class="setting-row">
+            <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
+              <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
+            ${settingSwitch("minimize_to_tray", "关闭窗口时缩到系统托盘", settings.minimize_to_tray)}
+          </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;">
-          <button class="btn btn-primary btn-sm" data-act="rescanTools">${ICONS.scan} 重新扫描本机 AI 软件</button>
-          <button class="btn btn-secondary btn-sm" data-act="openAddSection">${ICONS.plus} 新建分区</button>
-          <button class="btn btn-secondary btn-sm" data-act="openAddTool">${ICONS.plus} 添加应用 / 网页</button>
-        </div>
-        ${secRows}
-      </div>
       </section>
-
-      <section class="settings-group" aria-labelledby="settings-general">
-      <h2 id="settings-general" class="settings-heading">通用</h2>
-      <div class="surface-card">
-        <div class="setting-row">
-          <div>
-            <div style="font-size:13px;font-weight:500;">关闭窗口时缩到系统托盘</div>
-            <div style="font-size:11.5px;color:var(--text-muted);">隐藏到托盘后自动休眠渲染视图并停止轮询，保持低内存占用</div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" data-setting="minimize_to_tray" ${settings.minimize_to_tray ? "checked" : ""} />
-            <span class="toggle-track"></span><span class="toggle-thumb"></span>
-          </label>
-        </div>
-        <div class="setting-row">
-          <div>
-            <div style="font-size:13px;font-weight:500;">仅隐藏到后台时显示托盘图标</div>
-            <div style="font-size:11.5px;color:var(--text-muted);">关闭此项（默认）时，只要 AI Hub 在运行，右下角托盘图标会始终常驻</div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" data-setting="hide_tray_when_open" ${settings.hide_tray_when_open ? "checked" : ""} />
-            <span class="toggle-track"></span><span class="toggle-thumb"></span>
-          </label>
-        </div>
-        <div class="setting-row">
-          <div>
-            <div style="font-size:13px;font-weight:500;">周期回收号不足 48 小时弹出系统提醒</div>
-            <div style="font-size:11.5px;color:var(--text-muted);">进入回收临界窗口时发送桌面通知</div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" data-setting="expiry_balloon_alert" ${settings.expiry_balloon_alert ? "checked" : ""} />
-            <span class="toggle-track"></span><span class="toggle-thumb"></span>
-          </label>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--hairline);">
-          <button class="btn btn-secondary btn-sm" data-act="pinDesktop">更新桌面图标</button>
-          <button class="btn btn-secondary btn-sm" data-act="openDataDir">打开数据目录</button>
-          <button class="btn btn-danger-outline btn-sm" data-act="forceQuit">退出 AI Hub</button>
-        </div>
-      </div>
-      </section>
-    `;
+    </div>`;
   }
 
   // ==================== POPOVER & MODALS ====================
 
   function closePopover() {
     $("#popover-menu").classList.add("hidden");
-    $('[data-act="openLedgerMenu"][aria-expanded="true"]')?.setAttribute("aria-expanded", "false");
   }
 
-  function toggleLedgerMenu(anchor) {
-    if (anchor.getAttribute("aria-expanded") === "true") return closePopover();
-
+  function openAccountMoreMenu(anchor, acc) {
     const pop = $("#popover-menu");
-    pop.innerHTML = (appState.quick_ledger_forms || []).map((name) =>
-      `<button class="pop-item" data-act="openLedgerForm" data-id="${esc(name)}">${ICONS.ext} ${esc(name)}</button>`
-    ).join("");
-    positionPopover(pop, anchor);
-    anchor.setAttribute("aria-expanded", "true");
-    pop.querySelector("button")?.focus({ preventScroll: true });
-  }
-
-  function openAccountMoreMenu(anchorBtn, acc) {
-    const pop = $("#popover-menu");
-    const items = [];
-    if (acc.running) {
-      items.push(`<button class="pop-item" data-act="openAccountWindow" data-id="${esc(acc.id)}">${ICONS.monitor} 打开 Codex 窗口</button>`);
-    }
-    if (acc.permission_mode) {
-      items.push(`<button class="pop-item" data-act="openPermissionMode" data-id="${esc(acc.id)}">${ICONS.key} Codex 访问权限</button>`);
-    }
-    if (acc.auth?.logged_in) {
-      items.push(`<button class="pop-item" data-act="signOutAccount" data-id="${esc(acc.id)}">${ICONS.key} 打开 Codex 退出登录…</button>`);
-    }
-    if (!acc.is_default) {
-      items.push(`<button class="pop-item" data-act="openEditAccount" data-id="${esc(acc.id)}">${ICONS.edit} 编辑 / 校准倒计时</button>`);
-      items.push(`<button class="pop-item" data-act="syncConfig" data-id="${esc(acc.id)}">${ICONS.sync} 同步主号指引和 Skills</button>`);
-    }
-    items.push(`<button class="pop-item" data-act="createAccountShortcut" data-id="${esc(acc.id)}" data-name="${esc(acc.name)}">${ICONS.monitor} 创建桌面图标</button>`);
-    items.push(`<button class="pop-item" data-act="openAccountFolder" data-id="${esc(acc.id)}">${ICONS.folder} 打开账号目录</button>`);
-    if (!acc.is_default) {
-      items.push(`<div class="pop-sep"></div>`);
-      items.push(`<button class="pop-item danger" data-act="openWipe" data-id="${esc(acc.id)}">${ICONS.trash} 删除本地账号数据…</button>`);
-    }
-    pop.innerHTML = items.join("");
-    positionPopover(pop, anchorBtn);
-  }
-
-  function openWorkMore(anchor, id) {
-    const webTool = webTools.find((tool) => tool.id === id);
-    const tool = id === "antigravity" ? appState.antigravity : findOpenDesign();
-    const pop = $("#popover-menu");
-    if (webTool) {
-      pop.innerHTML = `<button class="pop-item" data-act="copyWorkAddress" data-id="${webTool.id}">${ICONS.ext} 复制网页地址</button>`;
-    } else {
-      const items = [];
-      if (id === "antigravity" && tool?.cli_installed) {
-        items.push(`<button class="pop-item" data-act="refreshAntigravity" ${tool.loading ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>`);
-      }
-      if (tool?.running) {
-        items.push(`<button class="pop-item danger" data-act="stopTool" data-id="${esc(tool.id)}">${ICONS.power} 关闭${id === "antigravity" ? " Antigravity" : " Open Design"}</button>`);
-      }
-      items.push(`<button class="pop-item" data-act="goManage">${ICONS.folder} 管理桌面应用</button>`);
-      pop.innerHTML = items.join("");
-    }
+    const id = esc(acc.id);
+    pop.innerHTML = acc.is_default
+      ? `<button class="pop-item" data-act="openPermissionMode" data-id="${id}">${ICONS.key} 默认权限设置</button>`
+      : `<button class="pop-item" data-act="openEditAccount" data-id="${id}">${ICONS.edit} 编辑账号与权限</button>
+         <button class="pop-item" data-act="syncConfig" data-id="${id}">${ICONS.sync} 同步主号指引和 Skills</button>
+         <div class="pop-sep"></div>
+         <button class="pop-item danger" data-act="openWipe" data-id="${id}">${ICONS.trash} 移除并清空账号…</button>`;
     positionPopover(pop, anchor);
   }
 
@@ -968,7 +807,7 @@
         if (!isOpen()) return;
         message.textContent = err.message;
         if (!picker.groups.length) {
-          list.innerHTML = '<div class="network-node-empty"><button class="btn btn-secondary btn-sm" data-picker-retry>重新读取</button></div>';
+          list.innerHTML = '<div class="network-node-empty"><button class="btn btn-soft btn-sm" data-picker-retry>重新读取</button></div>';
         }
       } finally {
         loading = false;
@@ -1061,7 +900,7 @@
         <div style="font-size:13px;color:var(--text-secondary);white-space:pre-line;">${esc(message)}</div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
+        <button class="btn btn-soft" data-close-modal>取消</button>
         <button id="confirm-ok-btn" class="btn ${danger ? "btn-danger" : "btn-primary"}">${esc(confirmLabel)}</button>
       </div>
     `);
@@ -1071,15 +910,17 @@
   function openAccountModal(editAcc) {
     const isEdit = !!editAcc;
     const now = new Date();
-    const startDt = isEdit && editAcc.started_at ? new Date(editAcc.started_at) : now;
-    const days = isEdit && editAcc.recycle_days ? editAcc.recycle_days : 25;
-    const endDt = isEdit && editAcc.recycle_at ? new Date(editAcc.recycle_at) : new Date(startDt.getTime() + days * 86400000);
+    const savedStart = new Date(editAcc?.started_at || "");
+    const savedEnd = new Date(editAcc?.recycle_at || "");
+    const startDt = Number.isFinite(savedStart.getTime()) ? savedStart : now;
+    const days = Number(editAcc?.recycle_days) > 0 ? Number(editAcc.recycle_days) : 25;
+    const endDt = Number.isFinite(savedEnd.getTime()) ? savedEnd : new Date(startDt.getTime() + days * 86400000);
     const isRec = !isEdit || editAcc.account_type === "recycled";
-    const subUntil = isEdit ? editAcc.auth?.subscription_until : null;
+    const subUntil = new Date(editAcc?.auth?.subscription_until || "").getTime();
 
     openModal(`
       <div class="modal-header">
-        <h3>${isEdit ? `编辑账号 · ${esc(editAcc.name)}` : "添加 Codex 账号"}</h3>
+        <h3>${isEdit ? `编辑账号与权限 · ${esc(editAcc.name)}` : "添加 Codex 账号"}</h3>
         <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
       </div>
       <form id="f-acc" class="modal-body">
@@ -1095,41 +936,41 @@
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
             <strong style="font-size:12.5px;">回收倒计时设置</strong>
             <div style="display:flex;gap:4px;">
-              <button type="button" class="btn btn-secondary btn-sm" data-preset="25">25天</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-preset="24">24天</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-preset="30">30天</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-preset="7">7天</button>
+              <button type="button" class="btn btn-soft btn-sm" data-preset="25">25天</button>
+              <button type="button" class="btn btn-soft btn-sm" data-preset="24">24天</button>
+              <button type="button" class="btn btn-soft btn-sm" data-preset="30">30天</button>
+              <button type="button" class="btn btn-soft btn-sm" data-preset="7">7天</button>
             </div>
           </div>
           <div class="field-grid">
             <div class="field"><label>起算 / 购买时间</label><input id="f-start" type="datetime-local" value="${toLocalInputValue(startDt)}" /></div>
-            <div class="field"><label>周期天数</label><input id="f-days" type="number" step="0.5" min="0.5" value="${days}" /></div>
+            <div class="field"><label>周期天数</label><input id="f-days" type="number" step="any" min="0.1" value="${days}" /></div>
           </div>
           <div class="field"><label>精确回收截止时刻</label><input id="f-end" type="datetime-local" value="${toLocalInputValue(endDt)}" /></div>
-          ${subUntil ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:7px;background:var(--ok-bg);border:1px solid var(--ok-border);font-size:12px;color:var(--ok);">
-              <span>官方 Plus 到期：${esc(fmtDate(subUntil))}</span>
-              <button type="button" id="f-cal-5d" class="btn btn-secondary btn-sm">按到期前 5 天校准</button>
+          ${Number.isFinite(subUntil) ? `
+            <div class="calibration-note">
+              <span>官方 Plus 到期 ${esc(fmtDate(subUntil))}</span>
+              <button type="button" id="f-cal-5d" class="btn btn-soft btn-sm">按到期前 5 天校准</button>
             </div>` : ""}
         </div>
-        ${!isEdit ? `
+        ${isEdit ? permissionFields(editAcc.permission_mode) : `
           <div class="sub-box">
             <strong style="font-size:12.5px;">初始指引和 Skills</strong>
             <label class="check-row"><input type="radio" name="cfgMode" value="clone" checked /> 复制主号指引和 Skills</label>
             <label class="check-row"><input type="radio" name="cfgMode" value="junction_skills" /> 复制主号指引，共享 Skills 目录</label>
             <label class="check-row"><input type="radio" name="cfgMode" value="fresh" /> 空白环境</label>
-            ${appState.pending_update !== undefined ? '<label class="check-row"><input id="f-full-access" type="checkbox"> 此账号使用完整访问（不询问）</label>' : ""}
+            <label class="check-row"><input id="f-full-access" type="checkbox"> 此账号使用完整访问（不询问）</label>
             <label class="check-row" style="margin-top:4px;"><input id="f-dis-mem" type="checkbox" checked /> 在副本配置中关闭本地 Memories</label>
             <label class="check-row"><input id="f-launch" type="checkbox" checked /> 创建后打开官方 Codex 窗口</label>
-          </div>` : ""}
+          </div>`}
         <div class="field">
           <label>备注（可选）</label>
           <input id="f-notes" type="text" placeholder="例如：到期前5天 15r 回收" value="${esc(isEdit ? editAcc.notes : "")}" />
         </div>
       </form>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
-        <button id="f-submit" class="btn btn-primary">${isEdit ? "保存修改" : "创建并启动"}</button>
+        <button class="btn btn-soft" data-close-modal>取消</button>
+        <button id="f-submit" type="submit" form="f-acc" class="btn btn-primary">${isEdit ? "保存修改" : "创建账号"}</button>
       </div>
     `);
 
@@ -1155,27 +996,40 @@
     $("#f-end").addEventListener("change", syncDays);
     if ($("#f-cal-5d")) {
       $("#f-cal-5d").addEventListener("click", () => {
-        $("#f-end").value = toLocalInputValue(new Date(new Date(subUntil).getTime() - 5 * 86400000));
+        const calibrated = new Date(subUntil - 5 * 86400000);
+        if (new Date($("#f-start").value).getTime() >= calibrated.getTime())
+          $("#f-start").value = toLocalInputValue(new Date(calibrated.getTime() - days * 86400000));
+        $("#f-end").value = toLocalInputValue(calibrated);
         syncDays();
       });
     }
 
-    $("#f-submit").addEventListener("click", async () => {
+    const form = $("#f-acc");
+    const submit = $("#f-submit");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (submit.disabled) return;
       const name = $("#f-name").value.trim();
       if (!name) return showToast("请输入账号备注名称", true);
       const accType = $('input[name="accType"]:checked').value;
+      const start = new Date($("#f-start").value);
+      const end = new Date($("#f-end").value);
+      const duration = Number($("#f-days").value);
+      if (accType === "recycled" && (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())
+        || end <= start || !Number.isFinite(duration) || duration <= 0)) return showToast("请填写有效的回收期限，截止时间须晚于起算时间。", true);
       const payload = {
         name,
         account_type: accType,
         notes: $("#f-notes").value.trim(),
-        started_at: accType === "recycled" ? toIsoWithOffset(new Date($("#f-start").value)) : null,
-        recycle_at: accType === "recycled" ? toIsoWithOffset(new Date($("#f-end").value)) : null,
-        recycle_days: accType === "recycled" ? (parseFloat($("#f-days").value) || 25) : null,
+        started_at: accType === "recycled" ? toIsoWithOffset(start) : null,
+        recycle_at: accType === "recycled" ? toIsoWithOffset(end) : null,
+        recycle_days: accType === "recycled" ? duration : null,
       };
-      $("#f-submit").disabled = true;
+      submit.disabled = true;
       try {
         if (isEdit) {
           payload.id = editAcc.id;
+          payload.permission_mode = form.querySelector('input[name="account-permission"]:checked')?.value || null;
           await callHost("updateAccount", payload);
         } else {
           payload.config_mode = $('input[name="cfgMode"]:checked').value;
@@ -1184,39 +1038,46 @@
           payload.permission_mode = $("#f-full-access")?.checked ? "full" : "custom";
           await callHost("createAccount", payload);
         }
-        closeModal();
+        if (form.isConnected) closeModal();
       } catch (_) {
-        $("#f-submit").disabled = false;
+        submit.disabled = false;
       }
     });
+  }
+
+  function permissionFields(mode) {
+    const custom = mode !== "workspace" && mode !== "full";
+    return `<fieldset class="sub-box permission-options"><legend>Codex 本地权限</legend>
+      ${custom ? '<label class="check-row"><input type="radio" name="account-permission" value="" checked> 保留现有权限配置</label>' : ""}
+      <label class="check-row"><input type="radio" name="account-permission" value="workspace" ${mode === "workspace" ? "checked" : ""}> 工作区可写 · 不询问</label>
+      <label class="check-row"><input type="radio" name="account-permission" value="full" ${mode === "full" ? "checked" : ""}> 完整访问 · 不询问</label>
+      <p>Codex 选择「自定义」时读取这里保存的权限。完整访问可读写当前 Windows 用户有权访问的文件，并使用网络。</p>
+    </fieldset>`;
   }
 
   function openPermissionModal(acc) {
     openModal(`
       <div class="modal-header">
-        <h3>Codex 访问权限</h3>
+        <h3>默认权限设置</h3>
         <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <strong>${esc(acc.name)}</strong>
-        <label class="check-row"><input type="radio" name="account-permission" value="workspace" ${acc.permission_mode === "workspace" ? "checked" : ""}> 工作区可写 · 不询问</label>
-        <label class="check-row"><input type="radio" name="account-permission" value="full" ${acc.permission_mode === "full" ? "checked" : ""}> 完整访问 · 不询问</label>
-        <p>只写入此账号的配置。完整访问可以读写当前 Windows 用户可访问的文件和使用网络。Codex 选择「自定义」时使用这里保存的权限。</p>
+        ${permissionFields(acc.permission_mode)}
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
-        <button id="permission-save" class="btn btn-primary" ${acc.permission_mode === "custom" ? "disabled" : ""}>保存</button>
+        <button class="btn btn-soft" data-close-modal>取消</button>
+        <button id="permission-save" class="btn btn-primary" ${["workspace", "full"].includes(acc.permission_mode) ? "" : "disabled"}>保存</button>
       </div>
     `);
     const save = $("#permission-save");
-    $$('input[name="account-permission"]').forEach((input) => input.addEventListener("change", () => { save.disabled = false; }));
+    $$('input[name="account-permission"]').forEach((input) => input.addEventListener("change", () => { save.disabled = !input.value; }));
     save.addEventListener("click", async () => {
       const mode = $('input[name="account-permission"]:checked')?.value;
       if (!mode) return;
       save.disabled = true;
       try {
         await callHost("saveProfilePermissionMode", { id: acc.id, mode });
-        closeModal();
+        if (save.isConnected) closeModal();
       } catch (_) {
         save.disabled = false;
       }
@@ -1226,18 +1087,18 @@
   function openWipeModal(acc) {
     openModal(`
       <div class="modal-header">
-        <h3>删除本地账号数据</h3>
+        <h3>移除并清空账号</h3>
         <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
       </div>
       <div class="modal-body">
         <div class="sub-box">
           <strong>${esc(acc.name)}</strong>
-          <p>此操作将移除 AI Hub 中的这张账号卡片，并永久删除该实例的本地会话、设置和登录数据。请先完全退出该 Codex 实例。</p>
+          <p>此操作会移除这张卡片，并永久删除本机隔离登录态、配置和本地会话。云端账号及云端数据保留。请先完全退出此 Codex 实例。</p>
           <label class="check-row"><input type="checkbox" id="w-ack" /> 我确认删除这个账号的本地数据</label>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
+        <button class="btn btn-soft" data-close-modal>取消</button>
         <button id="w-confirm" class="btn btn-danger" disabled>确认删除</button>
       </div>
     `);
@@ -1250,7 +1111,7 @@
       confirm.textContent = "正在删除…";
       try {
         await callHost("wipeAccount", { id: acc.id });
-        closeModal();
+        if (confirm.isConnected) closeModal();
       } catch (_) {
         confirm.disabled = !ack.checked;
         ack.disabled = false;
@@ -1285,107 +1146,37 @@
         <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div style="font-size:12.5px;color:var(--text-secondary);">仅退出勾选的外部应用与代理（不会退出 AI Hub 本身），适用于网络异常或集中重启。</div>
-        <div class="sub-box">
+        <div id="batch-exit-options" class="sub-box">
           ${rows.length ? rows.join("") : `<span style="font-size:12.5px;color:var(--text-muted);">当前没有正在运行的受管应用或代理。</span>`}
+          <label class="check-row batch-exit-hub"><input type="checkbox" id="be-hub" /> 同时退出 AI Hub</label>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
+        <button class="btn btn-soft" data-close-modal>取消</button>
         <button id="be-ok" class="btn btn-danger" ${total === 0 ? "disabled" : ""}>确认全部退出</button>
       </div>
     `);
 
-    $("#be-ok").addEventListener("click", async () => {
-      $("#be-ok").disabled = true;
-      await callHost("batchExit", {
-        codexIds: $$(".be-codex:checked").map((c) => c.value),
-        toolIds: $$(".be-tool:checked").map((c) => c.value),
-        stopProxy: !!$("#be-proxy")?.checked,
-      });
-      closeModal();
-    });
-  }
-
-  function openAddSectionModal() {
-    openModal(`
-      <div class="modal-header">
-        <h3>新建工作台分区</h3>
-        <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
-      </div>
-      <div class="modal-body">
-        <div class="field">
-          <label>分区名称</label>
-          <input id="sec-title-in" type="text" placeholder="例如：设计工具 / 常用 AI 网页" />
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
-        <button id="sec-ok" class="btn btn-primary">创建分区</button>
-      </div>
-    `);
-    $("#sec-title-in").focus();
-    $("#sec-ok").addEventListener("click", async () => {
-      const title = $("#sec-title-in").value.trim();
-      if (!title) return showToast("请输入分区名称", true);
-      await callHost("addSection", { title });
-      closeModal();
-    });
-  }
-
-  function openAddToolModal() {
-    const sections = appState.tool_sections || [];
-    const opts = sections.map((s) => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join("");
-    openModal(`
-      <div class="modal-header">
-        <h3>添加应用或 AI 网页</h3>
-        <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
-      </div>
-      <div class="modal-body">
-        ${opts ? `<div class="field"><label>归属分区</label><select id="t-sec">${opts}</select></div>` : ""}
-        <div style="display:flex;gap:18px;font-size:12.5px;">
-          <label class="check-row"><input type="radio" name="tKind" value="exe" checked /> 本机桌面程序 (.exe)</label>
-          <label class="check-row"><input type="radio" name="tKind" value="url" /> 网页工具 (URL)</label>
-        </div>
-        <div class="field"><label>名称</label><input id="t-name" type="text" placeholder="例如：Claude / Cursor" /></div>
-        <div class="field">
-          <label>程序路径或网址</label>
-          <div style="display:flex;gap:8px;">
-            <input id="t-target" type="text" placeholder="C:\\... 或 https://..." />
-            <button type="button" id="t-browse" class="btn btn-secondary">浏览...</button>
-          </div>
-        </div>
-        <div class="field"><label>简短描述（可选）</label><input id="t-sub" type="text" /></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-close-modal>取消</button>
-        <button id="t-ok" class="btn btn-primary">添加</button>
-      </div>
-    `);
-    $$('input[name="tKind"]').forEach((r) => r.addEventListener("change", () => {
-      $("#t-browse").classList.toggle("hidden", $('input[name="tKind"]:checked').value !== "exe");
-    }));
-    $("#t-browse").addEventListener("click", async () => {
+    const options = $("#batch-exit-options");
+    const confirm = $("#be-ok");
+    const checks = [...options.querySelectorAll("input[type=checkbox]")];
+    const syncConfirm = () => { confirm.disabled = !checks.some((input) => input.checked); };
+    options.addEventListener("change", syncConfirm);
+    confirm.addEventListener("click", async () => {
+      confirm.disabled = true;
+      checks.forEach((input) => { input.disabled = true; });
       try {
-        const res = await callHost("browseExe");
-        if (res && res.path) {
-          $("#t-target").value = res.path;
-          if (!$("#t-name").value.trim()) $("#t-name").value = res.name || "";
-        }
-      } catch (_) {}
-    });
-    $("#t-ok").addEventListener("click", async () => {
-      const name = $("#t-name").value.trim();
-      const target = $("#t-target").value.trim();
-      if (!name || !target) return showToast("请填写名称与路径/网址", true);
-      await callHost("addTool", {
-        sectionId: $("#t-sec")?.value || "",
-        kind: $('input[name="tKind"]:checked').value,
-        name,
-        target,
-        subtitle: $("#t-sub").value.trim(),
-      });
-      closeModal();
+        await callHost("batchExit", {
+          codexIds: $$(".be-codex:checked").map((c) => c.value),
+          toolIds: $$(".be-tool:checked").map((c) => c.value),
+          stopProxy: !!$("#be-proxy")?.checked,
+          quitAiHub: $("#be-hub").checked,
+        });
+        if (confirm.isConnected) closeModal();
+      } catch (_) {
+        checks.forEach((input) => { input.disabled = false; });
+        syncConfirm();
+      }
     });
   }
 
@@ -1552,7 +1343,6 @@
 
   $$(".nav-item").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
-  $("#btn-open-cmdk").addEventListener("click", openCmdk);
   $("#btn-batch-exit").addEventListener("click", openBatchExitModal);
 
   $("#cmdk-input").addEventListener("input", (e) => { cmdkSelected = 0; renderCmdkList(e.target.value); });
@@ -1569,11 +1359,9 @@
       if ($("#cmdk-backdrop").classList.contains("hidden")) openCmdk();
       else closeCmdk();
     } else if (e.key === "Escape") {
-      const ledgerTrigger = $('[data-act="openLedgerMenu"][aria-expanded="true"]');
       closeCmdk();
       closeModal();
       closePopover();
-      ledgerTrigger?.focus({ preventScroll: true });
     }
   });
 
@@ -1581,13 +1369,16 @@
     const tool = event.target.dataset.webIdentity;
     if (!tool) return;
     setWebIdentity(tool, event.target.value);
-    const email = event.target.closest(".tool-card").querySelector("[data-web-email]");
-    const profile = webIdentity(tool, appState.chrome_profiles || []);
-    if (email) email.textContent = profile?.email || "";
+    const email = event.target.closest(".tool-card")?.querySelector("[data-web-email]");
+    const profile = webIdentity(tool, appState?.chrome_profiles || []);
+    if (email) {
+      email.textContent = profile?.email || "—";
+      email.title = profile?.email || "";
+    }
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWorkMore"], [data-act="openLedgerMenu"]')) closePopover();
+    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"]')) closePopover();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
     if (e.target === $("#cmdk-backdrop")) return closeCmdk();
 
@@ -1615,40 +1406,31 @@
     else if (act === "refreshUsage") postAction("refreshUsage", { id });
     else if (act === "refreshNetwork") refreshNetwork();
     else if (act === "openNetworkPicker") openNetworkPicker();
-    else if (act === "openWorkMore") openWorkMore(actBtn, id);
     else if (act === "refreshAntigravity") { closePopover(); postAction("refreshAntigravity"); }
-    else if (act === "goManage") {
-      switchTab("manage");
-      $("#settings-apps")?.scrollIntoView({ block: "start" });
-    }
-    else if (act === "copyWorkAddress") { closePopover(); postAction("copyWorkAddress", { tool: id }); }
     else if (["proxyOpen", "proxyRestart", "proxyStop"].includes(act)) {
       closePopover();
       postAction(act);
     }
     else if (act === "launchAccount") postAction("launchAccount", { id });
     else if (act === "stopAccount") postAction("stopAccount", { id });
-    else if (act === "calibrate5Days") postAction("calibrate5Days", { id });
     else if (act === "syncConfig") { closePopover(); postAction("syncConfig", { id }); }
-    else if (act === "openAccountFolder") { closePopover(); postAction("openAccountFolder", { id }); }
-    else if (act === "createAccountShortcut") { closePopover(); postAction("createShortcut", { id, name: actBtn.dataset.name }); }
-    else if (act === "pinDesktop") postAction("createShortcut", {});
-    else if (act === "openDataDir") postAction("openDataDir");
     else if (act === "openChangelog") openChangelogModal();
-    else if (act === "forceQuit") postAction("forceQuit");
     else if (act === "startScreenshot") postAction("startScreenshot");
     else if (act === "startVoiceRecorder") postAction("startVoiceRecorder");
-    else if (act === "openLedgerMenu") toggleLedgerMenu(actBtn);
-    else if (act === "openLedgerForm") {
-      closePopover();
-      $('[data-act="openLedgerMenu"]')?.focus({ preventScroll: true });
-      postAction("openLedgerForm", { id });
+    else if (act === "openLedgerForm") postAction("openLedgerForm", { id });
+    else if (act === "toggleSettingsDetails") {
+      const panel = document.getElementById(id);
+      if (!panel) return;
+      if (panel.hidden) expandedSettings.add(id);
+      else expandedSettings.delete(id);
+      panel.hidden = !expandedSettings.has(id);
+      actBtn.setAttribute("aria-expanded", String(!panel.hidden));
+      actBtn.querySelector("span").textContent = panel.hidden ? actBtn.dataset.collapsedLabel : "收起";
     }
     else if (act === "reregisterHotkey") postAction("reregisterHotkey");
     else if (act === "setScreenshotHotkey") postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: actBtn.dataset.hk });
     else if (act === "hideAllAiShortcuts") postAction("hideAllDesktopShortcuts", { category: "ai" });
     else if (act === "restoreAllShortcuts") postAction("restoreAllDesktopShortcuts");
-    else if (act === "rescanTools") postAction("rescanTools");
     else if (act === "launchTool") postAction("launchTool", { id });
     else if (act === "stopTool") { closePopover(); postAction("stopTool", { id }); }
     else if (act === "openWebTool") {
@@ -1656,53 +1438,28 @@
       if (profile) postAction("launchChromeUrl", { tool: id, dir: profile.dir });
     }
     else if (act === "openAddAccount") openAccountModal(null);
-    else if (act === "openAddSection") openAddSectionModal();
-    else if (act === "openAddTool") openAddToolModal();
-    else if (act === "openAccountWindow") {
-      closePopover();
-      postAction("launchAccount", { id });
-    } else if (act === "signOutAccount") {
-      closePopover();
-      postAction("launchAccount", { id, intent: "signOut" });
-    } else if (act === "openPermissionMode") {
+    else if (act === "openPermissionMode") {
       closePopover();
       const acc = (appState.accounts || []).find((a) => a.id === id);
-      if (acc) openPermissionModal(acc);
+      if (acc?.is_default) openPermissionModal(acc);
     } else if (act === "openEditAccount") {
       const acc = (appState.accounts || []).find((a) => a.id === id);
-      if (acc) openAccountModal(acc);
+      if (acc && !acc.is_default) openAccountModal(acc);
     } else if (act === "openWipe") {
       const acc = (appState.accounts || []).find((a) => a.id === id);
-      if (acc) openWipeModal(acc);
+      if (acc && !acc.is_default) openWipeModal(acc);
     } else if (act === "openMoreMenu") {
       const acc = (appState.accounts || []).find((a) => a.id === id);
       if (acc) openAccountMoreMenu(actBtn, acc);
     } else if (act === "confirmUninstall") {
-      let targetApp = null;
-      (appState.tool_sections || []).forEach((s) => (s.items || []).forEach((it) => { if (it.id === id) targetApp = it; }));
+      const targetApp = (appState.installed_apps || []).find((it) => it.id === id);
       if (!targetApp) return;
       openConfirmModal(
         `确认卸载「${targetApp.name}」`,
-        `执行方式：${targetApp.uninstall_method}\n程序路径：${targetApp.target}\n\n确认后将调用系统或软件官方卸载程序。`,
+        `确认后将${targetApp.uninstall_method}。`,
         "确认卸载",
         true,
         () => postAction("uninstallTool", { id })
-      );
-    } else if (act === "confirmHideTool") {
-      openConfirmModal(
-        `从工作台隐藏「${actBtn.dataset.name}」`,
-        "仅从工作台列表隐藏，不会卸载电脑上的软件本体。\n随时可点击「重新扫描本机 AI 软件」恢复显示。",
-        "确认隐藏",
-        false,
-        () => postAction("hideTool", { sectionId: actBtn.dataset.sec, id })
-      );
-    } else if (act === "confirmDeleteSection") {
-      openConfirmModal(
-        `删除分区「${actBtn.dataset.title}」`,
-        "仅删除此分组显示，不会卸载电脑上的任何软件。\n之后可随时点击「重新扫描本机 AI 软件」恢复。",
-        "删除分区",
-        false,
-        () => postAction("deleteSection", { id })
       );
     }
   });
@@ -1735,8 +1492,8 @@
         clock.className = `meter-pct tone-${cd.level}`;
       }
       if (fill) {
-        fill.className = `grad-fill tone-${cd.level}`;
-        fill.style.width = `${cd.pct <= 0 ? 0 : Math.max(2, cd.pct).toFixed(1)}%`;
+        fill.className = `grad-fill tone-${cd.level}${cd.pct > 0 && cd.pct < 100 ? " is-partial" : ""}`;
+        fill.style.width = `${cd.pct}%`;
       }
     }
   }, 1000);

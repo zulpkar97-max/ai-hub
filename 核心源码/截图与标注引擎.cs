@@ -1069,15 +1069,15 @@ namespace CodexLauncher
 
             _toolbar = new Border
             {
-                Background = WpfBrushes.White,
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0xE2, 0xE8, 0xF0)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
+                Background = UiHelpers.SubtleBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(6, 5, 6, 5),
                 Child = bar,
                 Cursor = Cursors.Arrow,
                 Visibility = Visibility.Collapsed,
-                Effect = new DropShadowEffect { Color = WpfColors.Black, BlurRadius = 18, ShadowDepth = 4, Opacity = 0.22 }
+                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 2, ShadowDepth = 3, Direction = 315, Opacity = 0.22 }
             };
 
             // Color & Stroke sub-bar
@@ -1092,7 +1092,7 @@ namespace CodexLauncher
                 {
                     Width = dotVisual,
                     Height = dotVisual,
-                    Fill = new SolidColorBrush(WpfColor.FromRgb(0x33, 0x41, 0x55))
+                    Fill = UiHelpers.TextSecondary
                 };
                 var wrap = new Border
                 {
@@ -1125,7 +1125,7 @@ namespace CodexLauncher
                 {
                     Width = 17,
                     Height = 17,
-                    CornerRadius = new CornerRadius(9),
+                    CornerRadius = new CornerRadius(6),
                     Background = new SolidColorBrush(c),
                     BorderBrush = c == WpfColors.White
                         ? new SolidColorBrush(WpfColor.FromRgb(0xCB, 0xD5, 0xE1))
@@ -1147,15 +1147,15 @@ namespace CodexLauncher
 
             _subBar = new Border
             {
-                Background = WpfBrushes.White,
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0xE2, 0xE8, 0xF0)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(9),
+                Background = UiHelpers.SubtleBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(8, 5, 8, 5),
                 Child = subSp,
                 Cursor = Cursors.Arrow,
                 Visibility = Visibility.Collapsed,
-                Effect = new DropShadowEffect { Color = WpfColors.Black, BlurRadius = 14, ShadowDepth = 3, Opacity = 0.18 }
+                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 2, ShadowDepth = 3, Direction = 315, Opacity = 0.22 }
             };
 
             SyncSubBarVisuals();
@@ -1167,7 +1167,7 @@ namespace CodexLauncher
             {
                 Width = 1,
                 Height = 18,
-                Background = new SolidColorBrush(WpfColor.FromRgb(0xE2, 0xE8, 0xF0)),
+                Background = UiHelpers.Hairline,
                 Margin = new Thickness(5, 0, 5, 0)
             };
         }
@@ -1199,7 +1199,7 @@ namespace CodexLauncher
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
                 ToolTip = tip,
-                Content = MakeSvgIcon(svgData, new SolidColorBrush(WpfColor.FromRgb(0x33, 0x41, 0x55)))
+                Content = MakeSvgIcon(svgData, UiHelpers.TextSecondary)
             };
             ApplyFlatButtonTemplate(btn);
             btn.Click += (s, e) => SelectTool(_activeTool == tool ? DrawTool.None : tool);
@@ -1210,7 +1210,7 @@ namespace CodexLauncher
         private Button MakeActionBtn(string svgData, string tip, string label, bool primary, Action onClick)
         {
             var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            var fg = primary ? WpfBrushes.White : new SolidColorBrush(WpfColor.FromRgb(0x33, 0x41, 0x55));
+            var fg = primary ? WpfBrushes.White : UiHelpers.TextSecondary;
             sp.Children.Add(MakeSvgIcon(svgData, fg));
             if (!string.IsNullOrEmpty(label))
             {
@@ -1231,7 +1231,7 @@ namespace CodexLauncher
                 MinWidth = string.IsNullOrEmpty(label) ? 30 : 54,
                 Padding = string.IsNullOrEmpty(label) ? new Thickness(0) : new Thickness(8, 0, 9, 0),
                 Margin = new Thickness(1.5, 0, 1.5, 0),
-                Background = primary ? new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)) : WpfBrushes.Transparent,
+                Background = primary ? UiHelpers.PrimaryBg : WpfBrushes.Transparent,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
                 ToolTip = tip,
@@ -1248,7 +1248,7 @@ namespace CodexLauncher
             var bd = new FrameworkElementFactory(typeof(Border));
             bd.Name = "bd";
             bd.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
             bd.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
             var cp = new FrameworkElementFactory(typeof(ContentPresenter));
             cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
@@ -1260,8 +1260,8 @@ namespace CodexLauncher
             hov.Setters.Add(new Setter(
                 Border.BackgroundProperty,
                 primary
-                    ? new SolidColorBrush(WpfColor.FromRgb(0x05, 0x96, 0x69))
-                    : new SolidColorBrush(WpfColor.FromRgb(0xF1, 0xF5, 0xF9)),
+                    ? UiHelpers.PrimaryHover
+                    : UiHelpers.HoverBg,
                 "bd"));
             tmpl.Triggers.Add(hov);
             btn.Template = tmpl;
@@ -2406,9 +2406,10 @@ namespace CodexLauncher
             MinHeight = 260;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Topmost = true;
-            Background = WpfBrushes.White;
+            Background = UiHelpers.MainBg;
             FontFamily = UiHelpers.MainFont;
             Icon = UiHelpers.LoadWindowIcon();
+            UiHelpers.ApplySeamlessLightTitlebar(this);
 
             var grid = new Grid { Margin = new Thickness(16) };
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -2419,7 +2420,7 @@ namespace CodexLauncher
             {
                 Text = "正在本机识别中英文文字…",
                 FontSize = 12.5,
-                Foreground = new SolidColorBrush(WpfColor.FromRgb(0x64, 0x74, 0x8B)),
+                Foreground = UiHelpers.TextSecondary,
                 Margin = new Thickness(0, 0, 0, 10)
             };
             Grid.SetRow(_statusText, 0);
@@ -2432,10 +2433,10 @@ namespace CodexLauncher
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 FontSize = 13.5,
                 Padding = new Thickness(10),
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0xE2, 0xE8, 0xF0)),
-                BorderThickness = new Thickness(1),
-                Background = new SolidColorBrush(WpfColor.FromRgb(0xF8, 0xFA, 0xFC)),
-                Foreground = new SolidColorBrush(WpfColor.FromRgb(0x0F, 0x17, 0x2A))
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                Background = UiHelpers.SubtleBg,
+                Foreground = UiHelpers.TextPrimary
             };
             Grid.SetRow(_textBox, 1);
             grid.Children.Add(_textBox);
@@ -2453,8 +2454,9 @@ namespace CodexLauncher
                 Padding = new Thickness(14, 6, 14, 6),
                 Margin = new Thickness(0, 0, 8, 0),
                 Background = WpfBrushes.White,
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0xCB, 0xD5, 0xE1)),
-                BorderThickness = new Thickness(1),
+                BorderBrush = UiHelpers.DangerBorder,
+                Foreground = UiHelpers.DangerText,
+                BorderThickness = new Thickness(1.5),
                 Cursor = Cursors.Hand
             };
             closeBtn.Click += (s, e) => Close();
@@ -2463,9 +2465,10 @@ namespace CodexLauncher
             {
                 Content = "复制全部文字",
                 Padding = new Thickness(16, 6, 16, 6),
-                Background = new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)),
+                Background = UiHelpers.PrimaryBg,
                 Foreground = WpfBrushes.White,
-                BorderThickness = new Thickness(0),
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
                 FontWeight = FontWeights.SemiBold,
                 Cursor = Cursors.Hand
             };

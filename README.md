@@ -2,7 +2,7 @@
 
 AI Hub 是面向 Windows 11 的本地 AI 聚合中枢与 Codex 多账号隔离启动器，采用原生 Windows 11 云母通透（Mica）宿主窗口与嵌入式 WebView2 界面引擎构建。
 
-项目把日常高频的本地代理通道状态、OpenAI Codex 多账号隔离多开、实时剩余额度与 25 天周期回收倒计时、桌面 AI 应用（Gemini、Antigravity、Open Design 等）、Chrome 多账号直达、全局快捷截图与本机离线 OCR 提字，以及桌面快捷方式可逆收纳集中到同一工作台内。
+工作台集中展示代理状态、Codex 多账号及额度、Antigravity 额度和常用 AI 工具。侧栏提供「工作台」与「设置」两项导航，截图、AI 录音笔、快速记账、批量退出和更新日志均可直接访问。全站使用透明底几何图标和冷纸石色版画样式。
 
 仓库：<https://github.com/zulpkar97-max/ai-hub>。本地项目目录统一命名为 `ai-hub`。完整演进记录见 [更新日志.md](./更新日志.md)。
 
@@ -24,7 +24,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
 
 ## 配置快速记账
 
-在 `%USERPROFILE%\.codex-launcher\quick-ledger.json` 中保存一个 UTF-8 JSON 对象，键为表单名称，值为飞书「获取填写链接」生成的 HTTPS 地址。例如：
+在 `%USERPROFILE%\.codex-launcher\quick-ledger.json` 中保存一个 UTF-8 JSON 对象，键为入口名称，值为飞书 HTTPS 地址。支持租户域名下的 `/wiki/`、`/base/`、`/sheets/` 和 `/docx/` 链接，可带表和视图参数。例如：
 
 ```json
 {
@@ -32,7 +32,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
 }
 ```
 
-重启 AI Hub 后，可以在「工具 → 快速记账」或 Ctrl+K 中打开这些表单。链接保存在本机，点击入口会用系统默认浏览器打开飞书。
+侧栏「快捷工具 → 快速记账」和 Ctrl+K 读取本机配置。保存修改后，AI Hub 在下一次状态刷新时更新入口。点击入口会用系统默认浏览器打开飞书。
+
+## 额度自动刷新
+
+「设置 → 快捷键与通知」可调整 Codex 和 Antigravity 的额度自动刷新与回满提醒，默认开启。隐藏到系统托盘时，额度检测继续以低频运行。
 
 ## 离线提字
 

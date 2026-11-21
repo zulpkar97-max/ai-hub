@@ -17,7 +17,6 @@ using System.Windows.Shell;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
-using Microsoft.Win32;
 using WinForms = System.Windows.Forms;
 using Brushes = System.Windows.Media.Brushes;
 using Colors = System.Windows.Media.Colors;
@@ -45,7 +44,7 @@ namespace CodexLauncher
         private bool _webReady = false;
 
         private AccountsStore _store;
-        private readonly Dictionary<string, string> _quickLedgerForms = CoreService.ReadQuickLedgerForms();
+        private int _settingsRevision;
         private List<AccountViewModel> _accounts = new List<AccountViewModel>();
         private ProxyStatusInfo _proxy = new ProxyStatusInfo();
         private readonly ClashNetwork _network = new ClashNetwork();
@@ -60,6 +59,18 @@ namespace CodexLauncher
         private List<ChromeProfileInfo> _chromeProfiles = new List<ChromeProfileInfo>();
         private readonly Dictionary<string, UsageSnapshot> _usageCache = new Dictionary<string, UsageSnapshot>();
         private readonly Dictionary<string, AuthInfo> _usageLoading = new Dictionary<string, AuthInfo>();
+        private readonly Dictionary<string, string> _usageErrors = new Dictionary<string, string>();
+        private readonly Dictionary<string, QuotaRefreshState> _codexQuota = new Dictionary<string, QuotaRefreshState>();
+        private readonly QuotaRefreshState _antigravityQuota = new QuotaRefreshState();
+        private readonly Dictionary<string, long> _quotaRefillHistory = CoreService.ReadQuotaRefillHistory();
+        private readonly List<string> _quotaBalloonLabels = new List<string>();
+        private DispatcherTimer _quotaTimer;
+        private DispatcherTimer _quotaBalloonTimer;
+        private bool _quotaRefreshOnResume = true;
+        private bool _openBatchExitPending;
+        private bool _batchExitInFlight;
+        private bool _discoveringApps;
+        private List<ToolItem> _installedApps = new List<ToolItem>();
         private string _lastRefreshError;
 
         private bool _refreshInFlight = false;
@@ -81,7 +92,7 @@ namespace CodexLauncher
         private string _hotkeyError = "";
         private List<DesktopShortcutInfo> _desktopShortcuts = new List<DesktopShortcutInfo>();
 
-        private const string UiProtocol = "2";
+        private const string UiProtocol = "3";
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
             { "/index.html", "text/html; charset=utf-8" },
@@ -134,7 +145,6 @@ namespace CodexLauncher
             Closed += OnWindowClosed;
 
             SetupTrayIcon();
-            SyncTrayVisibility();
             StartWakeListener();
         }
 
@@ -304,6 +314,11 @@ namespace CodexLauncher
                 _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
                 _pollTimer.Tick += (s3, e3) => RefreshAsync(false);
                 _pollTimer.Start();
+
+                _quotaTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+                _quotaTimer.Tick += (s3, e3) => CheckQuotaRefresh();
+                _quotaTimer.Start();
+                RefreshInstalledApps();
             }
             catch (Exception ex)
             {
@@ -329,17 +344,7 @@ namespace CodexLauncher
                     else if (e.Button == WinForms.MouseButtons.Right)
                         Dispatcher.BeginInvoke(new Action(ShowModernTrayMenu));
                 };
-            }
-            catch { }
-        }
-
-        private void SyncTrayVisibility()
-        {
-            if (_trayIcon == null) return;
-            try
-            {
-                bool hideWhenOpen = _store != null && _store.settings != null && _store.settings.hide_tray_when_open;
-                _trayIcon.Visible = !IsVisible || !hideWhenOpen;
+                _trayIcon.Visible = true;
             }
             catch { }
         }
@@ -353,18 +358,8 @@ namespace CodexLauncher
                     try { _activeTrayPopup.Close(); } catch { }
                     _activeTrayPopup = null;
                 }
-                string hk = (_store != null && _store.settings != null && _store.settings.screenshot_enabled)
-                    ? (_store.settings.screenshot_hotkey ?? "Ctrl+Shift+A")
-                    : "";
                 _activeTrayPopup = new TrayPopupWindow(
-                    _accounts,
-                    _proxy,
-                    hk,
-                    RestoreFromTray,
-                    () => StartScreenshotNow(120),
-                    (accId) => { try { CoreService.LaunchProfile(accId); } catch { } },
-                    () => { try { CoreService.OpenOrStartClashVerge(); } catch { } },
-                    () => { RestoreFromTray(); SendEventToJs("openBatchExit", null); },
+                    () => { _openBatchExitPending = true; RestoreFromTray(); },
                     ForceQuit);
                 _activeTrayPopup.Show();
             }
@@ -378,7 +373,9 @@ namespace CodexLauncher
             Activate();
             Topmost = true;
             Topmost = false;
-            SyncTrayVisibility();
+            _quotaRefreshOnResume = true;
+            try { if (_webView.CoreWebView2 != null) _webView.CoreWebView2.Resume(); }
+            catch (InvalidOperationException) { }
             if (_uiReloadPending && _webView.CoreWebView2 != null)
             {
                 _uiReloadPending = false;
@@ -400,12 +397,15 @@ namespace CodexLauncher
             {
                 e.Cancel = true;
                 Hide();
-                SyncTrayVisibility();
                 if (_pollTimer != null) _pollTimer.Stop();
                 try
                 {
                     if (_webReady && _webView != null && _webView.CoreWebView2 != null)
-                        await _webView.CoreWebView2.TrySuspendAsync();
+                    {
+                        var core = _webView.CoreWebView2;
+                        await core.TrySuspendAsync();
+                        if (!_wakeStop && IsVisible) core.Resume();
+                    }
                 }
                 catch { }
             }
@@ -511,6 +511,9 @@ namespace CodexLauncher
         private void OnWindowClosed(object sender, EventArgs e)
         {
             _wakeStop = true;
+            if (_pollTimer != null) _pollTimer.Stop();
+            if (_quotaTimer != null) _quotaTimer.Stop();
+            if (_quotaBalloonTimer != null) _quotaBalloonTimer.Stop();
             if (_hwnd != IntPtr.Zero) HotkeyHelper.Unregister(_hwnd, HotkeyHelper.SCREENSHOT_HOTKEY_ID);
             try { if (_uiWatcher != null) _uiWatcher.Dispose(); } catch { }
             try { if (_wakeEvent != null) _wakeEvent.Set(); } catch { }
@@ -548,10 +551,12 @@ namespace CodexLauncher
 
         // ==================== STATE SYNC & BACKGROUND POLL ====================
 
-        private void RefreshAsync(bool includeChromeAndUsage)
+        private void RefreshAsync(bool includeChrome)
         {
             if (_refreshInFlight) return;
             _refreshInFlight = true;
+            int settingsRevision = _settingsRevision;
+            bool refreshChrome = includeChrome || _chromeProfiles.Count == 0;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -566,7 +571,7 @@ namespace CodexLauncher
                     freshStore = CoreService.LoadStore();
                     vms = CoreService.BuildAccountViewModels();
                     proxy = CoreService.GetProxyStatus();
-                    if (includeChromeAndUsage || _chromeProfiles.Count == 0)
+                    if (refreshChrome)
                         chromes = CoreService.DiscoverChromeProfiles();
                     shortcuts = DesktopStashService.ScanShortcuts();
                 }
@@ -575,21 +580,40 @@ namespace CodexLauncher
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _refreshInFlight = false;
-                    if (freshStore != null) _store = freshStore;
-                    if (vms != null) UpdateUsageAccounts(vms, includeChromeAndUsage);
+                    if (_wakeStop) return;
+                    if (freshStore != null)
+                    {
+                        if (settingsRevision != _settingsRevision) freshStore.settings = _store.settings;
+                        _store = freshStore;
+                    }
+                    if (vms != null) UpdateUsageAccounts(vms);
                     if (proxy != null) _proxy = proxy;
                     if (chromes != null) _chromeProfiles = chromes;
                     if (shortcuts != null) _desktopShortcuts = shortcuts;
 
                     PushFullState();
-                    PollNetwork();
+                    if (IsVisible) PollNetwork();
                     CheckExpiryBalloon();
+                    if (_quotaRefreshOnResume) CheckQuotaRefresh();
 
                     if (refreshError != null && refreshError != _lastRefreshError)
                         SendToastToJs(refreshError, true);
                     _lastRefreshError = refreshError;
                 }));
             });
+        }
+
+        private async void RefreshInstalledApps()
+        {
+            if (_discoveringApps) return;
+            _discoveringApps = true;
+            try { _installedApps = await Task.Run(() => CoreService.DiscoverInstalledAiApps()); }
+            catch { }
+            finally
+            {
+                _discoveringApps = false;
+                if (!_wakeStop) PushFullState();
+            }
         }
 
         private async void PollNetwork()
@@ -616,29 +640,146 @@ namespace CodexLauncher
             if (Json.Serialize(_networkStatus) == Json.Serialize(status)) return;
             _networkStatus = status;
             PushFullState();
+            if (_quotaRefreshOnResume) CheckQuotaRefresh();
         }
 
-        private async void RefreshAntigravity()
+        private async void RefreshAntigravity(bool automatic)
         {
             if (_antigravityRefresh != null) return;
+            var previous = _antigravityUsage;
+            _antigravityQuota.Begin(DateTimeOffset.UtcNow);
             using (var cancellation = new CancellationTokenSource())
             {
                 _antigravityRefresh = cancellation;
-                _antigravityError = null;
+                if (!automatic) _antigravityError = null;
                 PushFullState();
                 try
                 {
-                    _antigravityUsage = await Task.Run(() => AntigravityQuota.Refresh(cancellation.Token));
+                    var usage = await Task.Run(() => AntigravityQuota.Refresh(cancellation.Token));
+                    if (_wakeStop) return;
+                    _antigravityUsage = usage;
+                    _antigravityError = null;
+                    _antigravityQuota.Finish(DateTimeOffset.UtcNow, true, automatic);
+                    if (previous != null && (string.IsNullOrWhiteSpace(previous.email) || string.IsNullOrWhiteSpace(usage.email)
+                        || string.Equals(previous.email, usage.email, StringComparison.OrdinalIgnoreCase)))
+                        QueueQuotaBalloon("antigravity", "Antigravity", AntigravityBuckets(previous), AntigravityBuckets(usage));
                 }
                 catch (OperationCanceledException) { }
-                catch (InvalidOperationException ex) { _antigravityError = ex.Message; }
-                catch (Exception) { _antigravityError = "暂时无法读取 Antigravity CLI 的额度。"; }
+                catch (Exception ex)
+                {
+                    _antigravityQuota.Finish(DateTimeOffset.UtcNow, false, automatic);
+                    if (!automatic) _antigravityError = ex is InvalidOperationException ? ex.Message : "暂时无法读取 Antigravity CLI 的额度。";
+                }
                 finally
                 {
                     _antigravityRefresh = null;
                     PushFullState();
                 }
             }
+        }
+
+        private void CheckQuotaRefresh()
+        {
+            if (_wakeStop || !_store.settings.quota_auto_refresh) return;
+            if (!_proxy.Running && _networkStatus.state != "reachable")
+            {
+                try { if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) return; }
+                catch (System.Net.NetworkInformation.NetworkInformationException) { return; }
+            }
+            bool resume = _quotaRefreshOnResume;
+            _quotaRefreshOnResume = false;
+            bool inBackground = !IsVisible || WindowState == WindowState.Minimized;
+            TimeSpan age = TimeSpan.FromMinutes(resume ? 30 : inBackground ? 240 : 60);
+            bool onlyNonFullResets = inBackground && !resume;
+            var now = DateTimeOffset.UtcNow;
+
+            if (AntigravityQuota.IsInstalled && _antigravityRefresh == null && _antigravityQuota.IsDue(now,
+                ParseQuotaTimestamp(_antigravityUsage == null ? null : _antigravityUsage.fetched_at), AntigravityBuckets(_antigravityUsage).Values, age, onlyNonFullResets))
+                RefreshAntigravity(true);
+
+            foreach (var account in _accounts)
+            {
+                string id = account.Record.id;
+                if (account.Auth == null || !account.Auth.CanFetchUsage || _usageLoading.ContainsKey(id)) continue;
+                UsageSnapshot snapshot;
+                _usageCache.TryGetValue(id, out snapshot);
+                if (CodexQuotaState(id).IsDue(now, snapshot == null ? (DateTimeOffset?)null : snapshot.FetchedAt,
+                    CodexBuckets(snapshot).Values, age, onlyNonFullResets)) RefreshUsageForAccountAsync(account, true, true);
+            }
+        }
+
+        private static DateTimeOffset? ParseQuotaTimestamp(string value)
+        {
+            DateTimeOffset timestamp;
+            return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out timestamp)
+                ? timestamp : (DateTimeOffset?)null;
+        }
+
+        private static Dictionary<string, QuotaBucketSnapshot> CodexBuckets(UsageSnapshot snapshot)
+        {
+            var buckets = new Dictionary<string, QuotaBucketSnapshot>();
+            if (snapshot == null || !snapshot.Success) return buckets;
+            foreach (var bucket in new[] { snapshot.Primary, snapshot.Secondary })
+            {
+                if (bucket == null) continue;
+                string label = bucket.Label ?? "额度";
+                buckets[label + ":" + bucket.LimitWindowSeconds] = new QuotaBucketSnapshot
+                {
+                    Label = label.Replace("限额", "额度"), Percent = bucket.LeftPercent, ResetAt = bucket.ResetAt
+                };
+            }
+            return buckets;
+        }
+
+        private static Dictionary<string, QuotaBucketSnapshot> AntigravityBuckets(AntigravityUsage usage)
+        {
+            var buckets = new Dictionary<string, QuotaBucketSnapshot>();
+            if (usage == null || usage.quota == null) return buckets;
+            foreach (var entry in usage.quota)
+            {
+                var bucket = entry.Value;
+                if (bucket == null || bucket.disabled) continue;
+                string name = entry.Key.StartsWith("3p-", StringComparison.Ordinal) ? "Claude and GPT Models"
+                    : entry.Key.StartsWith("gemini-argon-", StringComparison.Ordinal) ? "Gemini 4 Argon"
+                    : entry.Key.StartsWith("gemini-", StringComparison.Ordinal) ? "Gemini Models" : entry.Key;
+                string period = entry.Key.EndsWith("-5h", StringComparison.Ordinal) ? "5h 额度"
+                    : entry.Key.EndsWith("-weekly", StringComparison.Ordinal) ? "每周额度" : "额度";
+                buckets[entry.Key] = new QuotaBucketSnapshot
+                {
+                    Label = name + "（" + period + "）", Percent = bucket.remaining_fraction * 100.0, ResetAt = ParseQuotaTimestamp(bucket.reset_time)
+                };
+            }
+            return buckets;
+        }
+
+        private QuotaRefreshState CodexQuotaState(string id)
+        {
+            QuotaRefreshState state;
+            if (!_codexQuota.TryGetValue(id, out state)) _codexQuota[id] = state = new QuotaRefreshState();
+            return state;
+        }
+
+        private void QueueQuotaBalloon(string owner, string name, Dictionary<string, QuotaBucketSnapshot> before, Dictionary<string, QuotaBucketSnapshot> after)
+        {
+            if (_trayIcon == null || !_store.settings.quota_auto_refresh) return;
+            var buckets = QuotaRefreshState.CollectRefilled(owner, _quotaRefillHistory, before, after);
+            if (buckets.Count == 0) return;
+            CoreService.SaveQuotaRefillHistory(_quotaRefillHistory);
+            _quotaBalloonLabels.Add(name + " · " + string.Join("、", buckets) + " 已恢复至 100%");
+            if (_quotaBalloonTimer == null)
+            {
+                _quotaBalloonTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _quotaBalloonTimer.Tick += (sender, args) =>
+                {
+                    _quotaBalloonTimer.Stop();
+                    string message = string.Join("\n", _quotaBalloonLabels);
+                    _quotaBalloonLabels.Clear();
+                    if (_trayIcon == null || !_store.settings.quota_auto_refresh) return;
+                    try { _trayIcon.ShowBalloonTip(5000, "额度已刷新", message, WinForms.ToolTipIcon.Info); }
+                    catch { }
+                };
+            }
+            _quotaBalloonTimer.Start();
         }
 
         private async Task RunNetworkAction(string reqId, Func<object> work)
@@ -730,7 +871,7 @@ namespace CodexLauncher
             }
         }
 
-        private void UpdateUsageAccounts(List<AccountViewModel> accounts, bool includeUsage)
+        private void UpdateUsageAccounts(List<AccountViewModel> accounts)
         {
             var previous = _accounts.ToDictionary(a => a.Record.id, a => a.Auth);
             var current = accounts.ToDictionary(a => a.Record.id, a => a.Auth);
@@ -740,27 +881,24 @@ namespace CodexLauncher
                 if (!current.TryGetValue(id, out auth) || !AuthInfo.SameUsageIdentity(previous[id], auth))
                 {
                     _usageCache.Remove(id);
-                    _usageLoading.Remove(id);
+                    _usageErrors.Remove(id);
+                    _codexQuota.Remove(id);
                 }
             }
 
             _accounts = accounts;
-            foreach (var vm in _accounts)
-            {
-                AuthInfo oldAuth;
-                bool changed = !previous.TryGetValue(vm.Record.id, out oldAuth) || !AuthInfo.SameUsageIdentity(oldAuth, vm.Auth);
-                if ((changed || includeUsage) && !_usageCache.ContainsKey(vm.Record.id))
-                    RefreshUsageForAccountAsync(vm, true);
-            }
         }
 
-        private void RefreshUsageForAccountAsync(AccountViewModel vm, bool silent)
+        private void RefreshUsageForAccountAsync(AccountViewModel vm, bool silent, bool automatic = false)
         {
             if (vm == null || vm.Auth == null || !vm.Auth.CanFetchUsage) return;
             string id = vm.Record.id;
             if (_usageLoading.ContainsKey(id)) return;
             AuthInfo authCopy = vm.Auth;
             _usageLoading[id] = authCopy;
+            var state = CodexQuotaState(id);
+            state.Begin(DateTimeOffset.UtcNow);
+            if (!automatic) _usageErrors.Remove(id);
             PushFullState();
 
             ThreadPool.QueueUserWorkItem(_ =>
@@ -768,12 +906,22 @@ namespace CodexLauncher
                 UsageSnapshot snap = CoreService.FetchCodexUsage(authCopy);
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
+                    if (_wakeStop) return;
                     AuthInfo pending;
                     if (!_usageLoading.TryGetValue(id, out pending) || !object.ReferenceEquals(pending, authCopy)) return;
                     _usageLoading.Remove(id);
                     var current = _accounts.FirstOrDefault(a => a.Record.id == id);
                     if (current == null || !AuthInfo.SameUsageIdentity(current.Auth, authCopy)) return;
-                    _usageCache[id] = snap;
+                    state.Finish(DateTimeOffset.UtcNow, snap.Success, automatic);
+                    if (snap.Success)
+                    {
+                        UsageSnapshot previous;
+                        _usageCache.TryGetValue(id, out previous);
+                        _usageCache[id] = snap;
+                        _usageErrors.Remove(id);
+                        QueueQuotaBalloon("codex/" + id, "Codex · " + current.Record.name, CodexBuckets(previous), CodexBuckets(snap));
+                    }
+                    else if (!automatic) _usageErrors[id] = snap.ErrorMessage ?? "额度查询失败";
                     PushFullState();
                     if (!silent)
                         SendToastToJs(snap.Success ? ("已刷新「" + current.Record.name + "」额度") : ("额度查询失败：" + snap.ErrorMessage), !snap.Success);
@@ -794,6 +942,7 @@ namespace CodexLauncher
 
         private void SendToastToJs(string text, bool isError)
         {
+            if (!IsVisible) return;
             SendEventToJs("toast", new Dictionary<string, object> { { "text", text }, { "isError", isError } });
         }
 
@@ -804,13 +953,16 @@ namespace CodexLauncher
 
         private void PushFullState()
         {
-            if (!_webReady) return;
+            if (!IsVisible || !_webReady) return;
 
             var accList = new List<object>();
             foreach (var vm in _accounts)
             {
+                string id = vm.Record.id;
                 UsageSnapshot uSnap;
-                _usageCache.TryGetValue(vm.Record.id, out uSnap);
+                _usageCache.TryGetValue(id, out uSnap);
+                string usageError;
+                _usageErrors.TryGetValue(id, out usageError);
 
                 object usageObj = null;
                 if (uSnap != null)
@@ -818,7 +970,7 @@ namespace CodexLauncher
                     usageObj = new Dictionary<string, object>
                     {
                         { "success", uSnap.Success },
-                        { "error", uSnap.ErrorMessage },
+                        { "automatic", CodexQuotaState(id).LastSuccessWasAutomatic },
                         { "fetched_at", uSnap.FetchedAt == default(DateTimeOffset) ? null : uSnap.FetchedAt.ToString("o") },
                         { "primary", SerializeUsageWindow(uSnap.Primary) },
                         { "secondary", SerializeUsageWindow(uSnap.Secondary) }
@@ -854,33 +1006,31 @@ namespace CodexLauncher
                         }
                     },
                     { "usage", usageObj },
-                    { "usage_loading", _usageLoading.ContainsKey(vm.Record.id) }
+                    { "usage_error", usageError },
+                    { "usage_loading", _usageLoading.ContainsKey(id) }
                 });
             }
 
             var secList = new List<object>();
             ToolItem antigravityRef = null;
+            var discovered = _installedApps.ToDictionary(item => item.id);
+            var remaining = new Dictionary<string, ToolItem>(discovered);
             if (_store != null && _store.tool_sections != null)
             {
                 foreach (var sec in _store.tool_sections)
                 {
+                    if (sec == null || sec.items == null) continue;
                     var items = new List<object>();
-                    foreach (var it in sec.items)
+                    foreach (var storedTool in sec.items)
                     {
+                        if (storedTool == null || string.IsNullOrEmpty(storedTool.id)) continue;
+                        ToolItem it;
+                        if (!discovered.TryGetValue(storedTool.id, out it)) it = storedTool;
+                        remaining.Remove(it.id);
+                        if (it.kind == "exe" && !File.Exists(it.target) && !CoreService.IsToolRunning(it)) continue;
                         if (it.id == "tool-antigravity" || (it.name ?? "").IndexOf("Antigravity", StringComparison.OrdinalIgnoreCase) >= 0)
                             antigravityRef = it;
-                        items.Add(new Dictionary<string, object>
-                        {
-                            { "id", it.id },
-                            { "name", it.name },
-                            { "kind", it.kind },
-                            { "target", it.target },
-                            { "subtitle", it.subtitle ?? "" },
-                            { "uninstall_hint", it.uninstall_hint ?? "" },
-                            { "uninstall_method", it.kind == "msix" ? "系统 MSIX 包卸载" : "调用软件官方卸载程序" },
-                            { "running", CoreService.IsToolRunning(it) },
-                            { "icon_url", CoreService.GetCachedIconUrl(it.target, it.kind) }
-                        });
+                        items.Add(SerializeTool(it));
                     }
                     secList.Add(new Dictionary<string, object>
                     {
@@ -889,6 +1039,12 @@ namespace CodexLauncher
                         { "items", items }
                     });
                 }
+            }
+            if (remaining.Count > 0)
+            {
+                ToolItem antigravity;
+                if (remaining.TryGetValue("tool-antigravity", out antigravity)) antigravityRef = antigravity;
+                secList.Add(new { id = "discovered-desktop-ai", title = "桌面 AI 应用", items = remaining.Values.Select(SerializeTool).ToArray() });
             }
 
             var chromeList = new List<object>();
@@ -924,12 +1080,12 @@ namespace CodexLauncher
                 { "pending_update", LocalUpdate.IsPending },
                 { "brand_icon", CoreService.BrandIconUrl },
                 { "voice_recorder_hotkey", VoiceRecorderShortcut.Display },
-                { "quick_ledger_forms", _quickLedgerForms.Keys.ToArray() },
+                { "quick_ledger_forms", CoreService.ReadQuickLedgerForms().Keys.ToArray() },
                 { "settings", new Dictionary<string, object>
                     {
                         { "minimize_to_tray", _store.settings.minimize_to_tray },
-                        { "hide_tray_when_open", _store.settings.hide_tray_when_open },
                         { "expiry_balloon_alert", _store.settings.expiry_balloon_alert },
+                        { "quota_auto_refresh", _store.settings.quota_auto_refresh },
                         { "screenshot_enabled", _store.settings.screenshot_enabled },
                         { "screenshot_hotkey", _store.settings.screenshot_hotkey ?? "Ctrl+Shift+A" }
                     }
@@ -943,6 +1099,13 @@ namespace CodexLauncher
                     }
                 },
                 { "desktop_shortcuts", shortcutList },
+                { "installed_apps", _installedApps.Select(item => new
+                    {
+                        item.id,
+                        item.name,
+                        icon_url = CoreService.GetCachedIconUrl(item.target, item.kind),
+                        uninstall_method = item.kind == "msix" ? "系统 MSIX 包卸载" : "调用软件官方卸载程序"
+                    }).ToArray() },
                 { "network", _networkStatus },
                 { "network_status_refresh", true },
                 { "network_japan_picker", true },
@@ -970,12 +1133,27 @@ namespace CodexLauncher
                         { "cli_installed", AntigravityQuota.IsInstalled },
                         { "usage", _antigravityUsage },
                         { "loading", _antigravityRefresh != null },
+                        { "automatic", _antigravityQuota.LastSuccessWasAutomatic },
                         { "error", _antigravityError }
                     }
                 }
             };
 
             SendEventToJs("state", statePayload);
+            if (_openBatchExitPending)
+            {
+                _openBatchExitPending = false;
+                SendEventToJs("openBatchExit", null);
+            }
+        }
+
+        private static object SerializeTool(ToolItem tool)
+        {
+            return new
+            {
+                tool.id, tool.name, tool.kind, tool.subtitle, tool.uninstall_hint,
+                running = CoreService.IsToolRunning(tool), icon_url = CoreService.GetCachedIconUrl(tool.target, tool.kind)
+            };
         }
 
         private object SerializeUsageWindow(UsageWindowInfo w)
@@ -1077,7 +1255,7 @@ namespace CodexLauncher
                         break;
 
                     case "refreshAntigravity":
-                        RefreshAntigravity();
+                        RefreshAntigravity(false);
                         break;
 
                     case "refreshUsage":
@@ -1141,11 +1319,10 @@ namespace CodexLauncher
                         {
                             string id = AuthParser.GetStr(data, "id");
                             var vm = _accounts.FirstOrDefault(a => a.Record.id == id);
-                            CoreService.LaunchProfile(id);
-                            string message = AuthParser.GetStr(data, "intent") == "signOut"
-                                ? "请在打开的 Codex 窗口中，从账号菜单选择退出登录。"
-                                : "正在打开「" + (vm != null ? vm.Record.name : id) + "」...";
-                            SendToastToJs(message, false);
+                            if (vm == null) throw new InvalidOperationException("未找到该账号。");
+                            if (vm.Running) CoreService.OpenRunningProfile(id);
+                            else CoreService.LaunchProfile(id);
+                            SendToastToJs("正在打开「" + vm.Record.name + "」...", false);
                             ScheduleDelayedRefresh(1800);
                             break;
                         }
@@ -1204,43 +1381,30 @@ namespace CodexLauncher
                             var vm = _accounts.FirstOrDefault(a => a.Record.id == id);
                             if (vm == null || vm.IsDefault) throw new InvalidOperationException("未找到可编辑账号");
 
-                            var rec = vm.Record;
-                            rec.name = (AuthParser.GetStr(data, "name") ?? rec.name).Trim();
-                            rec.account_type = AuthParser.GetStr(data, "account_type") ?? rec.account_type;
-                            rec.notes = (AuthParser.GetStr(data, "notes") ?? "").Trim();
+                            var rec = new AccountRecord
+                            {
+                                id = vm.Record.id, created_at = vm.Record.created_at, config_mode = vm.Record.config_mode,
+                                disable_memories = vm.Record.disable_memories, started_at = vm.Record.started_at,
+                                name = (AuthParser.GetStr(data, "name") ?? vm.Record.name ?? "").Trim(),
+                                account_type = AuthParser.GetStr(data, "account_type") ?? vm.Record.account_type,
+                                notes = (AuthParser.GetStr(data, "notes") ?? "").Trim()
+                            };
+                            if (string.IsNullOrEmpty(rec.name) || (rec.account_type != "recycled" && rec.account_type != "permanent"))
+                                throw new InvalidOperationException("请填写账号名称并选择账号类型。");
                             if (rec.account_type == "recycled")
                             {
-                                rec.started_at = AuthParser.GetStr(data, "started_at") ?? rec.started_at;
-                                rec.recycle_at = AuthParser.GetStr(data, "recycle_at") ?? rec.recycle_at;
-                                rec.recycle_days = AuthParser.GetDouble(data, "recycle_days") ?? rec.recycle_days ?? 25.0;
+                                rec.started_at = AuthParser.GetStr(data, "started_at") ?? vm.Record.started_at;
+                                rec.recycle_at = AuthParser.GetStr(data, "recycle_at") ?? vm.Record.recycle_at;
+                                rec.recycle_days = AuthParser.GetDouble(data, "recycle_days") ?? vm.Record.recycle_days ?? 25.0;
+                                DateTimeOffset start, end;
+                                if (!DateTimeOffset.TryParse(rec.started_at, out start) || !DateTimeOffset.TryParse(rec.recycle_at, out end)
+                                    || end <= start || rec.recycle_days <= 0 || double.IsNaN(rec.recycle_days.Value) || double.IsInfinity(rec.recycle_days.Value))
+                                    throw new InvalidOperationException("请填写有效的回收期限，截止时间须晚于起算时间。");
                             }
-                            else
-                            {
-                                rec.recycle_at = null;
-                                rec.recycle_days = null;
-                            }
-                            CoreService.UpdateAccount(rec);
+                            string mode = AuthParser.GetStr(data, "permission_mode");
+                            CoreService.UpdateAccount(rec, mode == vm.PermissionMode ? null : mode);
                             ReplyJs(reqId, true, null, null);
                             SendToastToJs("已保存「" + rec.name + "」", false);
-                            RefreshAsync(false);
-                            break;
-                        }
-
-                    case "calibrate5Days":
-                        {
-                            string id = AuthParser.GetStr(data, "id");
-                            var vm = _accounts.FirstOrDefault(a => a.Record.id == id);
-                            if (vm == null || vm.IsDefault || vm.Auth == null || !vm.Auth.SubscriptionUntil.HasValue)
-                                throw new InvalidOperationException("尚未读取到官方 Plus 到期时间");
-                            var until = vm.Auth.SubscriptionUntil.Value.ToLocalTime();
-                            var target = until.AddDays(-5);
-                            var start = vm.Auth.SubscriptionStart.HasValue ? vm.Auth.SubscriptionStart.Value.ToLocalTime() : DateTimeOffset.Now;
-                            vm.Record.account_type = "recycled";
-                            vm.Record.started_at = start.ToString("yyyy-MM-ddTHH:mm:sszzz");
-                            vm.Record.recycle_at = target.ToString("yyyy-MM-ddTHH:mm:sszzz");
-                            vm.Record.recycle_days = Math.Max(1.0, Math.Round((target - start).TotalDays * 10.0) / 10.0);
-                            CoreService.UpdateAccount(vm.Record);
-                            SendToastToJs("已校准为官方到期前 5 天（" + target.ToString("yyyy/MM/dd HH:mm") + "）", false);
                             RefreshAsync(false);
                             break;
                         }
@@ -1264,27 +1428,6 @@ namespace CodexLauncher
                             string mode = vm.Record.config_mode == "junction_skills" ? "junction_skills" : "clone";
                             var synced = CoreService.PopulateProfileConfig(vm.CodexHome, mode, false);
                             SendToastToJs("已检查主号指引与 Skills：" + (synced.Count > 0 ? string.Join("、", synced) : "无变化"), false);
-                            break;
-                        }
-
-                    case "openAccountFolder":
-                        {
-                            string id = AuthParser.GetStr(data, "id");
-                            var vm = _accounts.FirstOrDefault(a => a.Record.id == id);
-                            if (vm != null)
-                            {
-                                Directory.CreateDirectory(vm.CodexHome);
-                                Process.Start("explorer.exe", vm.CodexHome);
-                            }
-                            break;
-                        }
-
-                    case "createShortcut":
-                        {
-                            string id = AuthParser.GetStr(data, "id");
-                            string name = AuthParser.GetStr(data, "name");
-                            string path = CoreService.CreateDesktopShortcut(string.IsNullOrEmpty(id) ? null : id, name);
-                            SendToastToJs("已更新桌面快捷方式：" + Path.GetFileName(path), false);
                             break;
                         }
 
@@ -1332,7 +1475,8 @@ namespace CodexLauncher
                         {
                             var tool = FindToolById(AuthParser.GetStr(data, "id"));
                             if (tool == null) break;
-                            CoreService.StopToolItem(tool);
+                            await Task.Run(() => CoreService.StopToolItem(tool));
+                            if (CoreService.IsToolRunning(tool)) throw new InvalidOperationException(tool.name + " 仍在运行。");
                             SendToastToJs("已关闭「" + tool.name + "」", false);
                             RefreshAsync(false);
                             break;
@@ -1340,140 +1484,37 @@ namespace CodexLauncher
 
                     case "uninstallTool":
                         {
-                            var tool = FindToolById(AuthParser.GetStr(data, "id"));
+                            var tool = _installedApps.FirstOrDefault(item => item.id == AuthParser.GetStr(data, "id"));
                             if (tool == null) throw new InvalidOperationException("未找到该应用");
                             string msg = CoreService.UninstallSoftware(tool);
                             ReplyJs(reqId, true, msg, null);
                             SendToastToJs(msg, false);
-                            break;
-                        }
-
-                    case "hideTool":
-                        {
-                            string secId = AuthParser.GetStr(data, "sectionId");
-                            string toolId = AuthParser.GetStr(data, "id");
-                            var sec = _store.tool_sections.FirstOrDefault(s => s.id == secId);
-                            if (sec != null)
-                            {
-                                var removed = sec.items.FirstOrDefault(x => x.id == toolId);
-                                sec.items.RemoveAll(x => x.id == toolId);
-                                CoreService.SaveStore(_store);
-                                SendToastToJs("已隐藏「" + (removed != null ? removed.name : toolId) + "」（可随时重新扫描恢复）", false);
-                                PushFullState();
-                            }
-                            break;
-                        }
-
-                    case "addSection":
-                        {
-                            string title = (AuthParser.GetStr(data, "title") ?? "").Trim();
-                            if (string.IsNullOrEmpty(title)) throw new InvalidOperationException("请输入分区名称");
-                            _store.tool_sections.Add(new ToolSection { id = "sec-" + Guid.NewGuid().ToString("N").Substring(0, 6), title = title });
-                            CoreService.SaveStore(_store);
-                            ReplyJs(reqId, true, null, null);
-                            SendToastToJs("已新建分区「" + title + "」", false);
-                            PushFullState();
-                            break;
-                        }
-
-                    case "deleteSection":
-                        {
-                            string secId = AuthParser.GetStr(data, "id");
-                            var sec = _store.tool_sections.FirstOrDefault(s => s.id == secId);
-                            if (sec != null)
-                            {
-                                _store.tool_sections.RemoveAll(s => s.id == secId);
-                                CoreService.SaveStore(_store);
-                                SendToastToJs("已删除分区「" + sec.title + "」", false);
-                                PushFullState();
-                            }
-                            break;
-                        }
-
-                    case "addTool":
-                        {
-                            string secId = AuthParser.GetStr(data, "sectionId");
-                            string kind = AuthParser.GetStr(data, "kind") ?? "exe";
-                            string name = (AuthParser.GetStr(data, "name") ?? "").Trim();
-                            string target = (AuthParser.GetStr(data, "target") ?? "").Trim();
-                            string subtitle = (AuthParser.GetStr(data, "subtitle") ?? "").Trim();
-                            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(target))
-                                throw new InvalidOperationException("请填写名称与路径/网址");
-
-                            if (_store.tool_sections.Count == 0)
-                                _store.tool_sections.Add(new ToolSection { id = "sec-desktop-ai", title = "桌面 AI 应用" });
-                            var sec = _store.tool_sections.FirstOrDefault(s => s.id == secId) ?? _store.tool_sections[0];
-                            sec.items.Add(new ToolItem
-                            {
-                                id = "tool-" + Guid.NewGuid().ToString("N").Substring(0, 8),
-                                name = name,
-                                kind = kind,
-                                target = target,
-                                process_name = kind == "exe" ? Path.GetFileNameWithoutExtension(target) : "",
-                                uninstall_hint = kind == "exe" ? name : "",
-                                subtitle = subtitle
-                            });
-                            CoreService.SaveStore(_store);
-                            ReplyJs(reqId, true, null, null);
-                            SendToastToJs("已添加「" + name + "」", false);
-                            PushFullState();
-                            break;
-                        }
-
-                    case "browseExe":
-                        {
-                            var ofd = new OpenFileDialog { Filter = "应用程序 (*.exe;*.lnk)|*.exe;*.lnk|所有文件 (*.*)|*.*" };
-                            if (ofd.ShowDialog(this) == true)
-                            {
-                                ReplyJs(reqId, true, new Dictionary<string, object>
-                                {
-                                    { "path", ofd.FileName },
-                                    { "name", Path.GetFileNameWithoutExtension(ofd.FileName) }
-                                }, null);
-                            }
-                            else
-                            {
-                                ReplyJs(reqId, false, null, "canceled");
-                            }
-                            break;
-                        }
-
-                    case "rescanTools":
-                        {
-                            var added = CoreService.RescanInstalledAiTools(_store);
-                            SendToastToJs(added.Count > 0 ? ("已扫描并恢复：" + string.Join("、", added)) : "本机已知 AI 软件均已在列表中", false);
-                            PushFullState();
+                            RefreshInstalledApps();
                             break;
                         }
 
                     case "launchChromeUrl":
-                    case "copyWorkAddress":
                         {
                             string tool = AuthParser.GetStr(data, "tool");
                             string url = tool == "gemini" ? "https://gemini.google.com/app" :
                                 tool == "ai-studio" ? "https://aistudio.google.com/" : null;
                             if (url == null) throw new InvalidOperationException("未知的网页工具。");
-                            if (action == "copyWorkAddress")
-                            {
-                                Clipboard.SetText(url);
-                                SendToastToJs("网址已复制", false);
-                            }
-                            else
-                            {
-                                string dir = AuthParser.GetStr(data, "dir");
-                                if (!_chromeProfiles.Any(profile => profile.DirectoryName == dir))
-                                    throw new InvalidOperationException("请先选择可用的 Google 身份。");
-                                CoreService.LaunchChromeProfileUrl(dir, url);
-                                SendToastToJs("已在对应 Chrome 账号中打开", false);
-                            }
+                            string dir = AuthParser.GetStr(data, "dir");
+                            if (!_chromeProfiles.Any(profile => profile.DirectoryName == dir))
+                                throw new InvalidOperationException("请先选择可用的 Google 身份。");
+                            CoreService.LaunchChromeProfileUrl(dir, url);
+                            SendToastToJs("已在对应 Chrome 账号中打开", false);
                             break;
                         }
 
                     case "batchExit":
                         {
-                            var codexIds = ToStringList(data, "codexIds");
-                            var toolIds = ToStringList(data, "toolIds");
+                            var codexIds = ToStringList(data, "codexIds").Where(id => _accounts.Any(account => account.Record.id == id)).Distinct().ToArray();
+                            var tools = ToStringList(data, "toolIds").Distinct().Select(FindToolById).Where(t => t != null).ToArray();
                             bool stopProxy = data.ContainsKey("stopProxy") && Convert.ToBoolean(data["stopProxy"]);
+                            bool quitAiHub = data.ContainsKey("quitAiHub") && Convert.ToBoolean(data["quitAiHub"]);
+                            if (_batchExitInFlight) throw new InvalidOperationException("正在退出所选程序，请稍候。");
+                            _batchExitInFlight = true;
                             ThreadPool.QueueUserWorkItem(_ =>
                             {
                                 int count = 0;
@@ -1483,16 +1524,23 @@ namespace CodexLauncher
                                     try { CoreService.StopProfileProcesses(cid); count++; }
                                     catch (Exception ex) { failures.Add(ex.Message); }
                                 }
-                                foreach (string tid in toolIds)
+                                foreach (var tool in tools)
                                 {
-                                    var t = FindToolById(tid);
-                                    if (t != null) { try { CoreService.StopToolItem(t); count++; } catch { } }
+                                    try
+                                    {
+                                        CoreService.StopToolItem(tool);
+                                        if (CoreService.IsToolRunning(tool)) throw new InvalidOperationException(tool.name + " 仍在运行。");
+                                        count++;
+                                    }
+                                    catch (Exception ex) { failures.Add(ex.Message); }
                                 }
-                                if (stopProxy) { try { CoreService.StopClashVerge(); count++; } catch { } }
+                                if (stopProxy) { try { CoreService.StopClashVerge(); count++; } catch (Exception ex) { failures.Add(ex.Message); } }
 
                                 Dispatcher.BeginInvoke(new Action(() =>
                                 {
+                                    _batchExitInFlight = false;
                                     ReplyJs(reqId, true, count, null);
+                                    if (quitAiHub) { ForceQuit(); return; }
                                     string summary = string.Format("已退出 {0} 项程序", count);
                                     if (failures.Count > 0) summary += "，有 " + failures.Count + " 项需手动退出。" + failures[0];
                                     SendToastToJs(summary, failures.Count > 0);
@@ -1504,29 +1552,22 @@ namespace CodexLauncher
 
                     case "updateSettings":
                         {
-                            bool hotkeyChanged = false;
-                            if (data.ContainsKey("minimize_to_tray"))
-                                _store.settings.minimize_to_tray = Convert.ToBoolean(data["minimize_to_tray"]);
-                            if (data.ContainsKey("hide_tray_when_open"))
-                                _store.settings.hide_tray_when_open = Convert.ToBoolean(data["hide_tray_when_open"]);
-                            if (data.ContainsKey("expiry_balloon_alert"))
-                                _store.settings.expiry_balloon_alert = Convert.ToBoolean(data["expiry_balloon_alert"]);
-                            if (data.ContainsKey("screenshot_enabled"))
+                            string hotkey = (AuthParser.GetStr(data, "screenshot_hotkey") ?? "").Trim();
+                            bool hotkeyChanged = data.ContainsKey("screenshot_enabled") || hotkey.Length > 0;
+                            _store.settings = CoreService.UpdateLauncherSettings(settings =>
                             {
-                                _store.settings.screenshot_enabled = Convert.ToBoolean(data["screenshot_enabled"]);
-                                hotkeyChanged = true;
-                            }
-                            if (data.ContainsKey("screenshot_hotkey"))
+                                if (data.ContainsKey("minimize_to_tray")) settings.minimize_to_tray = Convert.ToBoolean(data["minimize_to_tray"]);
+                                if (data.ContainsKey("expiry_balloon_alert")) settings.expiry_balloon_alert = Convert.ToBoolean(data["expiry_balloon_alert"]);
+                                if (data.ContainsKey("quota_auto_refresh")) settings.quota_auto_refresh = Convert.ToBoolean(data["quota_auto_refresh"]);
+                                if (data.ContainsKey("screenshot_enabled")) settings.screenshot_enabled = Convert.ToBoolean(data["screenshot_enabled"]);
+                                if (hotkey.Length > 0) settings.screenshot_hotkey = hotkey;
+                            });
+                            _settingsRevision++;
+                            if (data.ContainsKey("quota_auto_refresh") && _store.settings.quota_auto_refresh)
                             {
-                                string hk = (AuthParser.GetStr(data, "screenshot_hotkey") ?? "").Trim();
-                                if (!string.IsNullOrEmpty(hk))
-                                {
-                                    _store.settings.screenshot_hotkey = hk;
-                                    hotkeyChanged = true;
-                                }
+                                _quotaRefreshOnResume = true;
+                                CheckQuotaRefresh();
                             }
-                            CoreService.SaveStore(_store);
-                            SyncTrayVisibility();
                             if (hotkeyChanged) SyncScreenshotHotkey();
                             PushFullState();
                             if (hotkeyChanged && _store.settings.screenshot_enabled && !_hotkeyRegistered)
@@ -1651,15 +1692,17 @@ namespace CodexLauncher
                             break;
                         }
 
-                    case "openDataDir":
-                        CoreService.EnsureDirs();
-                        Process.Start("explorer.exe", CoreService.DataDir);
+                    case "refreshInstalledApps":
+                        RefreshInstalledApps();
                         break;
 
                     case "openLedgerForm":
                         string formUrl;
-                        if (!_quickLedgerForms.TryGetValue(AuthParser.GetStr(data, "id") ?? "", out formUrl))
-                            throw new InvalidOperationException("记账表单未配置，请检查本地 quick-ledger.json。");
+                        if (!CoreService.ReadQuickLedgerForms().TryGetValue(AuthParser.GetStr(data, "id") ?? "", out formUrl))
+                        {
+                            PushFullState();
+                            throw new InvalidOperationException("记账入口已变更，请检查本地 quick-ledger.json。");
+                        }
                         CoreService.LaunchToolItem(new ToolItem { kind = "url", target = formUrl });
                         break;
 
@@ -1677,10 +1720,14 @@ namespace CodexLauncher
 
         private ToolItem FindToolById(string id)
         {
-            if (string.IsNullOrEmpty(id) || _store == null || _store.tool_sections == null) return null;
+            if (string.IsNullOrEmpty(id)) return null;
+            var installed = _installedApps.FirstOrDefault(item => item.id == id);
+            if (installed != null) return installed;
+            if (_store == null || _store.tool_sections == null) return null;
             foreach (var sec in _store.tool_sections)
-                foreach (var it in sec.items)
-                    if (it.id == id) return it;
+                if (sec != null && sec.items != null)
+                    foreach (var it in sec.items)
+                        if (it != null && it.id == id) return it;
             return null;
         }
 
