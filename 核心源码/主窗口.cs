@@ -53,6 +53,9 @@ namespace CodexLauncher
         private bool _networkPolling;
         private bool _networkWorking;
         private CancellationTokenSource _networkBatch;
+        private AntigravityUsage _antigravityUsage = AntigravityQuota.ReadCache();
+        private CancellationTokenSource _antigravityRefresh;
+        private string _antigravityError;
         private List<ChromeProfileInfo> _chromeProfiles = new List<ChromeProfileInfo>();
         private readonly Dictionary<string, UsageSnapshot> _usageCache = new Dictionary<string, UsageSnapshot>();
         private readonly Dictionary<string, AuthInfo> _usageLoading = new Dictionary<string, AuthInfo>();
@@ -77,12 +80,14 @@ namespace CodexLauncher
         private string _hotkeyError = "";
         private List<DesktopShortcutInfo> _desktopShortcuts = new List<DesktopShortcutInfo>();
 
-        private const string UiProtocol = "1";
+        private const string UiProtocol = "2";
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
             { "/index.html", "text/html; charset=utf-8" },
             { "/界面样式.css", "text/css; charset=utf-8" },
-            { "/工作台交互.js", "text/javascript; charset=utf-8" }
+            { "/工作台交互.js", "text/javascript; charset=utf-8" },
+            { "/gemini.png", "image/png" },
+            { "/ai-studio.png", "image/png" }
         };
         private Dictionary<string, byte[]> _uiAssets;
         private readonly string _updateToken;
@@ -375,6 +380,7 @@ namespace CodexLauncher
                 }
                 catch { }
             }
+            else if (_antigravityRefresh != null) _antigravityRefresh.Cancel();
         }
 
         private static Dictionary<string, byte[]> LoadUiAssets(string uiDir)
@@ -581,6 +587,29 @@ namespace CodexLauncher
             if (Json.Serialize(_networkStatus) == Json.Serialize(status)) return;
             _networkStatus = status;
             PushFullState();
+        }
+
+        private async void RefreshAntigravity()
+        {
+            if (_antigravityRefresh != null) return;
+            using (var cancellation = new CancellationTokenSource())
+            {
+                _antigravityRefresh = cancellation;
+                _antigravityError = null;
+                PushFullState();
+                try
+                {
+                    _antigravityUsage = await Task.Run(() => AntigravityQuota.Refresh(cancellation.Token));
+                }
+                catch (OperationCanceledException) { }
+                catch (InvalidOperationException ex) { _antigravityError = ex.Message; }
+                catch (Exception) { _antigravityError = "暂时无法读取 Antigravity CLI 的额度。"; }
+                finally
+                {
+                    _antigravityRefresh = null;
+                    PushFullState();
+                }
+            }
         }
 
         private async Task RunNetworkAction(string reqId, Func<object> work)
@@ -902,13 +931,17 @@ namespace CodexLauncher
                 { "accounts", accList },
                 { "tool_sections", secList },
                 { "chrome_profiles", chromeList },
-                { "antigravity", antigravityRef != null ? new Dictionary<string, object>
+                { "chrome_available", CoreService.FindChromeExe() != null },
+                { "antigravity", new Dictionary<string, object>
                     {
-                        { "id", antigravityRef.id },
-                        { "name", antigravityRef.name },
-                        { "running", CoreService.IsToolRunning(antigravityRef) },
-                        { "icon_url", CoreService.GetCachedIconUrl(antigravityRef.target, "exe") }
-                    } : null
+                        { "id", antigravityRef == null ? null : antigravityRef.id },
+                        { "running", antigravityRef != null && CoreService.IsToolRunning(antigravityRef) },
+                        { "icon_url", antigravityRef == null ? null : CoreService.GetCachedIconUrl(antigravityRef.target, antigravityRef.kind) },
+                        { "cli_installed", AntigravityQuota.IsInstalled },
+                        { "usage", _antigravityUsage },
+                        { "loading", _antigravityRefresh != null },
+                        { "error", _antigravityError }
+                    }
                 }
             };
 
@@ -1011,6 +1044,10 @@ namespace CodexLauncher
                             if (vm.Auth != null && vm.Auth.CanFetchUsage && !_usageLoading.ContainsKey(vm.Record.id)) { RefreshUsageForAccountAsync(vm, true); triggered++; }
                         }
                         SendToastToJs(triggered > 0 ? "正在刷新各账号剩余额度..." : (_usageLoading.Count > 0 ? "额度刷新正在进行" : "暂无可查询额度的账号"), triggered == 0);
+                        break;
+
+                    case "refreshAntigravity":
+                        RefreshAntigravity();
                         break;
 
                     case "refreshUsage":
@@ -1380,11 +1417,25 @@ namespace CodexLauncher
                         }
 
                     case "launchChromeUrl":
+                    case "copyWorkAddress":
                         {
-                            string dir = AuthParser.GetStr(data, "dir");
-                            string url = AuthParser.GetStr(data, "url");
-                            CoreService.LaunchChromeProfileUrl(dir, url);
-                            SendToastToJs("已在对应 Chrome 账号中打开", false);
+                            string tool = AuthParser.GetStr(data, "tool");
+                            string url = tool == "gemini" ? "https://gemini.google.com/app" :
+                                tool == "ai-studio" ? "https://aistudio.google.com/" : null;
+                            if (url == null) throw new InvalidOperationException("未知的网页工具。");
+                            if (action == "copyWorkAddress")
+                            {
+                                Clipboard.SetText(url);
+                                SendToastToJs("网址已复制", false);
+                            }
+                            else
+                            {
+                                string dir = AuthParser.GetStr(data, "dir");
+                                if (!_chromeProfiles.Any(profile => profile.DirectoryName == dir))
+                                    throw new InvalidOperationException("请先选择可用的 Google 身份。");
+                                CoreService.LaunchChromeProfileUrl(dir, url);
+                                SendToastToJs("已在对应 Chrome 账号中打开", false);
+                            }
                             break;
                         }
 

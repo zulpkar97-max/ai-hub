@@ -15,6 +15,7 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   const ICONS = {
+    power: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
     switch: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg>',
     refresh: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
     plus: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
@@ -147,10 +148,218 @@
     $("#version-label").textContent = `${appState.version || "v4.1"} · 更新日志`;
     $("#nav-workspace-dot").classList.toggle("hidden", appState.network?.state !== "reachable" || !appState.proxy?.running);
 
+    const globalTools = $("#sidebar-global-tools");
+    const shot = appState.screenshot?.hotkey || "Ctrl+Shift+A";
+    const voice = appState.voice_recorder_hotkey;
+    const globalHtml = `
+      <div class="sidebar-tool-label">全局工具</div>
+      <button class="sidebar-tool-button btn btn-ghost" data-act="startScreenshot" title="截图 · ${esc(shot)}">${ICONS.crop}<span>截图</span></button>
+      <button class="sidebar-tool-button btn btn-ghost" data-act="startVoiceRecorder" title="AI 录音笔${voice ? " · " + esc(voice) : ""}" ${voice ? "" : "disabled"}>${ICONS.mic}<span>AI 录音笔</span></button>`;
+    if (globalTools.dataset.rendered !== globalHtml) {
+      globalTools.innerHTML = globalHtml;
+      globalTools.dataset.rendered = globalHtml;
+    }
+    const pending = appState.pending_update;
+    const headerActions = $("#header-actions");
+    if (pending !== (headerActions.dataset.pending === "true")) {
+      headerActions.innerHTML = pending ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : "";
+      headerActions.dataset.pending = String(!!pending);
+    }
     $$(".nav-item").forEach((el) => el.classList.toggle("active", el.dataset.tab === activeTab));
 
     if (activeTab === "workspace") renderUnifiedWorkspace();
     else renderManage();
+  }
+
+  function iconButton(action, label, glyph, { disabled = false, danger = false, spinning = false, attrs = "" } = {}) {
+    return `<button type="button" class="btn icon-tool ${danger ? "btn-danger-outline" : "btn-ghost"}${spinning ? " is-spinning" : ""}"
+      ${action ? `data-act="${action}"` : ""} title="${esc(label)}" aria-label="${esc(label)}" ${disabled ? "disabled" : ""} ${attrs}>${glyph}</button>`;
+  }
+
+  function statusHtml(label, tone = "") {
+    return `<span class="status-inline ${tone}"><span class="status-dot"></span>${esc(label)}</span>`;
+  }
+
+  function toolHeading(id, icon, name, description, status = "") {
+    return `<div class="tool-identity">
+      ${icon ? `<img class="app-icon" src="${esc(icon)}" alt="" />` : `<span class="tool-icon-fallback" aria-hidden="true">${ICONS.monitor}</span>`}
+      <div class="app-info">
+        <div class="app-name-line"><h2 class="app-name" id="${id}">${esc(name)}</h2>${status}</div>
+        <div class="tool-purpose">${esc(description)}</div>
+      </div>
+    </div>`;
+  }
+
+  function quotaTone(percent) {
+    return percent <= 10 ? "danger" : (percent <= 30 ? "warn" : "ok");
+  }
+
+  function renderQuotaMeter({ title, value, when, percent, tone = "", labelAttrs = "", valueAttrs = "", fillAttrs = "", timeAttrs = "", action = "" }) {
+    return `<div class="meter-block">
+      <span class="meter-name" ${labelAttrs}>${esc(title)}</span>
+      <strong class="meter-pct${tone ? ` tone-${tone}` : ""}" ${valueAttrs}>${esc(value)}</strong>
+      <span class="meter-reset" ${timeAttrs}>${esc(when)}</span>
+      ${percent == null ? '<div class="grad-track"></div>' : renderGradientBar(percent, tone, fillAttrs)}
+      ${action}
+    </div>`;
+  }
+
+  function quotaMessage(message, type = "", action = "") {
+    return `<div class="quota-feedback ${type}" role="status"><span>${esc(message)}</span>${action}</div>`;
+  }
+
+  function updatedAtHtml(timestamp) {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+    const label = date.toDateString() === new Date().toDateString()
+      ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
+      : fmtDate(timestamp, true);
+    return `<time datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(label)}</time>`;
+  }
+
+  function timeToReset(timestamp) {
+    if (!timestamp) return "重置时间未知";
+    const until = new Date(timestamp);
+    if (Number.isNaN(until.getTime())) return "重置时间未知";
+    const minutes = Math.ceil((until.getTime() - Date.now()) / 60000);
+    if (minutes <= 0) return "已到重置时间";
+    const days = Math.floor(minutes / 1440), hours = Math.floor(minutes / 60) % 24;
+    if (days) return `${days}d ${hours}h 后重置`;
+    if (hours) return `${hours}h ${minutes % 60}m 后重置`;
+    return `${minutes}m 后重置`;
+  }
+
+  const webTools = [
+    { id: "gemini", name: "Gemini", icon: "gemini.png", description: "对话、研究与内容创作" },
+    { id: "ai-studio", name: "AI Studio", icon: "ai-studio.png", description: "试用 Gemini 模型与调试提示词" }
+  ];
+  const chosenIdentities = new Map();
+
+  function webIdentity(tool, profiles) {
+    let preferred = chosenIdentities.get(tool);
+    if (preferred == null) {
+      try { preferred = localStorage.getItem("work-identity-" + tool); } catch (_) {}
+    }
+    return profiles.find((profile) => profile.dir === preferred) || profiles[0];
+  }
+
+  function setWebIdentity(tool, identity) {
+    chosenIdentities.set(tool, identity);
+    try { localStorage.setItem("work-identity-" + tool, identity); } catch (_) {}
+  }
+
+  function renderWebTool(tool, profiles) {
+    const profile = webIdentity(tool.id, profiles);
+    const available = !!profile && appState.chrome_available !== false;
+    return `<section class="surface-card tool-card compact-tool" aria-labelledby="tool-${tool.id}">
+      <header class="tool-card-header">
+        ${toolHeading("tool-" + tool.id, tool.icon, tool.name, tool.description, statusHtml(available ? "可用" : "不可用", available ? "healthy" : "status-error"))}
+        <div class="tool-actions">
+          <button class="btn btn-primary btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
+          ${iconButton("openWorkMore", "更多 " + tool.name + " 操作", ICONS.more, { attrs: `data-id="${tool.id}"` })}
+        </div>
+      </header>
+      <div class="tool-card-body">
+        <div class="tool-field">
+          <label for="identity-${tool.id}">Google 身份</label>
+          <select id="identity-${tool.id}" data-web-identity="${tool.id}" ${available ? "" : "disabled"}>
+            ${profiles.length ? profiles.map((item) => `<option value="${esc(item.dir)}" ${item.dir === profile?.dir ? "selected" : ""}>${esc(item.name)}</option>`).join("") : "<option>暂无可用身份</option>"}
+          </select>
+        </div>
+        ${profiles.length ? `<div class="tool-identity-email" data-web-email="${tool.id}">${esc(profile?.email)}</div>` : ""}
+        <div class="tool-field tool-resource"><span>额度</span><span>暂不可读取</span></div>
+      </div>
+    </section>`;
+  }
+
+  function renderOpenDesign(tool) {
+    const ready = !!tool;
+    return `<section class="surface-card tool-card compact-tool" aria-labelledby="tool-open-design">
+      <header class="tool-card-header">
+        ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "设计构思与原型创作",
+          statusHtml(ready ? (tool.running ? "运行中" : "未运行") : "未安装", tool?.running ? "running" : ""))}
+        <div class="tool-actions">
+          <button class="btn btn-primary btn-sm" data-act="launchTool" data-id="${esc(tool?.id)}" ${ready ? "" : "disabled"}>${tool?.running ? "打开" : "启动"}</button>
+          ${iconButton("openWorkMore", "更多 Open Design 操作", ICONS.more, { attrs: 'data-id="open-design"' })}
+        </div>
+      </header>
+      <div class="tool-card-body">
+        <div class="tool-field"><span>启动方式</span><span>桌面</span></div>
+        <div class="tool-field"><span>身份</span><span>由 Open Design 管理</span></div>
+        <div class="tool-field tool-resource"><span>额度</span><span>暂不可读取</span></div>
+      </div>
+    </section>`;
+  }
+
+  function antigravityGroups(quota) {
+    const groups = [
+      { name: "Gemini Models", buckets: ["gemini-5h", "gemini-weekly"] },
+      { name: "Claude and GPT Models", buckets: ["3p-5h", "3p-weekly"] }
+    ];
+    const additional = new Map();
+    const known = new Set(groups.flatMap((group) => group.buckets));
+    for (const key of Object.keys(quota)) {
+      if (known.has(key)) continue;
+      const model = key.replace(/-(?:wtu-)?(?:weekly|5h)$/, "");
+      if (!additional.has(model)) additional.set(model, []);
+      additional.get(model).push(key);
+    }
+    for (const [model, buckets] of additional) {
+      const name = model === "gemini-argon" ? "Gemini 4 Argon" : model.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+      groups.push({ name, buckets });
+    }
+    return groups;
+  }
+
+  function renderAntigravity() {
+    const tool = appState.antigravity || {};
+    const usage = tool.usage;
+    const quota = usage?.quota || {};
+    const groups = Object.keys(quota).length ? antigravityGroups(quota).map((group) => `
+      <div class="antigravity-quota-group">
+        <h3>${esc(group.name)}</h3>
+        <div class="meter-grid">${group.buckets.map((key) => {
+          const bucket = quota[key];
+          const percent = typeof bucket?.remaining_fraction === "number" && !bucket.disabled
+            ? Math.min(100, Math.max(0, bucket.remaining_fraction * 100)) : null;
+          const title = key.endsWith("-weekly") ? "每周额度" : (key.endsWith("-5h") ? "5h 额度" : "额度");
+          const value = percent != null ? percent.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) + "%"
+            : bucket?.disabled ? "不可用" : (typeof bucket?.remaining_amount === "number" ? Number(bucket.remaining_amount).toLocaleString("zh-CN") : "—");
+          return renderQuotaMeter({ title, value, when: bucket ? timeToReset(bucket.reset_time) : "暂不可读取",
+            percent, tone: percent == null ? "" : quotaTone(percent),
+            timeAttrs: bucket?.reset_time ? `title="${esc(fmtDate(bucket.reset_time))}"` : "" });
+        }).join("")}</div>
+      </div>`).join("") : "";
+    const error = tool.error
+      ? quotaMessage(tool.error, "quota-error", tool.cli_installed ? '<button class="btn btn-secondary btn-sm" data-act="refreshAntigravity">重试</button>' : "")
+      : "";
+    const info = tool.loading ? quotaMessage("正在读取额度…")
+      : (!groups && !error ? quotaMessage(tool.cli_installed ? "点击刷新额度" : "暂不可读取 · CLI 未安装") : "");
+    return `<section class="surface-card tool-card" aria-labelledby="tool-antigravity">
+      <header class="tool-card-header">
+        ${toolHeading("tool-antigravity", tool.icon_url, "Antigravity", "在本地项目中开发与调试",
+          statusHtml(tool.id ? (tool.running ? "运行中" : "未运行") : "未安装", tool.running ? "running" : ""))}
+        <div class="tool-actions">
+          <button class="btn btn-secondary btn-sm" data-act="refreshAntigravity" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-primary btn-sm" data-act="launchTool" data-id="${esc(tool.id)}" ${tool.id ? "" : "disabled"}>${tool.running ? "打开" : "启动"}</button>
+          ${iconButton("openWorkMore", "更多 Antigravity 操作", ICONS.more, { attrs: 'data-id="antigravity"' })}
+        </div>
+      </header>
+      <div class="tool-card-body">
+        <div class="tool-resource-meta">
+          <span>${esc(usage?.plan || "Google 身份待读取")}${usage?.email ? ` <span class="tool-identity-email">${esc(usage.email)}</span>` : ""}</span>
+          ${updatedAtHtml(usage?.fetched_at)}
+        </div>
+        ${error}${info}
+        ${groups ? `<div class="antigravity-quota-grid">${groups}</div>` : ""}
+      </div>
+    </section>`;
+  }
+
+  function findOpenDesign() {
+    return (appState.tool_sections || []).flatMap((section) => section.items || []).find((tool) =>
+      tool.id === "tool-opendesign" || (tool.uninstall_hint === "Open Design" && tool.kind !== "url"));
   }
 
   function networkDelayTone(state, delay) {
@@ -184,10 +393,13 @@
       : "NIVA Network";
     const refreshLabel = networkBusy === "refresh" ? "刷新中…" : "刷新网络状态";
     const tools = [
-      ["refreshNetwork", refreshLabel, ICONS.refresh, !proxy.running || !appState.network_status_refresh || !!networkBusy, networkBusy === "refresh"],
-      ["openNetworkPicker", "切换节点", ICONS.switch, !proxy.running || !network.can_select || !appState.network_japan_picker || !!networkBusy],
-      ["proxyOpen", "打开 Clash Verge", ICONS.ext, !proxy.installed],
-      ["openNetworkMenu", "更多网络操作", ICONS.more, !proxy.running],
+      iconButton("refreshNetwork", refreshLabel, ICONS.refresh, { disabled: !proxy.running || !appState.network_status_refresh || !!networkBusy, spinning: networkBusy === "refresh" }),
+      iconButton("openNetworkPicker", "切换节点", ICONS.switch, { disabled: !proxy.running || !network.can_select || !appState.network_japan_picker || !!networkBusy }),
+      iconButton("proxyOpen", "打开 Clash Verge", ICONS.ext, { disabled: !proxy.installed && !proxy.running })
+    ];
+    const danger = [
+      iconButton("proxyRestart", "重启代理", ICONS.sync, { danger: true, disabled: !proxy.running || !!networkBusy }),
+      iconButton("proxyStop", "关闭代理", ICONS.power, { danger: true, disabled: !proxy.running || !!networkBusy, attrs: 'data-critical="true"' })
     ];
 
     return `
@@ -199,206 +411,105 @@
           <span class="network-cell network-latency ${delayTone}" title="当前节点延迟${esc(lastDelay)}">${esc(latency)}${lastDelay ? `<small>${esc(lastDelay)}</small>` : ""}</span>
           <span class="network-cell network-traffic" title="${esc(trafficDetails)}">${esc(traffic)}</span>
         </div>
-        <div class="network-actions" role="group" aria-label="网络工具栏">
-          ${tools.map(([action, label, icon, disabled, spin]) => `<button type="button"
-            class="btn btn-ghost network-tool${spin ? " is-spinning" : ""}" data-act="${action}"
-            title="${label}" aria-label="${label}" ${disabled ? "disabled" : ""}>${icon}</button>`).join("")}
+        <div class="network-actions utility-toolbar" role="group" aria-label="网络工具栏">
+          ${tools.join("")}
+          <div class="danger-zone" role="group" aria-label="代理中断操作">${danger.join("")}</div>
         </div>
       </section>`;
   }
 
+  function renderCodex(accounts) {
+    return `<section class="surface-card tool-card codex-tool" aria-labelledby="codex-tool-title">
+      <header class="tool-card-header">
+        ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "Codex", accounts.length + " 个账号")}
+        <div class="tool-actions">
+          <button class="btn btn-secondary btn-sm" data-act="refreshAllUsage" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
+        </div>
+      </header>
+      <div class="codex-accounts">${accounts.length ? accounts.map(renderCodexAccount).join("") : quotaMessage("暂无账号")}</div>
+    </section>`;
+  }
+
+  function renderCodexAccount(acc) {
+    const cd = computeCountdown(acc);
+    const auth = acc.auth || {};
+    const name = acc.is_default ? "主账号" : acc.name;
+    const email = auth.logged_in ? (auth.email || auth.display_name || "已登录") : "尚未登录";
+    const usage = acc.usage;
+    const windows = usage?.success ? [usage.primary, usage.secondary].filter(Boolean) : [];
+    let feedback = "";
+    if (!auth.logged_in) feedback = quotaMessage("登录后可读取剩余额度");
+    else if (auth.can_fetch_usage === false) feedback = quotaMessage("当前登录方式未提供额度");
+    else if (acc.usage_loading) feedback = quotaMessage("正在查询额度…");
+    else if (usage && !usage.success) feedback = quotaMessage(usage.error || "额度查询失败", "quota-error",
+      `<button class="btn btn-secondary btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
+    else if (!windows.length) feedback = quotaMessage(usage ? "当前套餐暂无独立额度窗口" : "暂无额度数据");
+
+    const meters = windows.map((w) => {
+      const percent = Math.max(0, Math.min(100, Number(w.left_percent) || 0));
+      return renderQuotaMeter({ title: String(w.label).replace("限额", "额度"), value: percent + "%",
+        when: w.reset_text || "重置时间未知", percent, tone: quotaTone(percent),
+        valueAttrs: `aria-label="剩余 ${percent}%"` });
+    });
+    if (cd) meters.push(renderQuotaMeter({
+      title: recycleStatus(cd), value: cd.meterValue, when: "截止 " + cd.targetShort,
+      percent: cd.pct, tone: cd.level,
+      labelAttrs: `data-cd-status="${esc(acc.id)}"`,
+      valueAttrs: `data-cd-clock="${esc(acc.id)}" title="${esc(cd.compact)}"`,
+      fillAttrs: `data-cd-fill="${esc(acc.id)}"`,
+      timeAttrs: `title="${esc(fmtDate(acc.recycle_at))}"`,
+      action: auth.subscription_until
+        ? `<button class="btn btn-secondary meter-calibrate" data-act="calibrate5Days" data-id="${esc(acc.id)}">按到期前 5 天校准</button>` : ""
+    }));
+
+    return `<article class="codex-account">
+      <header class="account-top">
+        <div class="app-info">
+          <div class="app-name-line">
+            <h3 class="app-name account-name">${esc(name)}</h3>
+            ${acc.is_default ? '<span class="tag">默认</span>' : ""}
+            ${planTagHtml(auth)}
+          </div>
+          <div class="app-sub account-email">${esc(email)}</div>
+        </div>
+        <div class="account-actions">
+          ${statusHtml(acc.running ? "运行中" : "未运行", acc.running ? "running" : "")}
+          <button class="btn ${acc.running ? "btn-danger-outline" : "btn-primary"} btn-sm"
+            data-act="${acc.running ? "stopAccount" : "launchAccount"}" data-id="${esc(acc.id)}"
+            ${!acc.running && !auth.logged_in ? 'title="启动 Codex 并登录"' : ""}>
+            ${acc.running ? "关闭" : ICONS.play + " 启动"}
+          </button>
+          ${iconButton("openMoreMenu", "更多 " + name + " 操作", ICONS.more, { attrs: `data-id="${esc(acc.id)}"` })}
+        </div>
+      </header>
+      <div class="account-usage">
+        ${feedback}
+        ${usage?.success && usage.fetched_at ? `<div class="account-usage-head">${updatedAtHtml(usage.fetched_at)}</div>` : ""}
+        ${meters.length ? `<div class="meter-grid${!cd && windows.length === 1 ? " meter-grid-single" : ""}">${meters.join("")}</div>` : ""}
+      </div>
+    </article>`;
+  }
   function renderUnifiedWorkspace() {
     const proxy = appState.proxy || {};
     const accounts = appState.accounts || [];
-    const sections = appState.tool_sections || [];
     const chromes = appState.chrome_profiles || [];
-
-    const codexRunning = accounts.some((acc) => acc.running);
-    let runningOtherApps = 0;
-    sections.forEach((s) => (s.items || []).forEach((it) => {
-      if (it.uninstall_hint !== "OpenAI.Codex" && it.running) runningOtherApps++;
-    }));
-
-    const shotHk = appState.screenshot?.hotkey || "Ctrl+Shift+A";
+    const design = findOpenDesign();
+    const running = Number(accounts.some((acc) => acc.running)) + Number(!!appState.antigravity?.running) + Number(!!design?.running);
     $("#view-title").textContent = "工作台";
-    $("#view-sub").textContent = `${runningOtherApps + (codexRunning ? 1 : 0)} 个工具运行中`;
-    $("#header-actions").innerHTML = `
-      ${appState.pending_update ? '<button class="btn btn-primary btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : ""}
-      <button class="btn btn-secondary btn-sm" data-act="startScreenshot" title="快捷截图与提字 (${esc(shotHk)})">${ICONS.crop} 截图</button>
-      ${appState.voice_recorder_hotkey ? `<button class="btn btn-secondary btn-sm" data-act="startVoiceRecorder" title="打开微信输入法 AI 录音笔 (${esc(appState.voice_recorder_hotkey)})">${ICONS.mic} AI 录音笔</button>` : ""}
-    `;
+    $("#view-sub").textContent = running ? `${running} 个工具运行中` : "";
 
-    let html = renderNetwork(proxy);
-
-    html += `
-      <div class="sec-heading"><span class="sec-title">AI 工作工具</span></div>
-      <section class="surface-card codex-tool" aria-labelledby="codex-tool-title">
-        <header class="codex-tool-header">
-          <div class="app-left">
-            <img class="app-icon" src="https://icons.aihub.local/chatgpt.png" alt="" />
-            <div class="app-info">
-              <h2 id="codex-tool-title" class="app-name">Codex</h2>
-              <div class="app-sub">${accounts.length} 个账号</div>
-            </div>
-          </div>
-          <div class="codex-tool-actions">
-            <button class="btn btn-secondary btn-sm" data-act="refreshAllUsage" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
-            <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
-          </div>
-        </header>
-        <div class="codex-accounts">
-          ${accounts.length ? "" : '<div class="quota-feedback">暂无账号</div>'}
-    `;
-
-    for (const acc of accounts) {
-      const cd = computeCountdown(acc);
-      const auth = acc.auth || {};
-      const name = acc.is_default ? "主账号" : acc.name;
-      const email = auth.logged_in ? (auth.email || auth.display_name || "已登录") : "尚未登录";
-      const timestamp = acc.usage?.success ? acc.usage.fetched_at : null;
-      const updated = timestamp ? new Date(timestamp) : null;
-      const updatedText = updated && !Number.isNaN(updated.getTime())
-        ? (updated.toDateString() === new Date().toDateString()
-          ? updated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
-          : fmtDate(timestamp, true))
-        : "";
-
-      let meterBlocks = "";
-      if (!auth.logged_in) {
-        meterBlocks = '<div class="quota-feedback">登录后自动读取剩余额度</div>';
-      } else if (auth.can_fetch_usage === false) {
-        meterBlocks = '<div class="quota-feedback">当前登录方式未提供可读取的额度</div>';
-      } else if (!acc.usage) {
-        meterBlocks = `<div class="quota-feedback">${acc.usage_loading ? "正在查询额度…" : "暂无额度数据"}</div>`;
-      } else if (!acc.usage.success) {
-        meterBlocks = `
-          <div class="quota-feedback">
-            <span>${acc.usage_loading ? "正在重试额度…" : esc(acc.usage.error || "额度查询失败")}</span>
-            <button class="btn btn-secondary btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询" ${acc.usage_loading ? "disabled" : ""}>重试</button>
-          </div>`;
-      } else {
-        const windows = [acc.usage.primary, acc.usage.secondary].filter(Boolean);
-        meterBlocks = windows.map((w) => {
-          const pct = Math.max(0, Math.min(100, Number(w.left_percent) || 0));
-          const tone = pct <= 10 ? "danger" : (pct <= 30 ? "warn" : "ok");
-          return `
-            <div class="meter-block">
-              <span class="meter-name">${esc(String(w.label).replace("限额", "额度"))}</span>
-              <strong class="meter-pct tone-${tone}" aria-label="剩余 ${pct}%">${pct}%</strong>
-              <span class="meter-reset">${esc(w.reset_text || "重置时间未知")}</span>
-              ${renderGradientBar(pct, tone)}
-            </div>`;
-        }).join("") || '<div class="quota-feedback">当前套餐暂无独立额度窗口</div>';
-      }
-
-      if (cd) {
-        meterBlocks += `
-          <div class="meter-block">
-            <span class="meter-name" data-cd-status="${esc(acc.id)}">${recycleStatus(cd)}</span>
-            <strong class="meter-pct tone-${cd.level}" data-cd-clock="${esc(acc.id)}" title="${esc(cd.compact)}">${esc(cd.meterValue)}</strong>
-            <span class="meter-reset" title="${esc(fmtDate(acc.recycle_at))}">截止 ${esc(cd.targetShort)}</span>
-            ${renderGradientBar(cd.pct, cd.level, `data-cd-fill="${esc(acc.id)}"`)}
-            ${auth.subscription_until ? `<button class="btn btn-secondary meter-calibrate" data-act="calibrate5Days" data-id="${esc(acc.id)}">按到期前 5 天校准</button>` : ""}
-          </div>`;
-      }
-
-      html += `
-        <article class="codex-account">
-          <header class="account-top">
-            <div class="app-info">
-              <div class="app-name-line">
-                <h3 class="app-name account-name">${esc(name)}</h3>
-                ${acc.is_default ? '<span class="tag">默认</span>' : ""}
-                ${planTagHtml(auth)}
-              </div>
-              <div class="app-sub account-email">${esc(email)}</div>
-            </div>
-            <div class="account-actions">
-              <span class="status-inline ${acc.running ? "running" : ""}">
-                <span class="status-dot"></span>${acc.running ? "运行中" : "未运行"}
-              </span>
-              <button class="btn ${acc.running ? "btn-secondary" : "btn-primary"} btn-sm"
-                data-act="${acc.running ? "stopAccount" : "launchAccount"}" data-id="${esc(acc.id)}"
-                ${!acc.running && !auth.logged_in ? 'title="启动 Codex 并登录"' : ""}>
-                ${acc.running ? "关闭" : ICONS.play + " 启动"}
-              </button>
-              <button class="btn btn-secondary btn-sm btn-icon-only" data-act="openMoreMenu" data-id="${esc(acc.id)}" title="更多操作">${ICONS.more}</button>
-            </div>
-          </header>
-          <div class="account-usage">
-            <div class="account-usage-head">
-              <span>额度</span>
-              ${acc.usage_loading ? '<span>查询中…</span>' : ""}
-              ${updatedText ? `<time datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(updatedText)}</time>` : ""}
-            </div>
-            <div class="meter-grid">${meterBlocks}</div>
-          </div>
-        </article>
-      `;
-    }
-    html += `</div></section>`;
-
-    // LAYER 3: Other Desktop AI Apps in Compact 2-Column Grid (Filtering out duplicate ChatGPT / Codex!)
-    let hasRenderedToolSection = false;
-    for (const sec of sections) {
-      const visibleItems = (sec.items || []).filter((it) => it.uninstall_hint !== "OpenAI.Codex");
-      if (visibleItems.length === 0) continue;
-      const underWorkToolsHeading = !hasRenderedToolSection && sec.id === "sec-desktop-ai" && sec.title === "桌面 AI 应用";
-
-      const tiles = visibleItems.map((it) => `
-        <div class="app-tile">
-          <div class="app-left">
-            <img class="app-icon" src="${esc(it.icon_url)}" alt="" />
-            <div class="app-info">
-              <div class="app-name-line">
-                <span class="app-name">${esc(it.name)}</span>
-                ${it.kind !== "url" ? `
-                  <span class="status-inline ${it.running ? "running" : ""}">
-                    <span class="status-dot"></span>${it.running ? "运行中" : "未运行"}
-                  </span>` : ""}
-              </div>
-              <div class="app-sub">${esc(it.subtitle || it.target)}</div>
-            </div>
-          </div>
-          <div class="app-right">
-            <button class="btn btn-primary btn-sm" data-act="launchTool" data-id="${esc(it.id)}">${it.kind === "url" ? "打开" : (it.running ? "唤起" : "启动")}</button>
-            ${it.running ? `<button class="btn btn-secondary btn-sm" data-act="stopTool" data-id="${esc(it.id)}">关闭</button>` : ""}
-          </div>
-        </div>
-      `).join("");
-
-      html += `
-        ${underWorkToolsHeading ? "" : `<div class="sec-heading" style="margin-top:6px;"><span class="sec-title">${esc(sec.title)}</span></div>`}
-        <div class="app-grid-2">${tiles}</div>
-      `;
-      hasRenderedToolSection = true;
-    }
-
-    // LAYER 4: Google Web Accounts (Chrome Profiles) in Compact 2-Column Grid
-    if (chromes.length > 0) {
-      const chromeTiles = chromes.map((cp) => `
-        <div class="app-tile">
-          <div class="app-info">
-            <div class="app-name-line">
-              <span class="app-name">${esc(cp.name)}</span>
-              <span class="tag">${esc(cp.dir)}</span>
-            </div>
-            <div class="app-sub">${esc(cp.email || "Chrome 独立配置文件")}</div>
-          </div>
-          <div class="app-right">
-            <button class="btn btn-primary btn-sm" data-act="launchChrome" data-dir="${esc(cp.dir)}" data-url="https://gemini.google.com/app">Gemini ${ICONS.ext}</button>
-            <button class="btn btn-secondary btn-sm" data-act="launchChrome" data-dir="${esc(cp.dir)}" data-url="https://aistudio.google.com/">AI Studio</button>
-          </div>
-        </div>
-      `).join("");
-
-      html += `
-        <div class="sec-heading" style="margin-top:4px;"><span class="sec-title">Google 网页账号（Chrome）</span></div>
-        <div class="app-grid-2">${chromeTiles}</div>
-      `;
-    }
-
-    $("#view-content").innerHTML = html;
+    const view = $("#view-content");
+    if (view.querySelector("[data-web-identity]:focus")) return;
+    view.innerHTML = `
+      ${renderNetwork(proxy)}
+      <div class="sec-heading"><h2 class="sec-title work-tools-title">AI 工作工具</h2></div>
+      ${renderCodex(accounts)}
+      ${renderAntigravity()}
+      <div class="work-tools-grid">
+        ${webTools.map((tool) => renderWebTool(tool, chromes)).join("")}
+        ${renderOpenDesign(design)}
+      </div>`;
   }
 
   // TAB 2: MANAGE & SETTINGS
@@ -408,7 +519,6 @@
 
     $("#view-title").textContent = "管理与设置";
     $("#view-sub").textContent = "集中管理软件卸载、工作台分区整理与托盘偏好";
-    $("#header-actions").innerHTML = "";
 
     // 1. Software Uninstall Center (includes ChatGPT / Codex MSIX!)
     const uniqueApps = [];
@@ -646,12 +756,24 @@
     positionPopover(pop, anchorBtn);
   }
 
-  function openNetworkMenu(anchorBtn) {
+  function openWorkMore(anchor, id) {
+    const webTool = webTools.find((tool) => tool.id === id);
+    const tool = id === "antigravity" ? appState.antigravity : findOpenDesign();
     const pop = $("#popover-menu");
-    pop.innerHTML = `
-      <button class="pop-item" data-act="proxyRestart">${ICONS.refresh} 重启代理</button>
-      <button class="pop-item danger" data-act="proxyStop">${ICONS.close} 关闭代理</button>`;
-    positionPopover(pop, anchorBtn);
+    if (webTool) {
+      pop.innerHTML = `<button class="pop-item" data-act="copyWorkAddress" data-id="${webTool.id}">${ICONS.ext} 复制网页地址</button>`;
+    } else {
+      const items = [];
+      if (id === "antigravity" && tool?.cli_installed) {
+        items.push(`<button class="pop-item" data-act="refreshAntigravity" ${tool.loading ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>`);
+      }
+      if (tool?.running) {
+        items.push(`<button class="pop-item danger" data-act="stopTool" data-id="${esc(tool.id)}">${ICONS.power} 关闭${id === "antigravity" ? " Antigravity" : " Open Design"}</button>`);
+      }
+      items.push(`<button class="pop-item" data-act="goManage">${ICONS.folder} 管理桌面应用</button>`);
+      pop.innerHTML = items.join("");
+    }
+    positionPopover(pop, anchor);
   }
 
   function positionPopover(pop, anchorBtn) {
@@ -702,9 +824,9 @@
     openModal(`
       <div class="modal-header network-picker-header">
         <h3>切换节点</h3>
-        <div class="network-picker-actions">
-          <button class="btn btn-ghost btn-sm" id="network-probe-all" disabled>${ICONS.refresh}<span>刷新全部延迟</span></button>
-          <button class="btn btn-ghost btn-icon-only" data-close-modal aria-label="关闭节点选择器">${ICONS.close}</button>
+        <div class="network-picker-actions utility-toolbar" role="group" aria-label="节点工具栏">
+          ${iconButton("", "刷新全部延迟", ICONS.refresh, { disabled: true, attrs: 'id="network-probe-all"' })}
+          ${iconButton("", "关闭节点选择器", ICONS.close, { attrs: "data-close-modal" })}
         </div>
       </div>
       <div class="modal-body network-picker" id="network-picker">
@@ -741,7 +863,10 @@
           aria-pressed="${active}" ${locked ? "disabled" : ""}>${esc(group.label)}</button>`;
       }).join("");
       probe.disabled = locked || picker.nodes.length === 0;
-      probe.querySelector("span").textContent = networkBusy === "batch" ? "测速中…" : "刷新全部延迟";
+      const probing = networkBusy === "batch";
+      probe.title = probing ? "测速中…" : "刷新全部延迟";
+      probe.setAttribute("aria-label", probe.title);
+      probe.classList.toggle("is-spinning", probing);
       list.querySelectorAll("[data-node-index]").forEach((button, index) => {
         button.disabled = locked || picker.nodes[index].selected;
       });
@@ -915,7 +1040,7 @@
           ${subUntil ? `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:7px;background:var(--ok-bg);border:1px solid var(--ok-border);font-size:12px;color:var(--ok);">
               <span>官方 Plus 到期：${esc(fmtDate(subUntil))}</span>
-              <button type="button" id="f-cal-5d" class="btn btn-accent btn-sm">按到期前5天校准</button>
+              <button type="button" id="f-cal-5d" class="btn btn-secondary btn-sm">按到期前 5 天校准</button>
             </div>` : ""}
         </div>
         ${!isEdit ? `
@@ -1195,33 +1320,64 @@
     });
   }
 
-  async function openChangelogModal() {
-    let md = "";
-    try { md = await callHost("getChangelog"); } catch (_) { md = "无法读取 CHANGELOG.md"; }
-    const htmlLines = String(md || "").split(/\r?\n/).map((raw) => {
+  function changelogDates(markdown) {
+    const days = new Map();
+    let day = null, version = "", section = "";
+    for (const raw of String(markdown).split(/\r?\n/)) {
       const line = raw.trim();
-      if (!line) return "";
-      if (line.startsWith("---")) return `<div class="cl-hr"></div>`;
-      if (line.startsWith("# ")) return `<div class="cl-h1">${esc(line.slice(2))}</div>`;
-      if (line.startsWith("## ")) return `<div class="cl-h2">${esc(line.slice(3))}</div>`;
-      if (line.startsWith("### ")) return `<div class="cl-h3">${esc(line.slice(4))}</div>`;
-      if (line.startsWith("* ") || line.startsWith("- ")) {
-        return `<div class="cl-li">${esc(line.slice(2).replace(/\*\*|`/g, ""))}</div>`;
+      const heading = line.match(/^##\s+(v[^\s（(]+)\s*[（(](\d{4}-\d{2}-\d{2})[）)]/);
+      if (heading) {
+        version = heading[1];
+        const date = heading[2];
+        if (!days.has(date)) days.set(date, { date, versions: [], updates: [] });
+        day = days.get(date);
+        day.versions.push(version);
+        section = "";
+      } else if (line.startsWith("### ")) {
+        section = line.slice(4);
+      } else if (day && /^[-*]\s|^\d+\.\s/.test(line)) {
+        const body = line.replace(/^[-*]\s+|^\d+\.\s+/,"").replace(/\*\*|`/g, "");
+        const label = body.match(/^\[(新增|改进|修复|调整)\]\s*/);
+        const words = body + " " + section;
+        const type = label ? label[1] : (/^(修复|纠正)|问题修复|错位|黑屏|黑边/.test(words) ? "修复"
+          : /^(新增|加入|首次)|新增功能|初版/.test(words) || section.startsWith("新增") ? "新增"
+          : /^(调整|改为|取消|移除)|命名|管理操作/.test(words) ? "调整" : "改进");
+        day.updates.push({ body: label ? body.slice(label[0].length) : body, version, type });
       }
-      return `<div style="font-size:12.5px;color:var(--text-secondary);margin:3px 0;">${esc(line.replace(/\*\*|`/g, ""))}</div>`;
-    }).join("");
+    }
+    return Array.from(days.values()).sort((a, b) => b.date.localeCompare(a.date));
+  }
 
+  async function openChangelogModal() {
+    let dates;
+    try { dates = changelogDates(await callHost("getChangelog")); } catch (_) { dates = []; }
+    const categories = { 新增: "added", 改进: "improved", 修复: "fixed", 调整: "changed" };
+    const summaries = {
+      "2026-11-21": "工作台、网络、Codex 和截图完成集中升级，新增 Antigravity 实时额度。",
+      "2026-11-20": "AI Hub 初版到工作台合并，加入截图、提字与桌面图标收纳。"
+    };
     openModal(`
       <div class="modal-header">
-        <h3>更新日志 · AI Hub</h3>
-        <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
+        <h3>更新日志</h3>
+        ${iconButton("", "关闭更新日志", ICONS.close, { attrs: "data-close-modal" })}
       </div>
-      <div class="modal-body" style="gap:2px;">${htmlLines}</div>
-      <div class="modal-footer">
-        <span style="margin-right:auto;font-size:11.5px;color:var(--text-muted);align-self:center;">源文件：更新日志.md</span>
-        <button class="btn btn-primary" data-close-modal>关闭</button>
-      </div>
-    `, true);
+      <div class="modal-body changelog-timeline">
+        ${dates.length ? dates.map((day, index) => {
+          const [year, month, date] = day.date.split("-");
+          const newest = day.versions[0], oldest = day.versions.at(-1);
+          return `<details class="changelog-day" ${index === 0 ? "open" : ""}>
+            <summary>
+              <span class="changelog-date">${year} 年 ${Number(month)} 月 ${Number(date)} 日</span>
+              <span class="changelog-version">${oldest === newest ? esc(newest) : `${esc(oldest)} → ${esc(newest)}`}</span>
+            </summary>
+            ${summaries[day.date] ? `<p class="changelog-summary">${esc(summaries[day.date])}</p>` : ""}
+            <div class="changelog-entries">${day.updates.map((update) => `<div class="changelog-entry">
+              <span class="changelog-type ${categories[update.type]}">${update.type}</span>
+              <span>${esc(update.body)}</span><small>${esc(update.version)}</small>
+            </div>`).join("")}</div>
+          </details>`;
+        }).join("") : quotaMessage("暂时无法读取更新日志", "quota-error")}
+      </div>`, true);
   }
 
   // ==================== CTRL+K COMMAND PALETTE ====================
@@ -1239,7 +1395,7 @@
     }
     for (const sec of appState.tool_sections || []) {
       for (const it of sec.items || []) {
-        if (it.uninstall_hint === "OpenAI.Codex") continue;
+        if (it.uninstall_hint === "OpenAI.Codex" || it.id === "tool-gemini") continue;
         items.push({
           title: `${it.kind === "url" ? "打开" : "启动"} ${it.name}`,
           sub: it.subtitle || sec.title,
@@ -1248,14 +1404,19 @@
         });
       }
     }
-    for (const cp of appState.chrome_profiles || []) {
-      items.push({
-        title: `打开 Gemini · ${cp.name}`,
-        sub: cp.email || cp.dir,
-        tag: "Chrome",
-        run: () => postAction("launchChromeUrl", { dir: cp.dir, url: "https://gemini.google.com/app" }),
-      });
+    for (const tool of webTools) {
+      for (const cp of appState.chrome_profiles || []) {
+        items.push({
+          title: `打开 ${tool.name} · ${cp.name}`,
+          sub: cp.email || "Google 身份",
+          tag: "AI 工作工具",
+          run: () => postAction("launchChromeUrl", { tool: tool.id, dir: cp.dir }),
+        });
+      }
     }
+    items.push({ title: "AI 录音笔", tag: "全局工具", sub: appState.voice_recorder_hotkey || "", run: () => postAction("startVoiceRecorder") });
+    if (appState.antigravity?.cli_installed)
+      items.push({ title: "刷新 Antigravity 额度", tag: "AI 工作工具", sub: "模型额度", run: () => postAction("refreshAntigravity") });
     items.push({ title: `快捷截图与提字（${appState.screenshot?.hotkey || "Ctrl+Shift+A"}）`, sub: "框选 · 标注 · OCR 提取文字 · 钉在桌面", tag: "工具", run: () => postAction("startScreenshot") });
     items.push({ title: "一键隐藏已收纳的 AI 桌面图标", sub: "移入本地收纳夹，随时可一键恢复", tag: "桌面", run: () => postAction("hideAllDesktopShortcuts", { category: "ai" }) });
     items.push({ title: "恢复全部隐藏的桌面图标", sub: "将收纳夹里的快捷方式放回桌面", tag: "桌面", run: () => postAction("restoreAllDesktopShortcuts") });
@@ -1347,8 +1508,17 @@
     }
   });
 
+  document.addEventListener("change", (event) => {
+    const tool = event.target.dataset.webIdentity;
+    if (!tool) return;
+    setWebIdentity(tool, event.target.value);
+    const email = event.target.closest(".tool-card").querySelector("[data-web-email]");
+    const profile = webIdentity(tool, appState.chrome_profiles || []);
+    if (email) email.textContent = profile?.email || "";
+  });
+
   document.addEventListener("click", (e) => {
-    if (!e.target.closest("#popover-menu") && !e.target.closest('[data-act="openMoreMenu"], [data-act="openNetworkMenu"]')) closePopover();
+    if (!e.target.closest("#popover-menu") && !e.target.closest('[data-act="openMoreMenu"], [data-act="openWorkMore"]')) closePopover();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
     if (e.target === $("#cmdk-backdrop")) return closeCmdk();
 
@@ -1376,7 +1546,10 @@
     else if (act === "refreshUsage") postAction("refreshUsage", { id });
     else if (act === "refreshNetwork") refreshNetwork();
     else if (act === "openNetworkPicker") openNetworkPicker();
-    else if (act === "openNetworkMenu") openNetworkMenu(actBtn);
+    else if (act === "openWorkMore") openWorkMore(actBtn, id);
+    else if (act === "refreshAntigravity") { closePopover(); postAction("refreshAntigravity"); }
+    else if (act === "goManage") { closePopover(); activeTab = "manage"; renderAll(); }
+    else if (act === "copyWorkAddress") { closePopover(); postAction("copyWorkAddress", { tool: id }); }
     else if (["proxyOpen", "proxyRestart", "proxyStop"].includes(act)) {
       closePopover();
       postAction(act);
@@ -1399,8 +1572,11 @@
     else if (act === "restoreAllShortcuts") postAction("restoreAllDesktopShortcuts");
     else if (act === "rescanTools") postAction("rescanTools");
     else if (act === "launchTool") postAction("launchTool", { id });
-    else if (act === "stopTool") postAction("stopTool", { id });
-    else if (act === "launchChrome") postAction("launchChromeUrl", { dir: actBtn.dataset.dir, url: actBtn.dataset.url });
+    else if (act === "stopTool") { closePopover(); postAction("stopTool", { id }); }
+    else if (act === "openWebTool") {
+      const profile = webIdentity(id, appState.chrome_profiles || []);
+      if (profile) postAction("launchChromeUrl", { tool: id, dir: profile.dir });
+    }
     else if (act === "openAddAccount") openAccountModal(null);
     else if (act === "openAddSection") openAddSectionModal();
     else if (act === "openAddTool") openAddToolModal();

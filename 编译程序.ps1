@@ -21,6 +21,7 @@ $sources = @(
     (Join-Path $root '核心源码\核心服务.cs'),
     (Join-Path $root '核心源码\网络通道.cs'),
     (Join-Path $root '核心源码\网络订阅.cs'),
+    (Join-Path $root '核心源码\Antigravity额度.cs'),
     (Join-Path $root '核心源码\桌面图标收纳.cs'),
     (Join-Path $root '核心源码\离线文字识别.cs'),
     (Join-Path $root '核心源码\界面辅助.cs'),
@@ -36,6 +37,8 @@ try {
     "/resource:$ui\index.html,AIHub.Ui.index.html" `
     "/resource:$ui\界面样式.css,AIHub.Ui.界面样式.css" `
     "/resource:$ui\工作台交互.js,AIHub.Ui.工作台交互.js" `
+    "/resource:$ui\gemini.png,AIHub.Ui.gemini.png" `
+    "/resource:$ui\ai-studio.png,AIHub.Ui.ai-studio.png" `
     "/win32icon:$ico" `
     "/win32manifest:$manifest" `
     "/out:$out" `

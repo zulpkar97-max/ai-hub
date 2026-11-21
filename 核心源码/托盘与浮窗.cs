@@ -90,7 +90,7 @@ namespace CodexLauncher
             pBtn.Click += (s, e) => { Close(); onOpenProxy(); };
             stack.Children.Add(pBtn);
 
-            var batchBtn = UiHelpers.MakeMenuRowButton("一键全部退出", null, "warn", true);
+            var batchBtn = UiHelpers.MakeMenuRowButton("一键全部退出", null, "danger", true);
             batchBtn.Click += (s, e) => { Close(); onBatchExit(); };
             stack.Children.Add(batchBtn);
 

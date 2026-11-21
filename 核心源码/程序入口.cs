@@ -18,6 +18,9 @@ namespace CodexLauncher
         [STAThread]
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 2 && args[0] == "--capture-antigravity-quota")
+                return AntigravityQuota.Capture(args[1]);
+
             // The embedded manifest opts in to PerMonitorV2 before any HWND is created.
             AppContext.SetSwitch("Switch.System.Windows.DoNotScaleForDpiChanges", false);
             ConfigureNativeAndManagedLibs();
