@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Hub</title>
+  <link rel="stylesheet" href="界面样式.css" />
+</head>
+<body>
+  <div class="window-frame">
+    <!-- LEFT TRANSLUCENT MICA SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-top drag-region">
+        <div class="brand">
+          <img id="brand-icon" class="brand-icon" src="https://icons.aihub.local/aihub.png" alt="AI Hub" />
+          <div class="brand-meta">
+            <div class="brand-name">AI Hub</div>
+            <div class="brand-sub">本地聚合中枢</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Command Palette Trigger -->
+      <div class="sidebar-search-wrap">
+        <button id="btn-open-cmdk" class="cmdk-trigger" title="快捷搜索或启动 (Ctrl+K)">
+          <span class="cmdk-left">
+            <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span>快速启动...</span>
+          </span>
+          <kbd>Ctrl K</kbd>
+        </button>
+      </div>
+
+      <!-- Clean 2-Item Navigation -->
+      <nav class="nav-list">
+        <button class="nav-item active" data-tab="workspace">
+          <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span class="nav-label">工作台</span>
+          <span id="nav-workspace-dot" class="nav-live-dot hidden"></span>
+        </button>
+        <button class="nav-item" data-tab="manage">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M4 7h10"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17H10"/><circle cx="7" cy="17" r="2.5"/></svg>
+          <span class="nav-label">管理与设置</span>
+        </button>
+      </nav>
+
+      <!-- Bottom Pinned Warning Action & Version -->
+      <div class="sidebar-footer">
+        <button id="btn-batch-exit" class="sidebar-action-btn sidebar-action-warn">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+          <span>一键全部退出</span>
+        </button>
+        <button id="btn-open-changelog" class="sidebar-version-btn">
+          <svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span id="version-label">v5.0 · 更新日志</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- RIGHT PURE WHITE ELEVATED WORKSPACE -->
+    <section class="main-pane">
+      <header class="main-header drag-region">
+        <div class="header-left">
+          <h1 id="view-title">工作台</h1>
+          <span id="view-sub" class="header-sub">正在读取状态...</span>
+        </div>
+        <div class="header-right no-drag">
+          <div id="header-actions" class="header-actions"></div>
+          <div class="win-controls">
+            <button id="win-min" class="win-btn" title="最小化" aria-label="最小化">
+              <svg viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6"/></svg>
+            </button>
+            <button id="win-max" class="win-btn" title="最大化" aria-label="最大化">
+              <svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.2"/></svg>
+            </button>
+            <button id="win-close" class="win-btn win-btn-close" title="关闭" aria-label="关闭">
+              <svg viewBox="0 0 12 12"><line x1="2.5" y1="2.5" x2="9.5" y2="9.5"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="view-content" class="view-content"></main>
+    </section>
+  </div>
+
+  <!-- Ctrl+K Spotlight Command Palette -->
+  <div id="cmdk-backdrop" class="modal-backdrop hidden">
+    <div class="cmdk-dialog">
+      <div class="cmdk-input-row">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="cmdk-input" type="text" placeholder="搜索账号、AI 应用或操作，回车立即执行..." autocomplete="off" />
+        <kbd>ESC</kbd>
+      </div>
+      <div id="cmdk-list" class="cmdk-list"></div>
+    </div>
+  </div>
+
+  <!-- Floating Popover Menu -->
+  <div id="popover-menu" class="popover-menu hidden"></div>
+
+  <!-- Generic Modal Host -->
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div id="modal-dialog" class="modal-dialog"></div>
+  </div>
+
+  <!-- Toast Host -->
+  <div id="toast-host" class="toast-host"></div>
+
+  <script src="工作台交互.js"></script>
+</body>
+</html>

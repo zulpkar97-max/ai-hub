@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.tmp
+*.previous
+*.bak
+CodexLauncher.next.exe
+.vs/
