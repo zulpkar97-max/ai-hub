@@ -32,6 +32,7 @@
     ext: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>',
     crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
     mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
+    ledger: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3"/></svg>',
     chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
   };
@@ -148,7 +149,7 @@
 
   function renderAll() {
     if (!appState) return;
-    $("#version-label").textContent = appState.version || "v5.5.0";
+    $("#version-label").textContent = appState.version || "v5.5.1";
     renderSidebarTools();
 
     const pending = !!appState.pending_update;
@@ -187,8 +188,8 @@
     const shot = appState.screenshot;
     const shotKey = shot?.enabled && shot.registered ? shot.hotkey : "";
     const voiceKey = appState.voice_recorder_hotkey || "";
-    const forms = appState.quick_ledger_forms || [];
-    const key = JSON.stringify([shotKey, voiceKey, forms]);
+    const ledger = appState.quick_ledger_forms?.[0];
+    const key = JSON.stringify([shotKey, voiceKey, ledger]);
     if (key === sidebarToolsKey) return;
     sidebarToolsKey = key;
     $("#sidebar-tools").innerHTML = `
@@ -199,9 +200,9 @@
       <button class="btn btn-paper sidebar-tool" data-act="startVoiceRecorder" title="${esc(voiceKey || "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
         ${ICONS.mic}<span>AI 录音笔</span>${voiceKey ? `<kbd aria-label="${esc(voiceKey)}">${esc(shortcutLabel(voiceKey))}</kbd>` : ""}
       </button>
-      ${forms.length ? `<h3>快速记账</h3><div class="ledger-grid">${forms.map((name) =>
-        `<button class="btn btn-paper ledger-btn" data-act="openLedgerForm" data-id="${esc(name)}" title="${esc(name)}"><span>${esc(name)}</span>${ICONS.ext}</button>`
-      ).join("")}</div>` : ""}`;
+      ${ledger ? `<button class="btn btn-paper sidebar-tool" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
+        ${ICONS.ledger}<span>记账</span><span class="sidebar-tool-external">${ICONS.ext}</span>
+      </button>` : ""}`;
   }
 
   function iconButton(action, label, glyph, { disabled = false, danger = false, spinning = false, attrs = "" } = {}) {
@@ -1278,9 +1279,8 @@
     if (appState.antigravity?.cli_installed)
       items.push({ title: "刷新 Antigravity 额度", tag: "AI 工作工具", sub: "模型额度", run: () => postAction("refreshAntigravity") });
     items.push({ title: `快捷截图与提字（${appState.screenshot?.hotkey || "Ctrl+Shift+A"}）`, sub: "框选 · 标注 · OCR 提取文字 · 钉在桌面", tag: "工具", run: () => postAction("startScreenshot") });
-    for (const name of appState.quick_ledger_forms || []) {
-      items.push({ title: `快速记账 · ${name}`, sub: "飞书表单", tag: "工具", run: () => postAction("openLedgerForm", { id: name }) });
-    }
+    const ledger = appState.quick_ledger_forms?.[0];
+    if (ledger) items.push({ title: "记账", sub: "打开飞书账本", tag: "工具", run: () => postAction("openLedgerForm", { id: ledger }) });
     items.push({ title: "一键隐藏已收纳的 AI 桌面图标", sub: "移入本地收纳夹，随时可一键恢复", tag: "桌面", run: () => postAction("hideAllDesktopShortcuts", { category: "ai" }) });
     items.push({ title: "恢复全部隐藏的桌面图标", sub: "将收纳夹里的快捷方式放回桌面", tag: "桌面", run: () => postAction("restoreAllDesktopShortcuts") });
     items.push({ title: appState.proxy?.running ? "Clash Verge · 打开面板" : "Clash Verge · 启动代理", sub: appState.proxy?.running ? "当前运行中" : "当前未启动", tag: "网络", run: () => postAction("proxyOpen") });

@@ -211,22 +211,17 @@ kbd {
   border-top: var(--border-inner);
 }
 
-.sidebar-tools h2, .sidebar-tools h3 {
+.sidebar-tools h2 {
   margin: 0;
   font-size: 11.5px;
   font-weight: 650;
   color: var(--ink-muted);
 }
 
-.sidebar-tools h3 { margin-top: 4px; }
-.ledger-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-
 .btn.sidebar-tool { justify-content: flex-start; gap: 7px; padding-inline: 8px; }
-.sidebar-tool kbd { margin-inline-start: auto; }
+.sidebar-tool kbd, .sidebar-tool-external { margin-inline-start: auto; }
+.sidebar-tool-external { display: flex; }
 .sidebar-tool.btn-paper:hover:not(:disabled) kbd { color: inherit; }
-
-.btn.ledger-btn { justify-content: space-between; gap: 3px; padding: 5px 6px; font-size: 11.5px; }
-.ledger-btn span { min-width: 0; text-overflow: ellipsis; overflow: hidden; }
 .sidebar-action-btn { width: 100%; flex-shrink: 0; }
 
 .sidebar-version {

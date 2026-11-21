@@ -32,7 +32,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
 }
 ```
 
-侧栏「快捷工具 → 快速记账」和 Ctrl+K 读取本机配置。保存修改后，AI Hub 在下一次状态刷新时更新入口。点击入口会用系统默认浏览器打开飞书。
+侧栏「快捷工具 → 记账」和 Ctrl+K 会用默认浏览器直接打开配置中的首条有效链接。保存修改后，AI Hub 在下一次状态刷新时更新入口。
 
 ## 额度自动刷新
 
