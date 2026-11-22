@@ -66,7 +66,8 @@ namespace CodexLauncher
                 Guid updateToken;
                 bool confirmingUpdate = args != null && args.Length == 2 && args[0] == "--update-ready"
                     && Guid.TryParseExact(args[1], "N", out updateToken);
-                return RunUi(confirmingUpdate ? args[1] : null);
+                bool startMinimized = args != null && Array.Exists(args, a => string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase));
+                return RunUi(confirmingUpdate ? args[1] : null, startMinimized);
             }
         }
 
@@ -93,13 +94,18 @@ namespace CodexLauncher
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static int RunUi(string updateToken)
+        private static int RunUi(string updateToken, bool startMinimized)
         {
             var app = new Application();
             app.ShutdownMode = ShutdownMode.OnMainWindowClose;
             try
             {
-                var win = new MainWindow(updateToken);
+                var win = new MainWindow(updateToken, startMinimized);
+                if (startMinimized)
+                {
+                    win.ShowInTaskbar = false;
+                    win.WindowState = WindowState.Minimized;
+                }
                 app.Run(win);
                 return 0;
             }

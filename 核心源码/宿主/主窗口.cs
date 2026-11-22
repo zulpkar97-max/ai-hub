@@ -67,15 +67,17 @@ namespace CodexLauncher
         private Dictionary<string, byte[]> _uiAssets;
         private readonly string _updateToken;
         private readonly bool _justUpdated;
+        private readonly bool _startMinimized;
         private bool _startingUpdate;
         private FileSystemWatcher _updateWatcher;
         private DispatcherTimer _updateDebounce;
         private bool _waitingPreviewStopForUpdate;
 
-        public MainWindow(string updateToken)
+        public MainWindow(string updateToken, bool startMinimized = false)
         {
             _updateToken = updateToken;
             _justUpdated = !string.IsNullOrEmpty(updateToken);
+            _startMinimized = startMinimized;
             _store = CoreService.LoadStore();
             _quotaAutoRefreshEnabled = _store.settings.quota_auto_refresh;
 
@@ -123,7 +125,14 @@ namespace CodexLauncher
             {
                 _hwnd = new WindowInteropHelper(this).Handle;
                 PositionStartupWindow();
-                WindowState = WindowState.Maximized;
+                if (_startMinimized)
+                {
+                    Hide();
+                }
+                else
+                {
+                    WindowState = WindowState.Maximized;
+                }
                 var src = HwndSource.FromHwnd(_hwnd);
                 if (src != null)
                 {
@@ -373,8 +382,9 @@ namespace CodexLauncher
 
         public void RestoreFromTray()
         {
+            ShowInTaskbar = true;
             Show();
-            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Maximized;
             Activate();
             Topmost = true;
             Topmost = false;

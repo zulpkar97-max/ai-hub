@@ -449,6 +449,8 @@ namespace CodexLauncher
                                 if (data.ContainsKey("screenshot_enabled")) settings.screenshot_enabled = Convert.ToBoolean(data["screenshot_enabled"]);
                                 if (hotkey.Length > 0) settings.screenshot_hotkey = hotkey;
                             });
+                            if (data.ContainsKey("auto_start_silent"))
+                                CoreService.SetAutoStartSilent(Convert.ToBoolean(data["auto_start_silent"]));
                             _settingsRevision++;
                             _quotaAutoRefreshEnabled = _store.settings.quota_auto_refresh;
                             if (data.ContainsKey("quota_auto_refresh") && _store.settings.quota_auto_refresh)
@@ -756,6 +758,136 @@ namespace CodexLauncher
                                 || (parsed.Scheme != Uri.UriSchemeHttps && parsed.Scheme != Uri.UriSchemeHttp))
                                 throw new InvalidOperationException("仓库地址无效。");
                             CoreService.LaunchToolItem(new ToolItem { kind = "url", target = parsed.AbsoluteUri });
+                            break;
+                        }
+
+                    case "openProjectTerminal":
+                        {
+                            string path = AuthParser.GetStr(data, "path") ?? "";
+                            if (!Directory.Exists(path))
+                                throw new InvalidOperationException("本地目录不存在：" + path);
+                            try
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = "wt.exe",
+                                    Arguments = "-d \"" + path + "\"",
+                                    UseShellExecute = true
+                                });
+                            }
+                            catch
+                            {
+                                string ps = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = ps,
+                                    Arguments = "-NoExit",
+                                    WorkingDirectory = path,
+                                    UseShellExecute = true
+                                });
+                            }
+                            break;
+                        }
+
+                    case "openProjectInAi":
+                        {
+                            string path = AuthParser.GetStr(data, "path") ?? "";
+                            string tool = (AuthParser.GetStr(data, "tool") ?? "antigravity").ToLowerInvariant();
+                            if (!Directory.Exists(path))
+                                throw new InvalidOperationException("本地目录不存在：" + path);
+                            if (tool == "codex")
+                            {
+                                Clipboard.SetDataObject(path, true);
+                                var defAcc = _accounts.FirstOrDefault(a => a.IsDefault) ?? _accounts.FirstOrDefault();
+                                if (defAcc != null) CoreService.LaunchProfile(defAcc.Record.id);
+                                SendToastToJs("已打开 Codex 并复制项目路径", false);
+                            }
+                            else
+                            {
+                                var apps = _installedApps.Count > 0 ? _installedApps : CoreService.DiscoverInstalledAiApps();
+                                var ag = apps.FirstOrDefault(t => t != null && (t.id == "tool-antigravity" || (t.name ?? "").IndexOf("Antigravity", StringComparison.OrdinalIgnoreCase) >= 0));
+                                if (ag == null || string.IsNullOrEmpty(ag.target) || !File.Exists(ag.target))
+                                    throw new InvalidOperationException("未检测到 Antigravity 可执行文件。");
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = ag.target,
+                                    Arguments = "\"" + path + "\"",
+                                    WorkingDirectory = path,
+                                    UseShellExecute = true
+                                });
+                                SendToastToJs("已在 Antigravity 中打开项目", false);
+                            }
+                            break;
+                        }
+
+                    case "openDataDir":
+                        {
+                            CoreService.EnsureDirs();
+                            System.Diagnostics.Process.Start("explorer.exe", "\"" + CoreService.DataDir + "\"");
+                            break;
+                        }
+
+                    case "exportBackupJson":
+                        {
+                            using (var dlg = new System.Windows.Forms.SaveFileDialog())
+                            {
+                                dlg.Title = "导出 AI BASE 配置与需求池备份";
+                                dlg.Filter = "JSON 备份文件 (*.json)|*.json";
+                                dlg.FileName = "aibase-backup-" + DateTime.Now.ToString("yyyyMMdd") + ".json";
+                                if (dlg.ShowDialog(new WindowInteropWin32Owner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK)
+                                {
+                                    var payload = new Dictionary<string, object>
+                                    {
+                                        { "exported_at", DateTimeOffset.Now.ToString("o") },
+                                        { "version", CoreService.AppVersion },
+                                        { "settings", _store.settings },
+                                        { "backlog_items", _backlogItems }
+                                    };
+                                    CoreService.WriteTextAtomically(dlg.FileName, Json.Serialize(payload), true);
+                                    SendToastToJs("已导出本地备份", false);
+                                }
+                            }
+                            ReplyJs(reqId, true, null, null);
+                            break;
+                        }
+
+                    case "importBackupJson":
+                        {
+                            using (var dlg = new System.Windows.Forms.OpenFileDialog())
+                            {
+                                dlg.Title = "导入 AI BASE 备份恢复";
+                                dlg.Filter = "JSON 备份文件 (*.json)|*.json";
+                                if (dlg.ShowDialog(new WindowInteropWin32Owner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK)
+                                {
+                                    string raw = File.ReadAllText(dlg.FileName, System.Text.Encoding.UTF8);
+                                    var parsed = Json.Deserialize<Dictionary<string, object>>(raw);
+                                    if (parsed == null) throw new InvalidOperationException("备份文件格式无效。");
+                                    object settingsObj;
+                                    if (parsed.TryGetValue("settings", out settingsObj) && settingsObj is Dictionary<string, object>)
+                                    {
+                                        var sd = (Dictionary<string, object>)settingsObj;
+                                        _store.settings = CoreService.UpdateLauncherSettings(s =>
+                                        {
+                                            if (sd.ContainsKey("minimize_to_tray")) s.minimize_to_tray = Convert.ToBoolean(sd["minimize_to_tray"]);
+                                            if (sd.ContainsKey("expiry_balloon_alert")) s.expiry_balloon_alert = Convert.ToBoolean(sd["expiry_balloon_alert"]);
+                                            if (sd.ContainsKey("quota_auto_refresh")) s.quota_auto_refresh = Convert.ToBoolean(sd["quota_auto_refresh"]);
+                                            if (sd.ContainsKey("screenshot_enabled")) s.screenshot_enabled = Convert.ToBoolean(sd["screenshot_enabled"]);
+                                            if (sd.ContainsKey("screenshot_hotkey") && sd["screenshot_hotkey"] != null) s.screenshot_hotkey = Convert.ToString(sd["screenshot_hotkey"]);
+                                        });
+                                        SyncScreenshotHotkey();
+                                    }
+                                    object blObj;
+                                    if (parsed.TryGetValue("backlog_items", out blObj) && blObj != null)
+                                    {
+                                        var blList = Json.ConvertToType<List<BacklogItem>>(blObj);
+                                        if (blList != null) _backlogItems = BacklogStorage.ReplaceItems(blList);
+                                    }
+                                    PushFullState();
+                                    RefreshAsync(true);
+                                    SendToastToJs("已从备份恢复配置与需求池", false);
+                                }
+                            }
+                            ReplyJs(reqId, true, null, null);
                             break;
                         }
 

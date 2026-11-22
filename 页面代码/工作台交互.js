@@ -65,6 +65,8 @@
     key: gSvg("g-key"),
     bolt: gSvg("g-bolt", "ic ic-xs"),
     node: gSvg("g-node"),
+    term: gSvg("g-term"),
+    workspace: gSvg("g-workspace"),
   };
 
   function esc(str) {
@@ -208,13 +210,20 @@
     const refreshingWorkspace = activeTab === "workspace"
       && ((appState.accounts || []).some((a) => a.usage_loading) || !!appState.antigravity?.loading);
     const headerActions = $("#header-actions");
-    const headerKey = `${activeTab}|${pending}|${refreshingProjects}|${refreshingWorkspace}`;
+    const headerKey = `${activeTab}|${pending}|${refreshingProjects}|${refreshingWorkspace}|${appState.version || ""}`;
     if (headerKey !== headerActions.dataset.key) {
       const parts = [];
       if (activeTab === "workspace") {
         parts.push(`<button type="button" class="btn btn-paper btn-sm${refreshingWorkspace ? " is-spinning" : ""}" data-act="refreshAllQuotas" ${refreshingWorkspace ? "disabled" : ""}>${ICONS.refresh} 刷新全部额度</button>`);
       } else if (activeTab === "projects") {
-        parts.push(iconButton("refreshProjects", "刷新项目 Git 状态", ICONS.refresh, { disabled: refreshingProjects, spinning: refreshingProjects }));
+        parts.push(`<button type="button" class="btn btn-paper btn-sm${refreshingProjects ? " is-spinning" : ""}" data-act="refreshProjects" ${refreshingProjects ? "disabled" : ""}>${ICONS.refresh} 检测 Git</button>`);
+        parts.push(`<button type="button" class="btn btn-dark btn-sm" data-act="openAddProject">${ICONS.plus} 导入项目</button>`);
+      } else if (activeTab === "backlog") {
+        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="exportBacklogMd">导出 MD</button>`);
+        parts.push(`<button type="button" class="btn btn-dark btn-sm" data-act="openAddBacklog">${ICONS.plus} 新建需求</button>`);
+      } else if (activeTab === "manage") {
+        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="openDataDir">${ICONS.folder} 打开数据目录</button>`);
+        if (appState.version) parts.push(`<span class="stamp mono">${esc(appState.version)}</span>`);
       }
       if (pending) {
         parts.push('<button class="btn btn-mint btn-sm" data-act="applyLocalUpdate">重启应用更新</button>');
@@ -769,63 +778,40 @@
     alert.querySelector("span").textContent = shot.error || "";
 
     const byId = new Map(shortcuts.map((shortcut) => [shortcut.id, shortcut]));
-    for (const input of view.querySelectorAll("[data-stash-id]")) {
-      const hidden = !!byId.get(input.dataset.stashId)?.hidden;
-      input.checked = hidden;
-      const label = input.closest(".stash-right").querySelector(".stash-state");
-      label.classList.toggle("hidden-on", hidden);
-      label.textContent = hidden ? "已隐藏" : "桌面显示中";
+    for (const seg of view.querySelectorAll("[data-stash-seg]")) {
+      const hidden = !!byId.get(seg.dataset.stashSeg)?.hidden;
+      for (const btn of seg.querySelectorAll("[data-act='setDesktopShortcutHidden']")) {
+        const active = (btn.dataset.hidden === "true") === hidden;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-pressed", String(active));
+      }
     }
     const hiddenCount = shortcuts.filter((shortcut) => shortcut.hidden).length;
-    view.querySelector("#stash-count").textContent = `已隐藏 ${hiddenCount}/${shortcuts.length}`;
-    view.querySelector('[data-act="hideAllAiShortcuts"]').disabled = !shortcuts.some((shortcut) => shortcut.category === "ai" && !shortcut.hidden);
+    const aiShortcuts = shortcuts.filter((shortcut) => shortcut.category === "ai");
+    const aiHiddenCount = aiShortcuts.filter((shortcut) => shortcut.hidden).length;
+    view.querySelector("#stash-count").textContent = `已收纳 ${hiddenCount}/${shortcuts.length}`;
+    const hideAllBtn = view.querySelector('[data-act="hideAllAiShortcuts"]');
+    const allAiHidden = aiShortcuts.length > 0 && aiHiddenCount === aiShortcuts.length;
+    hideAllBtn.disabled = allAiHidden || aiShortcuts.length === 0;
+    hideAllBtn.textContent = allAiHidden ? `AI 图标已全收纳 (${aiHiddenCount}/${aiShortcuts.length})` : "一键收纳 AI 图标";
     view.querySelector('[data-act="restoreAllShortcuts"]').disabled = hiddenCount === 0;
+    const customBtn = view.querySelector("#custom-hotkey-btn");
+    if (customBtn && !customBtn.classList.contains("is-recording")) {
+      const isPreset = ["Ctrl+Shift+A", "Alt+A", "Ctrl+Alt+A", "F1"].includes(shot.hotkey);
+      customBtn.classList.toggle("active", !isPreset && !!shot.hotkey);
+      customBtn.textContent = !isPreset && shot.hotkey ? shot.hotkey : "自定义…";
+    }
   }
 
   // ==================== PROJECTS PAGE ====================
 
   function projectVisualTheme(item) {
     const key = `${item.name || ""} ${item.folder_name || ""}`.toLowerCase();
-    if (key.includes("ai hub") || key.includes("ai-hub")) {
-      return {
-        headTone: "mint",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 17.5h7M17.5 14v7"/></svg>',
-      };
-    }
-    if (key.includes("astra") || key.includes("unknown")) {
-      return {
-        headTone: "sky",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="15" y="4" width="5" height="5"/><rect x="9.5" y="15" width="5" height="5"/><path d="M9 6.5h6M6.5 9l4 6M17.5 9l-4 6"/></svg>',
-      };
-    }
-    if (key.includes("留学") || key.includes("study")) {
-      return {
-        headTone: "sand",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M6 10.5V16c0 1.8 2.7 3.5 6 3.5s6-1.7 6-3.5v-5.5"/><path d="M21 9v6"/></svg>',
-      };
-    }
-    if (key.includes("runtime")) {
-      return {
-        headTone: "stone",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="m8 9 3 3-3 3M13 15h3"/></svg>',
-      };
-    }
-    if (key.includes("portfolio")) {
-      return {
-        headTone: "lav",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M9 9v11"/></svg>',
-      };
-    }
-    if (key.includes("ledger") || key.includes("life")) {
-      return {
-        headTone: "sand",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18"/><path d="M8 3v18M12 8h4M12 12h4M12 16h2.5"/></svg>',
-      };
-    }
-    return {
-      headTone: "sand",
-      svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3Z"/></svg>',
-    };
+    if (key.includes("ai hub") || key.includes("ai-hub") || key.includes("ai base")) return { svg: ICONS.workspace };
+    if (key.includes("astra") || key.includes("unknown")) return { svg: ICONS.node };
+    if (key.includes("runtime")) return { svg: ICONS.term };
+    if (key.includes("ledger") || key.includes("life")) return { svg: ICONS.ledger };
+    return { svg: ICONS.folder };
   }
 
   function compactPathLabel(fullPath) {
@@ -837,74 +823,66 @@
 
   function renderProjectCardsHtml(items) {
     if (items.length === 0) {
-      return '<section class="surface-card block"><div class="backlog-empty">暂无登记项目，可让 AI 助手添加到本地项目列表。</div></section>';
+      return '<section class="surface-card block"><div class="backlog-empty">暂无登记项目，点击右上角「+ 导入项目」添加到本地列表。</div></section>';
     }
     return `<div class="projects-grid">${items.map((item) => {
       const theme = projectVisualTheme(item);
-
-      let stampClass = "stone";
-      let stampText = "普通目录";
+      const isDefaultBranch = item.branch === "main" || item.branch === "master";
+      let statusMeta = "";
       if (!item.exists) {
-        stampClass = "coral";
-        stampText = "路径缺失";
+        statusMeta = `<span class="stamp coral">路径缺失</span>`;
       } else if (item.is_git) {
         if (item.dirty_count > 0) {
-          stampClass = "sand";
-          stampText = `${item.dirty_count} 处改动`;
+          statusMeta = `<span class="stamp sand"><span class="dot-warn-sq"></span>${item.dirty_count} 处改动</span>`;
+        } else if (!isDefaultBranch && item.branch) {
+          statusMeta = `<span class="stamp mono">${esc(item.branch)}</span><span class="project-clean-meta">· 干净</span>`;
         } else {
-          stampClass = "mint";
-          stampText = "干净";
+          statusMeta = `<span class="project-clean-meta mono">${esc(item.branch || "main")} · 干净</span>`;
         }
+      } else {
+        statusMeta = `<span class="project-clean-meta">本地目录</span>`;
       }
 
-      const branchTag = item.is_git
-        ? `<span class="stamp mono">${esc(item.branch || "HEAD")}</span>`
-        : '<span class="stamp stone">本地目录</span>';
-      const portTag = item.preview_port
-        ? `<span class="stamp mono">:${esc(item.preview_port)}</span>`
-        : "";
       const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
-
       const previewState = appState.project_previews?.[item.id];
       const previewBusy = previewState === "busy";
       const previewRunning = previewState === "running";
-      const previewTip = item.preview_port ? "本地预览 · 端口 " + item.preview_port : "运行项目的启动预览脚本";
+      const portSuffix = item.preview_port ? ` :${item.preview_port}` : "";
       const previewBtn = item.has_preview
-        ? `<button class="btn ${previewRunning ? "btn-mint" : "btn-dark"} btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" title="${esc(previewTip)}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : ICONS.play}<span>${previewBusy ? "处理中" : previewRunning ? "● 预览中 · 打开" : "启动预览"}</span></button>`
+        ? `<button class="btn ${previewRunning ? "btn-focus" : "btn-dark"} btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" data-tip="${esc(item.preview_port ? "本地预览 · 端口 " + item.preview_port : "运行启动预览脚本")}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : (previewRunning ? '<span class="dot-ok-sq" aria-hidden="true"></span>' : ICONS.play)}<span>${previewBusy ? "处理中" : previewRunning ? `${portSuffix.trim() || "预览中"} 打开` : `启动${portSuffix || "预览"}`}</span></button>`
         : ((item.is_self || item.id === "prj-ai-hub" || String(item.folder_name || "").toLowerCase() === "ai-hub")
-          ? '<span class="btn btn-mint btn-sm project-self-pill" title="当前正在运行的桌面软件本体"><span class="status-dot running" aria-hidden="true"></span><span>本体运行中</span></span>'
+          ? '<span class="stamp mint project-self-pill" data-tip="当前正在运行的桌面软件本体"><span class="dot-ok-sq" aria-hidden="true"></span><span>本体运行中</span></span>'
           : "");
       const stopPreviewBtn = previewRunning
-        ? `<button class="btn btn-flat danger btn-sm project-stop-preview" data-act="stopProjectPreview" data-id="${esc(item.id)}" title="停止预览" aria-label="停止 ${esc(item.name)} 预览"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10"/></svg></button>`
+        ? `<span class="v-sep" aria-hidden="true"></span>` + iconButton("stopProjectPreview", "停止预览", ICONS.power, { danger: true, attrs: `data-id="${esc(item.id)}"` })
         : "";
       const remoteBtn = item.remote_url
-        ? iconButton("openProjectRemote", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-url="${esc(item.remote_url)}"` })
+        ? iconButton("openProjectRemote", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-url="${esc(item.remote_url)}" data-tip="打开 GitHub 仓库"` })
         : "";
 
       return `<article class="project-card block" data-project-id="${esc(item.id)}">
-        <header class="project-card-head block-head ${theme.headTone}" title="按住卡头可拖动排序">
+        <header class="project-card-head block-head" title="按住卡头可拖动排序">
           <div class="project-card-lead">
+            <span class="head-bar" aria-hidden="true"></span>
             <div class="project-emblem">${theme.svg}</div>
             <div class="project-head-meta">
               <div class="project-name-row">
                 <span class="project-name" title="${esc(item.name)}">${esc(item.name)}</span>
-                ${branchTag}
+                ${statusMeta}
               </div>
             </div>
           </div>
           <div class="project-head-actions">
-            ${portTag}
-            <span class="stamp ${stampClass}">${esc(stampText)}</span>
-            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(item.name)} 的顺序" title="按住拖动，或聚焦后用方向键排序"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="square"/></svg></button>
+            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(item.name)} 的顺序" data-tip="拖动或方向键排序"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="square"/></svg></button>
           </div>
         </header>
 
         <div class="project-card-body">
           <p class="project-desc" title="${esc(descText)}">${esc(descText)}</p>
-          <div class="path-strip" title="${esc(item.path)}">
+          <button type="button" class="path-strip-btn" data-act="copyProjectPath" data-path="${esc(item.path)}" data-tip="点击复制完整路径：${esc(item.path)}">
             <span class="project-path mono">${esc(compactPathLabel(item.path))}</span>
-            <button type="button" class="btn btn-flat btn-xs" data-act="copyProjectPath" data-path="${esc(item.path)}" title="复制完整路径">复制</button>
-          </div>
+            <span class="path-copy-hint">复制</span>
+          </button>
         </div>
 
         <footer class="project-card-foot">
@@ -913,9 +891,11 @@
             ${stopPreviewBtn}
           </div>
           <div class="project-foot-right">
-            ${iconButton("openProjectFolder", "打开文件夹", ICONS.folder, { attrs: `data-path="${esc(item.path)}"` })}
+            ${iconButton("openProjectFolder", "打开目录", ICONS.folder, { attrs: `data-path="${esc(item.path)}" data-tip="打开文件夹"` })}
+            ${iconButton("openProjectTerminal", "打开终端", ICONS.term, { attrs: `data-path="${esc(item.path)}" data-tip="在此目录打开终端"` })}
+            ${iconButton("openProjectInAi", "用 Antigravity 打开", ICONS.bolt, { attrs: `data-path="${esc(item.path)}" data-tool="antigravity" data-tip="用 Antigravity 打开此项目"` })}
             ${remoteBtn}
-            ${iconButton("editProjectItem", "编辑项目名称与介绍", ICONS.edit, { attrs: `data-id="${esc(item.id)}" data-path="${esc(item.path)}"` })}
+            ${iconButton("editProjectItem", "编辑项目", ICONS.edit, { attrs: `data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-tip="编辑项目名称与介绍"` })}
           </div>
         </footer>
       </article>`;
@@ -1215,46 +1195,88 @@
       });
   }
 
+  function renderBacklogNotesHtml(item) {
+    const raw = String(item.notes || "");
+    if (!raw.trim()) {
+      return {
+        progressBadge: "",
+        bodyHtml: `<p class="backlog-notes">暂无详细说明，点击右上角「编辑」补充讨论要点。</p>`,
+      };
+    }
+    const lines = raw.split(/\r?\n/);
+    const checkItems = [];
+    const proseLines = [];
+    lines.forEach((line, idx) => {
+      const m = line.match(/^\s*-\s+(?:\[( |x|X)\]\s+)?(.*)$/);
+      if (m) {
+        checkItems.push({ idx, checked: (m[1] || "").toLowerCase() === "x", text: m[2] });
+      } else {
+        proseLines.push(line);
+      }
+    });
+    const doneCnt = checkItems.filter((c) => c.checked).length;
+    const progressBadge = checkItems.length
+      ? `<span class="stamp ${doneCnt === checkItems.length ? "mint" : "stone"} mono">${doneCnt}/${checkItems.length}</span>`
+      : "";
+    const checklistHtml = checkItems.length
+      ? `<div class="bl-checklist">${checkItems.map((c) => `
+          <label class="bl-check-item${c.checked ? " is-checked" : ""}">
+            <input type="checkbox" data-act="toggleBacklogCheck" data-id="${esc(item.id)}" data-line="${c.idx}" ${c.checked ? "checked" : ""} />
+            <span>${esc(c.text)}</span>
+          </label>`).join("")}</div>`
+      : "";
+    const prose = proseLines.join("\n").trim();
+    const proseHtml = prose ? `<p class="backlog-notes">${esc(prose)}</p>` : "";
+    return { progressBadge, bodyHtml: checklistHtml + proseHtml };
+  }
+
   function renderBacklogSplitHtml(filtered) {
     if (filtered.length === 0) {
       return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
     }
     const sel = filtered.find((it) => it.id === selectedBacklogId) || filtered[0];
     selectedBacklogId = sel.id;
-    const selStatus = backlogStatusMeta(sel.status);
     const selPrio = BACKLOG_PRIORITIES[sel.priority] || BACKLOG_PRIORITIES.medium;
     const statusOpts = BACKLOG_STATUSES.map((st) =>
       `<option value="${st.id}"${sel.status === st.id ? " selected" : ""}>${st.label}</option>`
     ).join("");
+    const notesRendered = renderBacklogNotesHtml(sel);
 
     const groups = [
-      { title: "进行中", tone: "mint", list: filtered.filter((it) => it.status === "doing") },
-      { title: "已排期", tone: "sky", list: filtered.filter((it) => it.status === "planned") },
-      { title: "构思中", tone: "sand", list: filtered.filter((it) => it.status === "idea") },
-      { title: "搁置 & 已完成", tone: "stone", list: filtered.filter((it) => it.status === "paused" || it.status === "done") },
+      { id: "doing", title: "进行中", dot: "var(--ok-fill)", list: filtered.filter((it) => it.status === "doing"), merged: false },
+      { id: "planned", title: "已排期", dot: "var(--ink)", list: filtered.filter((it) => it.status === "planned"), merged: false },
+      { id: "idea", title: "构思中", dot: "var(--warn-fill)", list: filtered.filter((it) => it.status === "idea"), merged: false },
+      { id: "closed", title: "搁置 & 已完成", dot: "#9C988F", list: filtered.filter((it) => it.status === "paused" || it.status === "done"), merged: true },
     ];
 
     return `<div class="cp-split">
       <section class="block cp-split-list">
         <div class="block-head white">
-          <span>需求清单（点击查看右侧完整详情）</span>
+          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>需求清单</span></span>
           <span class="stamp mono">${filtered.length} 条</span>
         </div>
         <div class="cp-list-scroll">
           ${groups.filter((g) => g.list.length > 0).map((g) => `
-            <div class="cp-grp-hdr ${g.tone}">
-              <span>${g.title}</span><span class="mono">${g.list.length}</span>
+            <div class="cp-grp-hdr">
+              <span class="cp-grp-lead"><span style="width:6px;height:6px;background:${g.dot};display:inline-block;"></span><span>${g.title}</span></span>
+              <span class="mono">${g.list.length}</span>
             </div>
             ${g.list.map((it) => {
               const pr = BACKLOG_PRIORITIES[it.priority] || BACKLOG_PRIORITIES.medium;
               const st = backlogStatusMeta(it.status);
+              const dateShort = it.updated_at ? fmtDate(it.updated_at, true).split(" ")[0] : "";
+              const advNext = it.status === "idea" ? "planned" : (it.status === "planned" ? "doing" : (it.status === "doing" ? "done" : ""));
+              const advLabel = advNext === "planned" ? "→ 排期" : (advNext === "doing" ? "→ 进行中" : (advNext === "done" ? "✓ 完成" : ""));
               return `<div class="cp-row${it.id === sel.id ? " selected" : ""}${it.status === "done" ? " is-done" : ""}" data-act="selectBacklogItem" data-id="${esc(it.id)}">
                 <div class="cp-row-main">
                   <span class="stamp ${pr.cls}">${pr.label}</span>
                   <span class="stamp stone">${esc(it.project || "通用")}</span>
                   <span class="cp-row-title" title="${esc(it.title)}">${esc(it.title)}</span>
                 </div>
-                <span class="stamp ${st.tone}">${st.label}</span>
+                <div class="cp-row-right">
+                  ${g.merged ? `<span class="stamp ${st.tone}">${st.label}</span>` : `<span class="cp-row-date mono${advNext ? " can-hide" : ""}">${esc(dateShort)}</span>`}
+                  ${advNext ? `<button type="button" class="cp-quick-adv" data-act="quickAdvanceBacklog" data-id="${esc(it.id)}" data-next="${advNext}">${advLabel}</button>` : ""}
+                </div>
               </div>`;
             }).join("")}
           `).join("")}
@@ -1262,12 +1284,12 @@
       </section>
 
       <aside class="block cp-split-detail">
-        <div class="block-head ${selStatus.tone}">
-          <span class="mono">DETAIL · ${esc(sel.project || "通用")}</span>
+        <div class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
+          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>详情 · ${esc(sel.project || "通用")}</span></span>
           <div class="cp-detail-actions">
-            <button type="button" class="btn btn-flat btn-xs" data-act="copyBacklogPrompt" data-id="${esc(sel.id)}">复制</button>
+            <button type="button" class="btn btn-primary btn-xs" data-act="copyBacklogPrompt" data-id="${esc(sel.id)}" data-tip="打包项目路径与详细说明为 AI Prompt">复制 Prompt</button>
             <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(sel.id)}">编辑</button>
-            <button type="button" class="btn btn-flat danger btn-xs" data-act="confirmDeleteBacklog" data-id="${esc(sel.id)}">删除</button>
+            <button type="button" class="btn btn-flat danger btn-xs" data-act="armDeleteBacklog" data-id="${esc(sel.id)}">删除</button>
           </div>
         </div>
         <div class="cp-detail-body">
@@ -1275,23 +1297,28 @@
           <div class="slot cp-detail-kv">
             <div>
               <div class="cp-kv-label">归属项目</div>
-              <strong>${esc(sel.project || "通用")}</strong>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <button type="button" class="kv-pill-btn" data-act="openBacklogProjectMenu" data-id="${esc(sel.id)}" data-tip="点击切换归属项目">${esc(sel.project || "通用")} ${ICONS.chevronDown}</button>
+                <button type="button" class="btn btn-flat btn-xs" data-act="jumpToProject" data-project="${esc(sel.project || "")}" data-tip="跳转到项目页">${ICONS.ext}</button>
+              </div>
             </div>
             <div>
               <div class="cp-kv-label">当前状态（实时切换）</div>
               <select class="sel" data-backlog-status="${esc(sel.id)}" aria-label="修改状态">${statusOpts}</select>
             </div>
             <div>
-              <div class="cp-kv-label">优先级</div>
-              <span class="stamp ${selPrio.cls}">${selPrio.label}优先级</span>
+              <div class="cp-kv-label">优先级（点击切换）</div>
+              <button type="button" class="kv-pill-btn" data-act="openBacklogPriorityMenu" data-id="${esc(sel.id)}" data-tip="点击快速切换优先级">
+                <span class="stamp ${selPrio.cls}">${selPrio.label}优先级</span>${ICONS.chevronDown}
+              </button>
             </div>
             <div>
               <div class="cp-kv-label">时间记录</div>
-              <span class="mono cp-kv-time" title="创建 ${esc(fmtDate(sel.created_at))}">更新 ${esc(fmtDate(sel.updated_at, true))}</span>
+              <span class="mono cp-kv-time" data-tip="创建 ${esc(fmtDate(sel.created_at))}">更新 ${esc(fmtDate(sel.updated_at, true))}</span>
             </div>
           </div>
-          <div class="cp-detail-sec">详细说明</div>
-          <p class="backlog-notes">${esc(sel.notes || "暂无详细说明，点击右上角「编辑」补充讨论要点。")}</p>
+          <div class="cp-detail-sec" style="display:flex;align-items:center;gap:8px;"><span>详细说明</span>${notesRendered.progressBadge}</div>
+          ${notesRendered.bodyHtml}
         </div>
       </aside>
     </div>`;
@@ -1302,26 +1329,26 @@
       return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
     }
     const cols = [
-      { title: "进行中", tone: "mint", items: filtered.filter((it) => it.status === "doing") },
-      { title: "已排期", tone: "sky", items: filtered.filter((it) => it.status === "planned") },
-      { title: "构思中", tone: "sand", items: filtered.filter((it) => it.status === "idea") },
-      { title: "搁置 & 已完成", tone: "stone", items: filtered.filter((it) => it.status === "paused" || it.status === "done") },
+      { id: "doing", title: "进行中", items: filtered.filter((it) => it.status === "doing") },
+      { id: "planned", title: "已排期", items: filtered.filter((it) => it.status === "planned") },
+      { id: "idea", title: "构思中", items: filtered.filter((it) => it.status === "idea") },
+      { id: "done", title: "搁置 & 已完成", items: filtered.filter((it) => it.status === "paused" || it.status === "done") },
     ];
     return `<div class="kanban-4">${cols.map((col) => `
-      <section class="block kanban-col">
-        <header class="block-head ${col.tone}">
-          <span>${col.title}</span>
+      <section class="block kanban-col" data-kanban-status="${col.id}">
+        <header class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
+          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>${col.title}</span></span>
           <span class="stamp mono">${col.items.length}</span>
         </header>
         <div class="kanban-cards">
           ${col.items.length === 0
-            ? '<div class="kanban-empty">暂无记录</div>'
+            ? '<div class="kanban-empty">拖入卡片到此处</div>'
             : col.items.map((item) => {
                 const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
                 const statusOpts = BACKLOG_STATUSES.map((st) =>
                   `<option value="${st.id}"${item.status === st.id ? " selected" : ""}>${st.label}</option>`
                 ).join("");
-                return `<article class="kcard${item.status === "done" ? " is-done" : ""}" data-backlog-id="${esc(item.id)}">
+                return `<article class="kcard${item.status === "done" ? " is-done" : ""}" draggable="true" data-backlog-id="${esc(item.id)}">
                   <div class="kcard-top">
                     <div class="kcard-tags">
                       <span class="stamp ${prio.cls}">${prio.label}</span>
@@ -1334,9 +1361,9 @@
                   <div class="kcard-foot">
                     <span class="mono kcard-date">${esc(fmtDate(item.updated_at, true))}</span>
                     <div class="kcard-actions">
-                      <button type="button" class="btn btn-flat btn-xs" data-act="copyBacklogPrompt" data-id="${esc(item.id)}">复制</button>
+                      <button type="button" class="btn btn-flat btn-xs" data-act="copyBacklogPrompt" data-id="${esc(item.id)}">Prompt</button>
                       <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(item.id)}">编辑</button>
-                      <button type="button" class="btn btn-flat danger btn-xs" data-act="confirmDeleteBacklog" data-id="${esc(item.id)}">删</button>
+                      <button type="button" class="btn btn-flat danger btn-xs" data-act="armDeleteBacklog" data-id="${esc(item.id)}">删</button>
                     </div>
                   </div>
                 </article>`;
@@ -1375,7 +1402,8 @@
 
     const pillTabs = ["all", ...BACKLOG_PROJECTS].map((p) => {
       const label = p === "all" ? "全部" : p;
-      return `<button type="button" class="seg-btn${backlogProject === p ? " active-sand" : ""}" data-act="filterBacklogProject" data-project="${esc(p)}">${esc(label)} <span class="mono">${counts[p] || 0}</span></button>`;
+      const cnt = counts[p] || 0;
+      return `<button type="button" class="bl-proj-tab${backlogProject === p ? " active" : ""}${cnt === 0 && p !== "all" ? " is-zero" : ""}" data-act="filterBacklogProject" data-project="${esc(p)}">${esc(label)} <span class="mono">${cnt}</span></button>`;
     }).join("");
 
     const statusFilterOpts = [
@@ -1387,16 +1415,14 @@
       <section class="bl-toolbar">
         <div class="backlog-filters">
           <div class="seg" role="group" aria-label="视图切换">
-            <button type="button" class="seg-btn${backlogViewMode === "split" ? " active" : ""}" data-act="setBacklogView" data-mode="split">▤ 清单详情</button>
-            <button type="button" class="seg-btn${backlogViewMode === "kanban" ? " active" : ""}" data-act="setBacklogView" data-mode="kanban">▥ 四列看板</button>
+            <button type="button" class="seg-btn${backlogViewMode === "split" ? " active" : ""}" data-act="setBacklogView" data-mode="split">${ICONS.changelog}<span>清单详情</span></button>
+            <button type="button" class="seg-btn${backlogViewMode === "kanban" ? " active" : ""}" data-act="setBacklogView" data-mode="kanban">${ICONS.workspace}<span>四列看板</span></button>
           </div>
-          <div class="seg" role="group" aria-label="项目筛选">${pillTabs}</div>
-          <select id="backlog-filter-status" class="sel backlog-status-select" aria-label="按状态筛选">${statusFilterOpts}</select>
-          <input id="backlog-search" class="backlog-search" type="text" placeholder="搜索需求或备注..." value="${esc(backlogQuery)}" />
+          <div class="bl-proj-tabs" role="group" aria-label="项目筛选">${pillTabs}</div>
         </div>
         <div class="backlog-actions">
-          <button class="btn btn-sm" data-act="exportBacklogMd"${filtered.length ? "" : " disabled"}>导出 MD</button>
-          <button class="btn btn-dark btn-sm" data-act="openAddBacklog">${ICONS.plus}<span>新建需求</span></button>
+          <select id="backlog-filter-status" class="sel backlog-status-select" aria-label="按状态筛选">${statusFilterOpts}</select>
+          <input id="backlog-search" class="backlog-search" type="text" placeholder="按 / 搜索需求..." value="${esc(backlogQuery)}" />
         </div>
       </section>
       <div id="backlog-list-card">${renderBacklogListHtml(filtered)}</div>
@@ -1463,20 +1489,37 @@
     });
   }
 
+  function resolveBacklogRepoPath(projectLabel) {
+    const p = String(projectLabel || "").toLowerCase();
+    if (!p || p === "通用") return "";
+    const projects = appState?.projects || [];
+    const hit = projects.find((it) => {
+      const n = String(it.name || "").toLowerCase();
+      const f = String(it.folder_name || "").toLowerCase();
+      if (n === p || f === p) return true;
+      if ((p === "ai hub" || p === "ai base") && (f === "ai-hub" || n.includes("ai hub"))) return true;
+      if (p === "life hub" && (f === "life-hub" || n.includes("life"))) return true;
+      return false;
+    });
+    return hit?.path || "";
+  }
+
   async function copyBacklogPrompt(item) {
     if (!item) return;
     const statusLabel = BACKLOG_STATUSES.find((s) => s.id === item.status)?.label || item.status;
     const prioLabel = BACKLOG_PRIORITIES[item.priority]?.label || "中";
+    const repoPath = resolveBacklogRepoPath(item.project);
     const promptText = [
-      `请帮我推进以下需求：`,
+      `请帮我推进以下开发需求：`,
       `- 项目归属：${item.project || "通用"}`,
+      repoPath ? `- 本地仓库路径：${repoPath}` : "",
       `- 需求标题：${item.title}`,
       `- 当前状态：${statusLabel}（优先级：${prioLabel}）`,
       item.notes ? `- 详细说明：\n${item.notes}` : "",
     ].filter(Boolean).join("\n");
     try {
       await callHost("copyText", { text: promptText });
-      showToast("已复制需求描述，可直接粘贴给 AI");
+      showToast("已复制 AI 开发 Prompt，可直接粘贴给 Codex / Antigravity");
     } catch (err) {
       showToast(err.message, true);
     }
@@ -1519,10 +1562,11 @@
     view.dataset.page = "manage";
 
     const hotkeyPresets = ["Ctrl+Shift+A", "Alt+A", "Ctrl+Alt+A", "F1"];
+    const isPresetHk = hotkeyPresets.includes(shot.hotkey);
     const hotkeyPills = hotkeyPresets.map((value) =>
       `<button class="hotkey-pill${shot.hotkey === value ? " active" : ""}" data-act="setScreenshotHotkey"
         data-hk="${value}" aria-pressed="${shot.hotkey === value}">${value}</button>`
-    ).join("");
+    ).join("") + `<button type="button" id="custom-hotkey-btn" class="hotkey-pill${!isPresetHk && shot.hotkey ? " active" : ""}" data-act="startCustomHotkeyRecord">${!isPresetHk && shot.hotkey ? esc(shot.hotkey) : "自定义…"}</button>`;
     const stashRows = shortcuts.map((sc) => `
       <div class="stash-row">
         <div class="stash-meta">
@@ -1530,11 +1574,10 @@
           <span class="stamp stone">${sc.requires_admin ? "公共桌面 · 需提权" : "个人桌面"}</span>
         </div>
         <div class="stash-right">
-          <span class="stash-state ${sc.hidden ? "hidden-on" : ""}">${sc.hidden ? "已隐藏" : "桌面显示中"}</span>
-          <label class="toggle">
-            <input type="checkbox" data-stash-id="${esc(sc.id)}" aria-label="收纳 ${esc(sc.name)}" ${sc.hidden ? "checked" : ""} />
-            <span class="toggle-track"></span><span class="toggle-thumb"></span>
-          </label>
+          <div class="stash-seg" data-stash-seg="${esc(sc.id)}" role="group" aria-label="收纳 ${esc(sc.name)}">
+            <button type="button" class="stash-seg-btn${!sc.hidden ? " is-active" : ""}" data-act="setDesktopShortcutHidden" data-id="${esc(sc.id)}" data-hidden="false" aria-pressed="${!sc.hidden}">显示</button>
+            <button type="button" class="stash-seg-btn${sc.hidden ? " is-active" : ""}" data-act="setDesktopShortcutHidden" data-id="${esc(sc.id)}" data-hidden="true" aria-pressed="${!!sc.hidden}">收纳</button>
+          </div>
         </div>
       </div>`).join("");
     const uninstallRows = apps.map((app) => `
@@ -1550,9 +1593,10 @@
       <section class="settings-group" aria-labelledby="settings-hotkeys">
         <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
         <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head sand">
+          <header class="settings-card-banner block-head">
             <div class="settings-banner-lead">
-              <div class="settings-emblem"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg></div>
+              <span class="head-bar" aria-hidden="true"></span>
+              <div class="settings-emblem">${ICONS.key}</div>
               <h3 class="settings-banner-title">热键与状态提醒</h3>
             </div>
             <span id="settings-hotkey-status" class="stamp"></span>
@@ -1561,6 +1605,7 @@
             <div class="setting-label">全局截图快捷键</div>
             <div class="setting-actions">
               <div class="hotkey-pills">${hotkeyPills}</div>
+              <span class="v-sep" aria-hidden="true"></span>
               ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
             </div>
           </div>
@@ -1581,14 +1626,15 @@
       <section class="settings-group" aria-labelledby="settings-apps">
         <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
         <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head mint">
+          <header class="settings-card-banner block-head">
             <div class="settings-banner-lead">
+              <span class="head-bar" aria-hidden="true"></span>
               <div class="settings-emblem">${ICONS.folder}</div>
               <h3 class="settings-banner-title">桌面图标收纳</h3>
               <span id="stash-count" class="stamp"></span>
             </div>
             <div class="setting-actions">
-              <button class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键隐藏 AI 图标</button>
+              <button class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键收纳 AI 图标</button>
               <button class="btn btn-flat btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
               ${settingsDisclosure("stash-details", "展开明细")}
             </div>
@@ -1599,8 +1645,9 @@
           `)}
         </div>
         <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head sky">
+          <header class="settings-card-banner block-head">
             <div class="settings-banner-lead">
+              <span class="head-bar" aria-hidden="true"></span>
               <div class="settings-emblem">${ICONS.trash}</div>
               <h3 class="settings-banner-title">软件卸载</h3>
               <span class="stamp">已检测 ${apps.length} 个</span>
@@ -1616,16 +1663,30 @@
       <section class="settings-group" aria-labelledby="settings-system">
         <h2 id="settings-system" class="settings-heading">系统与窗口</h2>
         <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head stone">
+          <header class="settings-card-banner block-head">
             <div class="settings-banner-lead">
+              <span class="head-bar" aria-hidden="true"></span>
               <div class="settings-emblem">${ICONS.monitor}</div>
-              <h3 class="settings-banner-title">常驻与托盘行为</h3>
+              <h3 class="settings-banner-title">常驻、自启与备份</h3>
             </div>
           </header>
+          <div class="setting-row">
+            <div><div class="setting-label">开机静默启动到托盘</div>
+              <div class="group-sub">开机后直接后台常驻系统托盘，随时响应全局截图与快速唤起。</div></div>
+            ${settingSwitch("auto_start_silent", "开机静默启动到托盘", settings.auto_start_silent)}
+          </div>
           <div class="setting-row">
             <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
               <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
             ${settingSwitch("minimize_to_tray", "关闭窗口时缩到系统托盘", settings.minimize_to_tray)}
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">配置与需求池本地备份</div>
+              <div class="group-sub">导出或恢复设置与需求池记录（不含账号登录态与密钥）。</div></div>
+            <div class="setting-actions">
+              <button type="button" class="btn btn-paper btn-sm" data-act="exportBackupJson">导出 JSON 备份</button>
+              <button type="button" class="btn btn-flat btn-sm" data-act="importBackupJson">导入恢复</button>
+            </div>
           </div>
         </div>
       </section>
@@ -2389,19 +2450,35 @@
       const [y, m, d] = iso.split("-");
       return `${y} 年 ${Number(m)} 月 ${Number(d)} 日`;
     };
+    let activeCatFilter = "all";
     const renderDayPane = (day) => {
       if (!day) return quotaMessage("暂时无法读取更新日志", "quota-error");
+      const list = activeCatFilter === "all" ? day.updates : day.updates.filter((u) => u.type === activeCatFilter);
+      const byVer = [];
+      for (const u of list) {
+        let g = byVer.find((x) => x.ver === u.version);
+        if (!g) { g = { ver: u.version, items: [] }; byVer.push(g); }
+        g.items.push(u);
+      }
+      const cats = ["all", "新增", "改进", "修复"];
       return `
         <div class="changelog-pane-head">
           <span class="changelog-pane-date">${formatDay(day.date)}</span>
-          <span class="changelog-pane-count mono">${day.updates.length} 项记录</span>
+          <span class="changelog-pane-count mono">${list.length} 项记录</span>
         </div>
         ${summaries[day.date] ? `<p class="changelog-summary">${esc(summaries[day.date])}</p>` : ""}
-        <div class="changelog-entries">${day.updates.map((update) => `<div class="changelog-entry">
-          <span class="changelog-type ${categories[update.type]}">${update.type}</span>
-          <span class="changelog-entry-body">${esc(update.body)}</span>
-          <small>${esc(update.version)}</small>
-        </div>`).join("")}</div>`;
+        <div class="changelog-filter-bar">
+          <div class="bl-proj-tabs" role="group" aria-label="筛选更新类型">
+            ${cats.map((c) => `<button type="button" class="bl-proj-tab${activeCatFilter === c ? " active" : ""}" data-cl-cat="${c}">${c === "all" ? "全部" : c}</button>`).join("")}
+          </div>
+        </div>
+        <div class="changelog-entries">${byVer.map((g) => `
+          ${g.ver ? `<div class="changelog-ver-hdr mono">${esc(g.ver)}</div>` : ""}
+          ${g.items.map((update) => `<div class="changelog-entry">
+            <span class="changelog-type ${categories[update.type]}">${update.type}</span>
+            <span class="changelog-entry-body">${esc(update.body)}</span>
+          </div>`).join("")}
+        `).join("")}</div>`;
     };
 
     openModal(`
@@ -2432,15 +2509,22 @@
     const nav = $("#changelog-nav");
     const pane = $("#changelog-pane");
     if (nav && pane) {
+      let curIdx = 0;
       nav.addEventListener("click", (e) => {
         const btn = e.target.closest("[data-changelog-idx]");
         if (!btn) return;
-        const idx = Number(btn.dataset.changelogIdx);
-        const day = dates[idx];
+        curIdx = Number(btn.dataset.changelogIdx);
+        const day = dates[curIdx];
         if (!day) return;
-        nav.querySelectorAll(".changelog-date-btn").forEach((el, i) => el.classList.toggle("is-active", i === idx));
+        nav.querySelectorAll(".changelog-date-btn").forEach((el, i) => el.classList.toggle("is-active", i === curIdx));
         pane.innerHTML = renderDayPane(day);
         pane.scrollTop = 0;
+      });
+      pane.addEventListener("click", (e) => {
+        const catBtn = e.target.closest("[data-cl-cat]");
+        if (!catBtn) return;
+        activeCatFilter = catBtn.dataset.clCat || "all";
+        pane.innerHTML = renderDayPane(dates[curIdx]);
       });
     }
   }
@@ -2498,7 +2582,44 @@
     }
   });
 
+  let recordingHotkeyBtn = null;
+  let armingDeleteTimer = null;
+  let dragBacklogId = "";
+
+  function formatCapturedHotkey(e) {
+    if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return "";
+    const parts = [];
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    let keyName = e.key;
+    if (keyName === " ") keyName = "Space";
+    else if (keyName.length === 1) keyName = keyName.toUpperCase();
+    else if (keyName === "PrintScreen") keyName = "PrintScreen";
+    const isFn = /^F([1-9]|1[0-2])$/i.test(keyName) || keyName === "PrintScreen";
+    if (!isFn && parts.length === 0) return "";
+    parts.push(keyName.length <= 3 && /^f\d+$/i.test(keyName) ? keyName.toUpperCase() : keyName);
+    return parts.join("+");
+  }
+
   document.addEventListener("keydown", (e) => {
+    if (recordingHotkeyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        recordingHotkeyBtn.classList.remove("is-recording");
+        recordingHotkeyBtn = null;
+        renderManage();
+        return;
+      }
+      const spec = formatCapturedHotkey(e);
+      if (!spec) return;
+      recordingHotkeyBtn.classList.remove("is-recording");
+      recordingHotkeyBtn = null;
+      postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: spec });
+      return;
+    }
+
     const modalOpen = layerIsOpen($("#modal-backdrop"));
     if (e.key === "Escape") {
       if (activeComboEl) { closeInlineNodeCombo(); return; }
@@ -2520,6 +2641,27 @@
       if (tabMap[e.key]) {
         e.preventDefault();
         switchTab(tabMap[e.key]);
+        return;
+      }
+    }
+    const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+    if (!modalOpen && !inInput && activeTab === "backlog") {
+      if (e.key === "/") {
+        e.preventDefault();
+        $("#backlog-search")?.focus();
+        return;
+      }
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && backlogViewMode === "split") {
+        const rows = $$(".cp-row[data-id]");
+        if (!rows.length) return;
+        e.preventDefault();
+        const curIdx = rows.findIndex((r) => r.dataset.id === selectedBacklogId);
+        const nextIdx = e.key === "ArrowDown"
+          ? Math.min(rows.length - 1, curIdx + 1)
+          : Math.max(0, (curIdx < 0 ? 0 : curIdx - 1));
+        selectedBacklogId = rows[nextIdx].dataset.id;
+        renderBacklog(true);
+        document.querySelector(`.cp-row[data-id="${CSS.escape(selectedBacklogId)}"]`)?.scrollIntoView({ block: "nearest" });
       }
     }
   });
@@ -2537,7 +2679,7 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"]')) closePopover();
+    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"], [data-act="openBacklogPriorityMenu"], [data-act="openBacklogProjectMenu"]')) closePopover();
     if (activeComboEl && !e.target.closest('.combo-popover, [data-act="toggleInlineNodeCombo"]')) closeInlineNodeCombo();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
 
@@ -2589,6 +2731,17 @@
     }
     else if (act === "reregisterHotkey") postAction("reregisterHotkey");
     else if (act === "setScreenshotHotkey") postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: actBtn.dataset.hk });
+    else if (act === "startCustomHotkeyRecord") {
+      recordingHotkeyBtn = actBtn;
+      actBtn.classList.add("is-recording");
+      actBtn.textContent = "请按组合键…";
+    }
+    else if (act === "setDesktopShortcutHidden") {
+      postAction("toggleDesktopShortcut", { id, hide: actBtn.dataset.hidden === "true" });
+    }
+    else if (act === "openDataDir") postAction("openDataDir");
+    else if (act === "exportBackupJson") callHost("exportBackupJson").catch((err) => showToast(err.message, true));
+    else if (act === "importBackupJson") callHost("importBackupJson").catch((err) => showToast(err.message, true));
     else if (act === "hideAllAiShortcuts") postAction("hideAllDesktopShortcuts", { category: "ai" });
     else if (act === "restoreAllShortcuts") postAction("restoreAllDesktopShortcuts");
     else if (act === "launchTool") postAction("launchTool", { id });
@@ -2613,11 +2766,17 @@
       if (acc) openAccountMoreMenu(actBtn, acc);
     } else if (act === "refreshProjects") {
       postAction("refreshProjects", { toast: "1" });
+    } else if (act === "openAddProject") {
+      openProjectModal(null);
     } else if (act === "copyProjectPath") {
       const p = actBtn.dataset.path || "";
       callHost("copyText", { text: p }).then(() => showToast("已复制项目路径")).catch((err) => showToast(err.message, true));
     } else if (act === "openProjectFolder") {
       postAction("openProjectFolder", { path: actBtn.dataset.path || "" });
+    } else if (act === "openProjectTerminal") {
+      postAction("openProjectTerminal", { path: actBtn.dataset.path || "" });
+    } else if (act === "openProjectInAi") {
+      postAction("openProjectInAi", { path: actBtn.dataset.path || "", tool: actBtn.dataset.tool || "antigravity" });
     } else if (act === "launchProjectPreview" || act === "stopProjectPreview") {
       postAction(act, { id });
     } else if (act === "openProjectRemote") {
@@ -2641,6 +2800,10 @@
         selectedBacklogId = id;
         renderBacklog(true);
       }
+    } else if (act === "quickAdvanceBacklog") {
+      e.stopPropagation();
+      const next = actBtn.dataset.next || "";
+      if (id && next) postAction("setBacklogStatus", { id, status: next });
     } else if (act === "openAddBacklog") {
       openBacklogModal(null);
     } else if (act === "exportBacklogMd") {
@@ -2652,9 +2815,73 @@
     } else if (act === "copyBacklogPrompt") {
       const item = (appState.backlog_items || []).find((it) => it.id === id);
       copyBacklogPrompt(item);
+    } else if (act === "openBacklogPriorityMenu") {
+      const pop = $("#popover-menu");
+      pop.innerHTML = Object.entries(BACKLOG_PRIORITIES).map(([k, v]) =>
+        `<button type="button" class="pop-item" data-act="setBacklogPriority" data-id="${esc(id)}" data-prio="${k}">
+          <span class="stamp ${v.cls}">${v.label}</span><span>${v.label}优先级</span>
+        </button>`).join("");
+      positionPopover(pop, actBtn);
+    } else if (act === "setBacklogPriority") {
+      closePopover();
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      if (item) callHost("saveBacklogItem", { ...item, priority: actBtn.dataset.prio || "medium" }).catch((err) => showToast(err.message, true));
+    } else if (act === "openBacklogProjectMenu") {
+      const pop = $("#popover-menu");
+      pop.innerHTML = BACKLOG_PROJECTS.map((p) =>
+        `<button type="button" class="pop-item" data-act="setBacklogProject" data-id="${esc(id)}" data-project="${esc(p)}">${esc(p)}</button>`).join("");
+      positionPopover(pop, actBtn);
+    } else if (act === "setBacklogProject") {
+      closePopover();
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      if (item) callHost("saveBacklogItem", { ...item, project: actBtn.dataset.project || "通用" }).catch((err) => showToast(err.message, true));
+    } else if (act === "jumpToProject") {
+      switchTab("projects");
     } else if (act === "editBacklogItem") {
       const item = (appState.backlog_items || []).find((it) => it.id === id);
       if (item) openBacklogModal(item);
+    } else if (act === "armDeleteBacklog") {
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      if (!item) return;
+      if (actBtn.dataset.armed === "1") {
+        clearInterval(armingDeleteTimer);
+        armingDeleteTimer = null;
+        const snapshot = { ...item };
+        callHost("deleteBacklogItem", { id }).then(() => {
+          showToast(`已删除「${snapshot.title}」`, {
+            isError: true,
+            ms: 5000,
+            undo: () => callHost("saveBacklogItem", {
+              id: "",
+              title: snapshot.title,
+              project: snapshot.project,
+              status: snapshot.status,
+              priority: snapshot.priority,
+              notes: snapshot.notes || "",
+            }).then(() => showToast("已撤销删除")).catch((err) => showToast(err.message, true)),
+          });
+        }).catch((err) => showToast(err.message, true));
+        return;
+      }
+      clearInterval(armingDeleteTimer);
+      let left = 3;
+      actBtn.dataset.armed = "1";
+      actBtn.classList.add("btn-arming");
+      actBtn.textContent = `再次点击确认 (${left}s)`;
+      armingDeleteTimer = setInterval(() => {
+        left--;
+        if (!actBtn.isConnected || left <= 0) {
+          clearInterval(armingDeleteTimer);
+          armingDeleteTimer = null;
+          if (actBtn.isConnected) {
+            delete actBtn.dataset.armed;
+            actBtn.classList.remove("btn-arming");
+            actBtn.textContent = actBtn.closest(".kcard-actions") ? "删" : "删除";
+          }
+        } else {
+          actBtn.textContent = `再次点击确认 (${left}s)`;
+        }
+      }, 1000);
     } else if (act === "confirmDeleteBacklog") {
       const item = (appState.backlog_items || []).find((it) => it.id === id);
       if (!item) return;
@@ -2691,6 +2918,23 @@
       renderBacklog(true);
       return;
     }
+    const blCheck = e.target.closest('[data-act="toggleBacklogCheck"]');
+    if (blCheck) {
+      const id = blCheck.dataset.id;
+      const lineIdx = Number(blCheck.dataset.line);
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      if (item) {
+        const lines = String(item.notes || "").split(/\r?\n/);
+        if (lines[lineIdx] != null) {
+          const m = lines[lineIdx].match(/^(\s*-\s+)(?:\[(?: |x|X)\]\s+)?(.*)$/);
+          if (m) {
+            lines[lineIdx] = `${m[1]}[${blCheck.checked ? "x" : " "}] ${m[2]}`;
+            callHost("saveBacklogItem", { ...item, notes: lines.join("\n") }).catch((err) => showToast(err.message, true));
+          }
+        }
+      }
+      return;
+    }
     const blStatus = e.target.closest("[data-backlog-status]");
     if (blStatus) {
       postAction("setBacklogStatus", { id: blStatus.dataset.backlogStatus, status: blStatus.value });
@@ -2704,6 +2948,42 @@
     const inp = e.target.closest("[data-setting]");
     if (!inp) return;
     postAction("updateSettings", { [inp.dataset.setting]: inp.checked });
+  });
+
+  // Kanban HTML5 Drag & Drop
+  document.addEventListener("dragstart", (e) => {
+    const card = e.target.closest(".kcard[data-backlog-id]");
+    if (!card) return;
+    dragBacklogId = card.dataset.backlogId || "";
+    e.dataTransfer?.setData("text/plain", dragBacklogId);
+  });
+  document.addEventListener("dragend", () => {
+    dragBacklogId = "";
+    $$(".kanban-col.is-drag-over").forEach((c) => c.classList.remove("is-drag-over"));
+  });
+  document.addEventListener("dragover", (e) => {
+    const col = e.target.closest(".kanban-col[data-kanban-status]");
+    if (!col || !dragBacklogId) return;
+    e.preventDefault();
+    col.classList.add("is-drag-over");
+  });
+  document.addEventListener("dragleave", (e) => {
+    const col = e.target.closest(".kanban-col[data-kanban-status]");
+    if (col && !col.contains(e.relatedTarget)) col.classList.remove("is-drag-over");
+  });
+  document.addEventListener("drop", (e) => {
+    const col = e.target.closest(".kanban-col[data-kanban-status]");
+    if (!col || !dragBacklogId) return;
+    e.preventDefault();
+    col.classList.remove("is-drag-over");
+    const targetStatus = col.dataset.kanbanStatus;
+    const item = (appState.backlog_items || []).find((it) => it.id === dragBacklogId);
+    const id = dragBacklogId;
+    dragBacklogId = "";
+    if (item && targetStatus && item.status !== targetStatus) {
+      postAction("setBacklogStatus", { id, status: targetStatus });
+      showToast(`已移至「${backlogStatusMeta(targetStatus).label}」`);
+    }
   });
 
   // 1-second live countdown ticker (in-place update, zero flicker!)

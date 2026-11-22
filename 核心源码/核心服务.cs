@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.4";
+        public const string AppVersion = "v5.9.5";
         private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -59,6 +59,45 @@ namespace CodexLauncher
             {
                 try { ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; } catch { }
             }
+        }
+
+        private const string AutoStartRegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string AutoStartRegName = "AIBase";
+
+        public static bool IsAutoStartSilentEnabled()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(AutoStartRegPath, false))
+                {
+                    if (key == null) return false;
+                    var val = key.GetValue(AutoStartRegName) as string;
+                    return !string.IsNullOrWhiteSpace(val);
+                }
+            }
+            catch { return false; }
+        }
+
+        public static void SetAutoStartSilent(bool enabled)
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(AutoStartRegPath, true)
+                    ?? Registry.CurrentUser.CreateSubKey(AutoStartRegPath))
+                {
+                    if (key == null) return;
+                    if (enabled)
+                    {
+                        string exePath = Assembly.GetExecutingAssembly().Location;
+                        key.SetValue(AutoStartRegName, "\"" + exePath + "\" --minimized", RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        key.DeleteValue(AutoStartRegName, false);
+                    }
+                }
+            }
+            catch { }
         }
 
         public static void EnsureDirs()

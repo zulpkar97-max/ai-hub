@@ -403,7 +403,8 @@ namespace CodexLauncher
                         { "expiry_balloon_alert", _store.settings.expiry_balloon_alert },
                         { "quota_auto_refresh", _store.settings.quota_auto_refresh },
                         { "screenshot_enabled", _store.settings.screenshot_enabled },
-                        { "screenshot_hotkey", _store.settings.screenshot_hotkey ?? "Ctrl+Shift+A" }
+                        { "screenshot_hotkey", _store.settings.screenshot_hotkey ?? "Ctrl+Shift+A" },
+                        { "auto_start_silent", CoreService.IsAutoStartSilentEnabled() }
                     }
                 },
                 { "screenshot", new Dictionary<string, object>

@@ -139,6 +139,29 @@ namespace CodexLauncher
             }
         }
 
+        internal static List<BacklogItem> ReplaceItems(List<BacklogItem> items)
+        {
+            lock (SyncLock)
+            {
+                var store = new BacklogStore();
+                if (items != null)
+                {
+                    foreach (var it in items)
+                    {
+                        if (it == null || string.IsNullOrWhiteSpace(it.title)) continue;
+                        var clean = Clone(it);
+                        if (string.IsNullOrWhiteSpace(clean.id)) clean.id = "bl-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                        clean.project = NormalizeValue(clean.project, ValidProjects, "Life Hub");
+                        clean.status = NormalizeValue(clean.status, ValidStatuses, "idea");
+                        clean.priority = NormalizeValue(clean.priority, ValidPriorities, "medium");
+                        store.items.Add(clean);
+                    }
+                }
+                WriteStore(store);
+                return store.items.Select(Clone).ToList();
+            }
+        }
+
         private static BacklogStore ReadStore()
         {
             Directory.CreateDirectory(CoreService.DataDir);
