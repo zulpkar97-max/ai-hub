@@ -719,16 +719,278 @@
       background: var(--ok-fill);
     }
 
-    .ds-input {
+    .ds-input, .ds-select {
       width: 100%;
       padding: 7px 10px;
       border: 1px solid var(--line-control);
       background: var(--surface-white);
       color: var(--ink);
       font-size: 12.5px;
+      font-family: inherit;
     }
-    .ds-input:focus {
+    .ds-input:focus, .ds-select:focus {
       border-color: var(--ink);
+    }
+    .ds-select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 28px;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2317191E' stroke-width='1.5' stroke-linecap='square'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
+      background-size: 10px 10px;
+    }
+
+    input[type="radio"].ds-rad {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      border: 1.5px solid #8A919C;
+      background: var(--surface-white);
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      transition: border-color var(--t-fast) ease;
+    }
+    input[type="radio"].ds-rad:hover { border-color: var(--ink); }
+    input[type="radio"].ds-rad:checked { border-color: var(--ink); }
+    input[type="radio"].ds-rad:checked::after {
+      content: "";
+      width: 7px;
+      height: 7px;
+      background: var(--ink);
+    }
+
+    /* Segmented Control */
+    .ds-seg {
+      display: inline-flex;
+      border: 1px solid var(--ink);
+      background: var(--surface-white);
+    }
+    .ds-seg-btn {
+      border: none;
+      border-right: 1px solid var(--line-struct);
+      background: transparent;
+      color: var(--text-secondary);
+      padding: 5.5px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .ds-seg-btn:last-child { border-right: none; }
+    .ds-seg-btn:hover:not(.is-active) {
+      background: var(--surface-hover);
+      color: var(--ink);
+    }
+    .ds-seg-btn.is-active {
+      background: var(--ink);
+      color: var(--surface-white);
+    }
+
+    /* Path Copy Bar */
+    .ds-path-bar {
+      width: 100%;
+      border: 1px solid var(--line-control);
+      background: var(--surface-paper);
+      padding: 6px 9px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      transition: border-color var(--t-fast) ease, background-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .ds-path-bar:hover {
+      border-color: var(--ink);
+      background: var(--surface-white);
+      color: var(--ink);
+    }
+
+    /* ==================== 06. OVERLAYS, MENUS & NOTIFICATIONS ==================== */
+    .overlay-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr 318px;
+      gap: 16px;
+      align-items: start;
+    }
+    .pop-specimen {
+      background: var(--surface-white);
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--shadow-ink);
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .pop-spec-item {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ink);
+      padding: 7px 9px;
+      font-size: 12px;
+      font-weight: 550;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-align: left;
+      transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .pop-spec-item:hover {
+      background: var(--surface-hover);
+      border-color: var(--ink);
+    }
+    .pop-spec-item.is-danger { color: var(--danger-hover); }
+    .pop-spec-item.is-danger:hover {
+      background: var(--danger);
+      border-color: var(--ink);
+      color: var(--surface-white);
+    }
+    .pop-spec-sep {
+      height: 1px;
+      background: var(--line-subtle);
+      margin: 3px 4px;
+    }
+
+    .modal-specimen {
+      background: var(--surface-white);
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--shadow-modal);
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-spec-head {
+      padding: 9px 9px 9px 14px;
+      border-bottom: 1px solid var(--line-struct);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-spec-head strong { font-size: 13.5px; }
+    .modal-spec-body {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .modal-spec-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 9px;
+      border: 1px solid var(--line-subtle);
+      background: var(--surface-white);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .modal-spec-row:hover {
+      border-color: var(--ink);
+      background: var(--surface-paper);
+    }
+    .modal-spec-foot {
+      padding: 9px 14px;
+      border-top: 1px solid var(--line-subtle);
+      background: var(--surface-paper);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .notif-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .toast-spec {
+      background: var(--ink);
+      color: var(--surface-white);
+      border: 1.5px solid var(--ink);
+      box-shadow: 2px 2px 0 rgba(23, 25, 30, 0.22);
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      align-self: flex-start;
+    }
+    .toast-spec.is-err {
+      background: var(--danger);
+      box-shadow: var(--shadow-ink);
+    }
+    .wpf-toast-spec {
+      background: var(--surface-white);
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--shadow-ink);
+      display: grid;
+      grid-template-columns: 3.5px 1fr;
+    }
+    .wpf-toast-stripe { background: var(--ok-fill); }
+    .wpf-toast-head {
+      background: var(--surface-paper);
+      border-bottom: 1px solid var(--line-subtle);
+      padding: 5px 6px 5px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+    .wpf-toast-body {
+      padding: 9px 11px 10px;
+    }
+    .wpf-toast-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+    .wpf-toast-msg { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
+
+    /* Kanban Column Specimen */
+    .kanban-mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .kanban-col {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+    }
+    .kanban-col-head {
+      padding: 8px 11px;
+      border-bottom: 1px solid var(--line-struct);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .kanban-col-body {
+      padding: 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      background: var(--surface-paper);
+      flex: 1;
+    }
+    .kanban-item {
+      background: var(--surface-white);
+      border: 1px solid var(--line-control);
+      box-shadow: var(--shadow-paper);
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
+    }
+    .kanban-item:hover {
+      border-color: var(--ink);
+      box-shadow: 1.5px 1.5px 0 var(--ink);
     }
 
     .ds-tag {
@@ -939,7 +1201,7 @@
     }
 
     @media (max-width: 1020px) {
-      .elev-grid, .atoms-grid, .hover-law-grid, .preview-2col, .roadmap-grid {
+      .elev-grid, .atoms-grid, .hover-law-grid, .preview-2col, .roadmap-grid, .overlay-grid, .kanban-mini-grid {
         grid-template-columns: 1fr;
       }
       .toc { display: none; }
@@ -964,8 +1226,9 @@
         <a class="toc-link" href="#sec-hover"><span>03 · Hover 二大铁律</span><span class="toc-dot"></span></a>
         <a class="toc-link" href="#sec-buttons"><span>04 · 标准按钮家族</span><span class="toc-dot"></span></a>
         <a class="toc-link" href="#sec-atoms"><span>05 · 表单与指标原子</span><span class="toc-dot"></span></a>
-        <a class="toc-link" href="#sec-composites"><span>06 · 实战样板预览</span><span class="toc-dot"></span></a>
-        <a class="toc-link" href="#sec-roadmap"><span>07 · 改造进度总览</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-overlays"><span>06 · 浮层菜单与通知</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-composites"><span>07 · 实战样板预览</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-roadmap"><span>08 · 改造进度总览</span><span class="toc-dot"></span></a>
       </nav>
 
       <div class="toc-foot">
@@ -1224,42 +1487,60 @@
         <!-- 05. ATOMS -->
         <section class="sec" id="sec-atoms">
           <div class="sec-head">
-            <div class="sec-title-wrap"><span class="sec-num mono">05</span><h2>表单、标签与进度轨道原子件</h2></div>
-            <span class="sec-note">严格 0px 直角 · 彻底消灭浏览器默认蓝</span>
+            <div class="sec-title-wrap"><span class="sec-num mono">05</span><h2>表单、选择器、分段切换与进度原子件</h2></div>
+            <span class="sec-note">严格 0px 直角 · 彻底消灭浏览器原生蓝，全部可现场点击体验</span>
           </div>
 
           <div class="atoms-grid">
             <div class="panel-soft">
-              <p class="sub-label">0px 选择器与输入框</p>
-              <div style="display:flex;flex-direction:column;gap:10px;">
+              <p class="sub-label">0px 复选框 / 单选框 / 开关</p>
+              <div style="display:flex;flex-direction:column;gap:9px;">
                 <label class="check-row"><input type="checkbox" class="ds-chk" checked /> Codex · Plus 回收号</label>
                 <label class="check-row"><input type="checkbox" class="ds-chk" /> 同时退出 AI Hub</label>
+                <div style="display:flex;gap:14px;padding-top:2px;">
+                  <label class="check-row"><input type="radio" name="perm-demo" class="ds-rad" checked /> 标准询问</label>
+                  <label class="check-row"><input type="radio" name="perm-demo" class="ds-rad" /> 完整访问</label>
+                </div>
                 <label class="ds-toggle">
                   <input type="checkbox" checked />
                   <span class="ds-toggle-track"><span class="ds-toggle-thumb"></span></span>
                   <span>额度自动刷新与回满提醒</span>
                 </label>
-                <input type="text" class="ds-input" value="zulpkar97@gmail.com" />
               </div>
             </div>
 
             <div class="panel-soft">
-              <p class="sub-label">克制单色标签（不再五颜六色）</p>
-              <div class="demo-row" style="gap:7px;">
+              <p class="sub-label">输入框 / 下拉框 / 分段切换 / 路径条</p>
+              <div style="display:flex;flex-direction:column;gap:9px;">
+                <div style="display:grid;grid-template-columns:1.25fr 0.75fr;gap:8px;">
+                  <input type="text" class="ds-input" value="zulpkar97@gmail.com" />
+                  <select class="ds-select" aria-label="Chrome 身份">
+                    <option>Carl</option>
+                    <option>Work</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="ds-seg" data-seg-group>
+                    <button type="button" class="ds-seg-btn is-active">清单详情</button>
+                    <button type="button" class="ds-seg-btn">四列看板</button>
+                  </div>
+                </div>
+                <button type="button" class="ds-path-bar" id="demo-path-copy" title="点击演示复制">
+                  <span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">D:\Projects\ai-hub</span>
+                  <span style="font-size:11px;font-weight:700;flex-shrink:0;" id="demo-path-status">复制</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="panel-soft">
+              <p class="sub-label">克制单色标签 &amp; 版画斜纹进度轨道</p>
+              <div class="demo-row" style="gap:6px;margin-bottom:12px;">
                 <span class="ds-tag is-ink">新增</span>
                 <span class="ds-tag">改进</span>
-                <span class="ds-tag">默认</span>
                 <span class="ds-tag">Google AI Pro</span>
                 <span class="ds-tag is-ok"><span class="dot-ok"></span>运行中</span>
                 <span class="ds-tag is-danger"><span class="dot-danger"></span>额度告急</span>
               </div>
-              <p style="margin:12px 0 0;font-size:11.5px;color:var(--text-muted);">
-                文字层级与方点承担语义，底色一律保持纯白或浅纸，视觉彻底安静下来。
-              </p>
-            </div>
-
-            <div class="panel-soft">
-              <p class="sub-label">额度 / 习惯进度轨道（版画斜纹）</p>
               <div class="meter-demo">
                 <div class="meter-row">
                   <div class="meter-top"><span>5h 额度（&gt;30%）</span><strong class="mono" style="color:var(--ok);">91%</strong></div>
@@ -1278,11 +1559,95 @@
           </div>
         </section>
 
-        <!-- 06. COMPOSITE PREVIEWS -->
+        <!-- 06. OVERLAYS, MENUS & NOTIFICATIONS -->
+        <section class="sec" id="sec-overlays">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">06</span><h2>浮层、右键菜单、弹窗与通知（100% 同源 Token）</h2></div>
+            <span class="sec-note">「…」浮动菜单、托盘右键、通用弹窗、应用内 Toast、自定义 WPF 桌面通知全覆盖</span>
+          </div>
+
+          <div class="overlay-grid">
+            <!-- Popover & Tray Menu Specimen -->
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <div>
+                <p class="sub-label">「…」浮动菜单 / 托盘右键</p>
+                <div class="pop-specimen">
+                  <button type="button" class="pop-spec-item"><span class="dot-danger" style="width:6px;height:6px;"></span><strong>一键全部退出</strong></button>
+                  <div class="pop-spec-sep"></div>
+                  <button type="button" class="pop-spec-item">同步账号配置</button>
+                  <button type="button" class="pop-spec-item">打开账号目录</button>
+                  <div class="pop-spec-sep"></div>
+                  <button type="button" class="pop-spec-item is-danger">退出 AI Hub / 退号清空</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal Specimen -->
+            <div>
+              <p class="sub-label">通用弹窗（60 线网点顶栏 + 统一无框 × + 0px 清单）</p>
+              <div class="modal-specimen">
+                <div class="modal-spec-head screentone">
+                  <strong>一键全部退出</strong>
+                  <button type="button" class="ds-icon-btn is-danger" title="关闭"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+                </div>
+                <div class="modal-spec-body">
+                  <label class="modal-spec-row">
+                    <span class="check-row"><input type="checkbox" class="ds-chk" checked /> Plus 回收号 · 11月</span>
+                    <span class="ds-tag">Codex</span>
+                  </label>
+                  <label class="modal-spec-row">
+                    <span class="check-row"><input type="checkbox" class="ds-chk" checked /> Clash Verge</span>
+                    <span class="ds-tag">网络代理</span>
+                  </label>
+                  <div style="border-top:1px dashed var(--line-struct);padding-top:7px;margin-top:2px;">
+                    <label class="modal-spec-row" style="background:var(--surface-paper);">
+                      <span class="check-row"><input type="checkbox" class="ds-chk" /> 同时退出 AI Hub</span>
+                      <span class="ds-tag">主程序</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="modal-spec-foot">
+                  <button type="button" class="ds-btn ds-btn-paper" style="padding:5px 12px;font-size:12px;">取消</button>
+                  <button type="button" class="ds-btn ds-btn-danger" style="padding:5px 12px;font-size:12px;">确认全部退出</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Toast & Custom WPF Desktop Notification -->
+            <div class="notif-stack">
+              <div>
+                <p class="sub-label">应用内 Toast 提示</p>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <div class="toast-spec"><span class="dot-ok" style="width:6px;height:6px;"></span>已复制项目路径</div>
+                  <div class="toast-spec is-err"><span style="width:6px;height:6px;background:#FFFFFF;display:inline-block;"></span>代理未运行，无法切换节点</div>
+                </div>
+              </div>
+
+              <div>
+                <p class="sub-label">自定义 0px WPF 桌面通知浮窗</p>
+                <div class="wpf-toast-spec">
+                  <div class="wpf-toast-stripe"></div>
+                  <div>
+                    <div class="wpf-toast-head">
+                      <span style="display:inline-flex;align-items:center;gap:6px;">AI HUB <span class="dot-ok"></span></span>
+                      <button type="button" class="ds-icon-btn is-danger" style="width:22px;height:20px;" title="关闭"><svg class="ic" style="width:11px;height:11px;" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+                    </div>
+                    <div class="wpf-toast-body">
+                      <div class="wpf-toast-title">额度已刷新</div>
+                      <div class="wpf-toast-msg">Antigravity · Gemini Models（5h 额度）已恢复至 100%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 07. COMPOSITE PREVIEWS -->
         <section class="sec" id="sec-composites">
           <div class="sec-head">
-            <div class="sec-title-wrap"><span class="sec-num mono">06</span><h2>实战样板：同一套 Token 组装 AI Hub 与 Life Hub</h2></div>
-            <span class="sec-note">先看整体气场对不对，满意了我们再按这个标准大改工作台</span>
+            <div class="sec-title-wrap"><span class="sec-num mono">07</span><h2>实战样板：同一套 Token 组装 AI Hub 与 Life Hub</h2></div>
+            <span class="sec-note">工作台、看板、Life Hub 全部出自同一套基因，先看整体气场对不对</span>
           </div>
 
           <!-- Network Bar with Vermilion End-Cap -->
@@ -1400,12 +1765,56 @@
               </div>
             </div>
           </div>
+
+          <!-- Backlog Kanban & Project Card Mini Specimen -->
+          <div>
+            <p class="sub-label">需求池四列看板（单色网点列头）与项目卡微样板</p>
+            <div class="kanban-mini-grid">
+              <div class="kanban-col">
+                <div class="kanban-col-head screentone">
+                  <span style="display:inline-flex;align-items:center;gap:6px;"><span class="dot-ok"></span>进行中</span>
+                  <span class="mono" style="font-size:11px;color:var(--text-muted);">1</span>
+                </div>
+                <div class="kanban-col-body">
+                  <div class="kanban-item">
+                    <div style="display:flex;gap:5px;"><span class="ds-tag is-danger">高</span><span class="ds-tag">AI Hub</span></div>
+                    <strong style="line-height:1.4;">统一全站 Design Token 与工作台重构</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="kanban-col">
+                <div class="kanban-col-head screentone">
+                  <span style="display:inline-flex;align-items:center;gap:6px;"><span class="dot-warn"></span>已排期</span>
+                  <span class="mono" style="font-size:11px;color:var(--text-muted);">2</span>
+                </div>
+                <div class="kanban-col-body">
+                  <div class="kanban-item">
+                    <div style="display:flex;gap:5px;"><span class="ds-tag">中</span><span class="ds-tag">Life Hub</span></div>
+                    <strong style="line-height:1.4;">日常看板、频率记录与作息提醒</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="kanban-col">
+                <div class="kanban-col-head screentone">
+                  <span>项目卡 · AI Hub</span>
+                  <span class="ds-tag is-ok"><span class="dot-ok"></span>运行中</span>
+                </div>
+                <div class="kanban-col-body" style="background:var(--surface-white);justify-content:space-between;">
+                  <div style="font-size:12px;color:var(--text-secondary);">本地 AI 聚合启动器，管理 Codex、Antigravity 与网络通道。</div>
+                  <div class="ds-path-bar" style="pointer-events:none;">
+                    <span class="mono">D:\Projects\ai-hub</span>
+                    <span style="font-size:10.5px;">复制</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <!-- 07. ROADMAP -->
+        <!-- 08. ROADMAP -->
         <section class="sec" id="sec-roadmap">
           <div class="sec-head">
-            <div class="sec-title-wrap"><span class="sec-num mono">07</span><h2>改造进度总览</h2></div>
+            <div class="sec-title-wrap"><span class="sec-num mono">08</span><h2>改造进度总览</h2></div>
             <span class="sec-note">本标本页定稿后，按下面清单逐项收口，不再反复返工</span>
           </div>
 
@@ -1450,6 +1859,26 @@
       if (vis) setActive(vis.target.id);
     }, { rootMargin: "-20% 0px -65% 0px" });
     sections.forEach((s) => obs.observe(s));
+
+    // Interactive Segmented Control Demo
+    document.querySelectorAll("[data-seg-group]").forEach((group) => {
+      group.addEventListener("click", (e) => {
+        const btn = e.target.closest(".ds-seg-btn");
+        if (!btn) return;
+        group.querySelectorAll(".ds-seg-btn").forEach((el) => el.classList.toggle("is-active", el === btn));
+      });
+    });
+
+    // Interactive Path Copy Demo
+    const pathBtn = document.getElementById("demo-path-copy");
+    const pathStatus = document.getElementById("demo-path-status");
+    if (pathBtn && pathStatus) {
+      pathBtn.addEventListener("click", () => {
+        pathStatus.textContent = "已复制 ✓";
+        pathStatus.style.color = "var(--ok)";
+        setTimeout(() => { pathStatus.textContent = "复制"; pathStatus.style.color = ""; }, 1200);
+      });
+    }
   </script>
 </body>
 </html>
