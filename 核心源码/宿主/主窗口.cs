@@ -131,11 +131,13 @@ namespace CodexLauncher
                     src.AddHook(WndProc);
                 }
 
-                // Light mode + Windows 11 Mica backdrop + Native rounded corners
+                // Light mode + Sharp 0px corners + Ink outer DWM border + Windows 11 Mica backdrop
                 int dark = 0;
                 DwmSetWindowAttribute(_hwnd, 20, ref dark, sizeof(int));
-                int corner = 2; // DWMWCP_ROUND
+                int corner = 1; // DWMWCP_DONOTROUND (strict 0px sharp corners)
                 DwmSetWindowAttribute(_hwnd, 33, ref corner, sizeof(int));
+                int borderColor = 0x001E1917; // COLORREF 0x00BBGGRR for #17191E
+                DwmSetWindowAttribute(_hwnd, 34, ref borderColor, sizeof(int));
                 int mica = 2; // DWMSBT_MAINWINDOW (True Windows 11 Mica)
                 int hr = DwmSetWindowAttribute(_hwnd, 38, ref mica, sizeof(int));
                 if (hr != 0)

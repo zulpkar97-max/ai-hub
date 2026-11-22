@@ -103,6 +103,8 @@ button { cursor: pointer; }
   width: 100%;
   height: 100%;
   background: var(--white);
+  border: 1.5px solid var(--ink);
+  overflow: hidden;
 }
 
 /* ==================== LEFT PURE WHITE SIDEBAR (Purified 1B Lineart) ==================== */
@@ -115,32 +117,40 @@ button { cursor: pointer; }
   background: var(--bg-sidebar);
   border-right: 1px solid #CFD5D3;
   overflow-y: auto;
-  padding: 16px 14px 14px;
+  padding: 15px 14px 14px;
 }
 
 .sidebar .ic {
-  stroke-width: 1.45;
+  stroke-width: 1.5;
 }
 
 .sidebar-top {
   cursor: default;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
-/* Redesigned Minimal White Nameplate — Clean Single-Line AI HUB + Subtle Offset */
+/* Split Architectural Nameplate — Left Brand + Right Vertical Changelog Tab */
 .brand-plate {
   background: var(--white);
   border: 1px solid #1A1D22;
-  box-shadow: 2px 2px 0 #E4E7E6;
-  padding: 10px 11px;
+  box-shadow: 2px 2px 0 #D8DCDC;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.brand-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  padding: 9px 10px;
 }
 
 .brand-icon {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   object-fit: contain;
   display: block;
@@ -151,33 +161,55 @@ button { cursor: pointer; }
   flex: 1;
 }
 
-.brand-meta-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-}
-
 .brand-name {
-  font-size: 14.5px;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--ink);
   line-height: 1.15;
   white-space: nowrap;
 }
 
-.brand-ver {
-  font-size: 10px;
-  color: #8F96A0;
-  font-weight: 500;
+.brand-sub {
+  font-size: 10.5px;
+  color: #7E8591;
+  margin-top: 2px;
   white-space: nowrap;
 }
 
-.brand-sub {
+.brand-log-tab {
+  width: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-left: 1px solid #1A1D22;
+  background-color: #F7F8F7;
+  background-image: radial-gradient(rgba(26, 29, 34, 0.11) 0.65px, transparent 0.65px);
+  background-size: 4.5px 4.5px;
+  color: #3A404A;
+  padding: 0;
+  padding-top: 0.22em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
   font-size: 10.5px;
-  color: #8F96A0;
-  margin-top: 2px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.brand-log-tab:hover {
+  background-color: #1A1D22;
+  background-image: none;
+  color: var(--white);
+}
+
+.brand-log-tab:active {
+  background-color: #2E333D;
+  background-image: none;
+  color: var(--white);
 }
 
 kbd {
@@ -188,7 +220,7 @@ kbd {
   border: 1px solid var(--ink);
 }
 
-/* Navigation — 1B Ultra-Fine 60-Line Screentone Active Box + Airy Frameless Items */
+/* Navigation — 1B Ultra-Fine 60-Line Screentone Active Box + Emerald Dot Only */
 .nav-list {
   display: flex;
   flex-direction: column;
@@ -232,12 +264,6 @@ kbd {
   gap: 9px;
 }
 
-.nav-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .nav-active-dot {
   display: none;
   width: 6px;
@@ -250,63 +276,84 @@ kbd {
   display: inline-block;
 }
 
-.nav-count {
-  font-size: 11px;
-  color: #8F96A0;
-}
-.nav-item.active .nav-count {
-  color: var(--ink);
-}
-
-/* Sidebar Purified 2x2 Quick Tools (No noisy shortcut text!) */
+/* Sidebar Vertical Tactile Quick Tools (Headerless, Crisp Paper Elevation) */
 .sidebar-tools {
-  margin: 22px 0 auto;
-  padding-top: 16px;
+  margin: 18px 0 auto;
+  padding-top: 15px;
   border-top: 1px dashed #CFD5D3;
 }
 
-.tools-hdr {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: #8F96A0;
-  margin-bottom: 10px;
-  padding-left: 2px;
-}
-
-.tools-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.tools-stack {
+  display: flex;
+  flex-direction: column;
   gap: 7px;
 }
 
 .tool-tile {
-  background: var(--white);
-  border: 1px solid #E4E7E6;
-  padding: 10px 8px;
-  color: #5A616C;
+  width: 100%;
+  background: #FAF9F7;
+  border: 1px solid #C6CCCA;
+  box-shadow: 1.5px 1.5px 0 #D8DCDC;
+  padding: 8px 10px;
+  color: #262B33;
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 500;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 550;
   text-align: left;
-  transition: border-color 90ms ease, color 90ms ease, background 90ms ease, transform var(--motion-press) ease;
+  transition: border-color 90ms ease, color 90ms ease, background-color 90ms ease, box-shadow 90ms ease, transform var(--motion-press) ease;
+}
+
+.tool-tile-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-tile-left .ic {
+  color: #424955;
+  transition: color 90ms ease;
+}
+
+.tool-tile-arrow {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: #A5ADB6;
+  stroke-width: 1.7;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  flex-shrink: 0;
+  transition: stroke 90ms ease;
 }
 
 .tool-tile:hover:not(:disabled) {
+  background: var(--white);
   border-color: #1A1D22;
   color: var(--ink);
-  background: #F9FAFA;
+  box-shadow: 1.5px 1.5px 0 #1A1D22;
+}
+
+.tool-tile:hover:not(:disabled) .tool-tile-left .ic {
+  color: var(--ink);
+}
+
+.tool-tile:hover:not(:disabled) .tool-tile-arrow {
+  stroke: #1A1D22;
 }
 
 .tool-tile:active:not(:disabled) {
   transform: translate(1px, 1px);
+  box-shadow: none;
 }
 
 .tool-tile:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .sidebar-action-btn {
@@ -316,29 +363,42 @@ kbd {
   flex-shrink: 0;
 }
 
-/* Calm Bottom Exit Button — Coral only on hover */
+/* High-Contrast Bottom Exit Button — Crisp White + Jet-Black Text + Vivid Crimson Signal */
 .sidebar-exit-btn {
   background: var(--white);
-  border: 1px solid #E2E5E4;
-  color: #8F96A0;
-  padding: 7.5px 10px;
-  font-size: 12px;
-  font-weight: 500;
+  border: 1.5px solid var(--danger);
+  box-shadow: 2px 2px 0 var(--danger);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 650;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  transition: border-color 110ms ease, color 110ms ease, background 110ms ease, transform var(--motion-press) ease;
+  gap: 7px;
+  transition: border-color 100ms ease, color 100ms ease, background-color 100ms ease, box-shadow 100ms ease, transform var(--motion-press) ease;
+}
+
+.sidebar-exit-btn .ic {
+  color: var(--danger-fill);
+  stroke-width: 1.9;
+  transition: color 100ms ease;
 }
 
 .sidebar-exit-btn:hover {
-  border-color: var(--danger);
-  color: var(--danger);
-  background: #FDF2F2;
+  background: var(--danger);
+  border-color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--white);
+}
+
+.sidebar-exit-btn:hover .ic {
+  color: var(--white);
 }
 
 .sidebar-exit-btn:active {
-  transform: translate(1px, 1px);
+  transform: translate(2px, 2px);
+  box-shadow: none;
 }
 
 /* ==================== RIGHT SNOW-WHITE MICRO-DOT WORKSPACE ==================== */

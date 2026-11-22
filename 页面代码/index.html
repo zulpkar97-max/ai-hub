@@ -12,14 +12,14 @@
     <aside class="sidebar">
       <div class="sidebar-top drag-region">
         <div class="brand-plate">
-          <img id="brand-icon" class="brand-icon" src="https://icons.aihub.local/aihub-v5.png" alt="AI Hub" />
-          <div class="brand-meta">
-            <div class="brand-meta-top">
+          <div class="brand-main">
+            <img id="brand-icon" class="brand-icon" src="https://icons.aihub.local/aihub-v5.png" alt="AI Hub" />
+            <div class="brand-meta">
               <div class="brand-name">AI HUB</div>
-              <span id="brand-version" class="brand-ver mono">v5.9.1</span>
+              <div class="brand-sub">本地聚合中枢</div>
             </div>
-            <div class="brand-sub">本地聚合中枢</div>
           </div>
+          <button type="button" id="brand-log-btn" class="brand-log-tab no-drag" data-act="openChangelog" title="更新日志 · v5.9.2" aria-label="查看更新日志">日志</button>
         </div>
       </div>
 
@@ -29,40 +29,28 @@
             <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             <span class="nav-label">工作台</span>
           </span>
-          <span class="nav-right">
-            <span class="nav-active-dot" aria-hidden="true"></span>
-            <span class="nav-count mono" data-nav-count="workspace">00</span>
-          </span>
+          <span class="nav-active-dot" aria-hidden="true"></span>
         </button>
         <button class="nav-item" data-tab="projects">
           <span class="nav-left">
             <svg class="ic" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3Z"/></svg>
             <span class="nav-label">项目</span>
           </span>
-          <span class="nav-right">
-            <span class="nav-active-dot" aria-hidden="true"></span>
-            <span class="nav-count mono" data-nav-count="projects">00</span>
-          </span>
+          <span class="nav-active-dot" aria-hidden="true"></span>
         </button>
         <button class="nav-item" data-tab="backlog">
           <span class="nav-left">
             <svg class="ic" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><rect x="3.5" y="4.8" width="2.4" height="2.4" fill="currentColor" stroke="none"/><rect x="3.5" y="10.8" width="2.4" height="2.4" fill="currentColor" stroke="none"/><rect x="3.5" y="16.8" width="2.4" height="2.4" fill="currentColor" stroke="none"/></svg>
             <span class="nav-label">需求池</span>
           </span>
-          <span class="nav-right">
-            <span class="nav-active-dot" aria-hidden="true"></span>
-            <span class="nav-count mono" data-nav-count="backlog">00</span>
-          </span>
+          <span class="nav-active-dot" aria-hidden="true"></span>
         </button>
         <button class="nav-item" data-tab="manage">
           <span class="nav-left">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 7h10M20 7h-2"/><rect x="14" y="4.5" width="4" height="5"/><path d="M20 17H10M4 17h2"/><rect x="6" y="14.5" width="4" height="5"/></svg>
             <span class="nav-label">设置</span>
           </span>
-          <span class="nav-right">
-            <span class="nav-active-dot" aria-hidden="true"></span>
-            <span class="nav-count mono" data-nav-count="manage">CFG</span>
-          </span>
+          <span class="nav-active-dot" aria-hidden="true"></span>
         </button>
       </nav>
 

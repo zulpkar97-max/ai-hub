@@ -175,24 +175,9 @@
     if (!appState) return;
     renderSidebarTools();
 
-    const brandVer = $("#brand-version");
-    if (brandVer && appState.version) brandVer.textContent = appState.version;
-
-    const accounts = appState.accounts || [];
-    const design = findOpenDesign();
-    const runningCount = Number(accounts.some((acc) => acc.running)) + Number(!!appState.antigravity?.running) + Number(!!design?.running);
-    const projectCount = (appState.projects || []).filter((it) => !it.hidden).length;
-    const backlogCount = (appState.backlog_items || []).length;
-    const pad2 = (n) => String(n).padStart(2, "0");
-    const countMap = {
-      workspace: pad2(runningCount),
-      projects: pad2(projectCount),
-      backlog: pad2(backlogCount),
-      manage: "CFG",
-    };
-    for (const [tabKey, val] of Object.entries(countMap)) {
-      const el = document.querySelector(`[data-nav-count="${tabKey}"]`);
-      if (el && el.textContent !== val) el.textContent = val;
+    const brandLogBtn = $("#brand-log-btn");
+    if (brandLogBtn && appState.version) {
+      brandLogBtn.title = `更新日志 · ${appState.version}`;
     }
 
     const pending = !!appState.pending_update;
@@ -259,25 +244,21 @@
     const shotKey = shot?.enabled && shot.registered ? shot.hotkey : "";
     const voiceKey = appState.voice_recorder_hotkey || "";
     const ledger = appState.quick_ledger_forms?.[0];
-    const version = appState.version || "v5.9.1";
-    const key = JSON.stringify([shotKey, voiceKey, ledger, version]);
+    const key = JSON.stringify([shotKey, voiceKey, ledger]);
     if (key === sidebarToolsKey) return;
     sidebarToolsKey = key;
+    const arrow = '<svg class="tool-tile-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>';
     $("#sidebar-tools").innerHTML = `
-      <div class="tools-hdr">快捷工具</div>
-      <div class="tools-grid">
+      <div class="tools-stack">
         <button type="button" class="tool-tile" data-act="startScreenshot" title="${esc(shotKey ? `截图 (${shotKey})` : "截图")}">
-          ${ICONS.crop}<span>截图</span>
+          <span class="tool-tile-left">${ICONS.crop}<span>截图</span></span>${arrow}
         </button>
-        <button type="button" class="tool-tile" data-act="startVoiceRecorder" title="${esc(voiceKey ? `AI 录音笔 (${voiceKey})` : "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
-          ${ICONS.mic}<span>录音笔</span>
+        <button type="button" class="tool-tile" data-act="startVoiceRecorder" title="${esc(voiceKey ? `录音 (${voiceKey})` : "录音不可用")}" ${voiceKey ? "" : "disabled"}>
+          <span class="tool-tile-left">${ICONS.mic}<span>录音</span></span>${arrow}
         </button>
         ${ledger ? `<button type="button" class="tool-tile" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
-          ${ICONS.ledger}<span>记账</span>
+          <span class="tool-tile-left">${ICONS.ledger}<span>记账</span></span>${arrow}
         </button>` : ""}
-        <button type="button" class="tool-tile" data-act="openChangelog" title="查看更新日志 (${esc(version)})">
-          ${ICONS.changelog}<span>日志</span>
-        </button>
       </div>`;
   }
 
