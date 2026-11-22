@@ -1116,7 +1116,7 @@
 
   function renderBacklogListHtml(filtered) {
     if (filtered.length === 0) {
-      return '<div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div>';
+      return '<div class="backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
     }
     return `<div class="backlog-list">${filtered.map((item) => {
       const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
@@ -1191,7 +1191,7 @@
     ].join("");
 
     view.innerHTML = `<div class="backlog-page">
-      <section class="surface-card backlog-toolbar">
+      <section class="backlog-toolbar">
         <div class="backlog-filters">
           <div class="backlog-pills">${pillTabs}</div>
           <select id="backlog-filter-status" class="backlog-status-select" aria-label="按状态筛选">${statusFilterOpts}</select>
@@ -1202,7 +1202,7 @@
           <button class="btn btn-primary btn-sm" data-act="openAddBacklog">${ICONS.plus}<span>新建需求</span></button>
         </div>
       </section>
-      <section id="backlog-list-card" class="surface-card">${renderBacklogListHtml(filtered)}</section>
+      <div id="backlog-list-card">${renderBacklogListHtml(filtered)}</div>
     </div>`;
   }
 
@@ -1352,9 +1352,16 @@
     view.innerHTML = `<div class="settings-page">
       <section class="settings-group" aria-labelledby="settings-hotkeys">
         <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
-        <div class="surface-card">
+        <div class="settings-comic-card">
+          <header class="settings-card-banner">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem tint-amber"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg></div>
+              <h3 class="settings-banner-title">热键与状态提醒</h3>
+            </div>
+            <span id="settings-hotkey-status" class="tag"></span>
+          </header>
           <div class="setting-row">
-            <div class="setting-label">全局截图快捷键 <span id="settings-hotkey-status" class="tag"></span></div>
+            <div class="setting-label">全局截图快捷键</div>
             <div class="setting-actions">
               <div class="hotkey-pills">${hotkeyPills}</div>
               ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
@@ -1376,12 +1383,16 @@
 
       <section class="settings-group" aria-labelledby="settings-apps">
         <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
-        <div class="surface-card">
-          <header class="group-header settings-card-header">
-            <div class="setting-label"><h3 class="group-title">桌面图标收纳</h3><span id="stash-count" class="group-sub"></span></div>
+        <div class="settings-comic-card">
+          <header class="settings-card-banner">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem tint-mint">${ICONS.folder}</div>
+              <h3 class="settings-banner-title">桌面图标收纳</h3>
+              <span id="stash-count" class="tag"></span>
+            </div>
             <div class="setting-actions">
-              <button class="btn btn-soft btn-sm" data-act="hideAllAiShortcuts">一键隐藏 AI 图标</button>
-              <button class="btn btn-soft btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
+              <button class="btn btn-paper btn-sm" data-act="hideAllAiShortcuts">一键隐藏 AI 图标</button>
+              <button class="btn btn-paper btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
               ${settingsDisclosure("stash-details", "展开明细")}
             </div>
           </header>
@@ -1390,9 +1401,13 @@
             ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
           `)}
         </div>
-        <div class="surface-card">
-          <header class="group-header settings-card-header">
-            <div class="setting-label"><h3 class="group-title">软件卸载</h3><span class="group-sub">已检测 ${apps.length} 个</span></div>
+        <div class="settings-comic-card">
+          <header class="settings-card-banner">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem tint-sky">${ICONS.trash}</div>
+              <h3 class="settings-banner-title">软件卸载</h3>
+              <span class="tag">已检测 ${apps.length} 个</span>
+            </div>
             ${settingsDisclosure("uninstall-details", "展开列表")}
           </header>
           ${disclosurePanel("uninstall-details", expandedSettings.has("uninstall-details"), `
@@ -1402,8 +1417,14 @@
       </section>
 
       <section class="settings-group" aria-labelledby="settings-system">
-        <h2 id="settings-system" class="settings-heading">系统</h2>
-        <div class="surface-card">
+        <h2 id="settings-system" class="settings-heading">系统与窗口</h2>
+        <div class="settings-comic-card">
+          <header class="settings-card-banner">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem tint-slate">${ICONS.monitor}</div>
+              <h3 class="settings-banner-title">常驻与托盘行为</h3>
+            </div>
+          </header>
           <div class="setting-row">
             <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
               <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
@@ -2001,12 +2022,17 @@
     try { dates = changelogDates(await callHost("getChangelog")); } catch (_) { dates = []; }
     const categories = { 新增: "added", 改进: "improved", 修复: "fixed", 调整: "changed" };
     const summaries = {
+      "2026-11-22": "新增需求池与漫画风项目管理页，支持固定端口预览、全卡头拖拽排序，并统一需求池、设置与日志的粗线视觉语言。",
       "2026-11-21": "工作台、网络、Codex 和截图完成集中升级，新增 Antigravity 实时额度。",
       "2026-11-20": "AI Hub 初版到工作台合并，加入截图、提字与桌面图标收纳。"
     };
+    const currentVer = appState?.version || (dates[0]?.versions?.[0]) || "";
     openModal(`
-      <div class="modal-header">
-        <h3>更新日志</h3>
+      <div class="modal-header changelog-modal-head">
+        <div class="changelog-head-title">
+          <h3>更新日志</h3>
+          ${currentVer ? `<span class="changelog-version">${esc(currentVer)}</span>` : ""}
+        </div>
         ${iconButton("", "关闭更新日志", ICONS.close, { attrs: "data-close-modal" })}
       </div>
       <div class="modal-body changelog-timeline">

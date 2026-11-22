@@ -921,41 +921,131 @@ kbd {
 
 .meter-grid-single .meter-reset { margin-bottom: 0; }
 
-.changelog-timeline { gap: 9px; }
-.changelog-day { border: 1px solid var(--hairline); border-radius: var(--radius-md); }
+.changelog-timeline {
+  gap: 11px;
+  padding-top: 14px;
+}
+
+.changelog-modal-head {
+  background-color: #ffffff;
+  background-image: radial-gradient(rgba(20, 25, 32, 0.08) 1px, transparent 1px);
+  background-size: 9px 9px;
+  border-bottom: 2px solid #141920;
+}
+
+.changelog-head-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.changelog-day {
+  border: 1.8px solid #141920;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 #141920;
+  overflow: hidden;
+}
+
 .changelog-day-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 12px;
-  background: transparent;
+  padding: 10px 13px;
+  background-color: #ffffff;
+  background-image: radial-gradient(rgba(20, 25, 32, 0.06) 1px, transparent 1px);
+  background-size: 9px 9px;
   border: 0;
   font: inherit;
   color: var(--ink-muted);
   text-align: start;
   cursor: pointer;
 }
-.changelog-day-toggle:hover { background: var(--bg-card-head); }
-.changelog-date { color: var(--text); font-weight: 650; }
-.changelog-version { margin-inline-start: auto; color: var(--text-muted); font-size: 11px; white-space: nowrap; }
-.changelog-summary { margin: 0; padding: 0 12px 9px; font-size: 12px; color: var(--text-secondary); }
-.changelog-entries { border-top: 1px solid var(--hairline); padding: 4px 12px 6px; }
+
+.changelog-day-toggle:hover {
+  background-color: #FAFBFD;
+}
+
+.changelog-date {
+  color: #141920;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.changelog-version {
+  margin-inline-start: auto;
+  padding: 2px 7px;
+  border: 1.4px solid #232B35;
+  border-radius: 5px;
+  background: #ffffff;
+  box-shadow: 1.5px 1.5px 0 rgba(20, 25, 32, 0.16);
+  color: #141920;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.changelog-summary {
+  margin: 0;
+  padding: 8px 13px;
+  border-top: 1.5px solid #141920;
+  background: #FAFBFD;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink-muted);
+}
+
+.changelog-entries {
+  border-top: 1.4px dashed #C2CBD6;
+  padding: 6px 13px 8px;
+  background: #ffffff;
+}
+
 .changelog-entry {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
-  gap: 8px;
-  padding: 6px 0;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: 9px;
+  padding: 6.5px 0;
+  font-size: 12.5px;
+  line-height: 1.52;
+  color: var(--text);
   overflow-wrap: anywhere;
+  border-top: 1px dashed var(--hairline);
 }
-.changelog-entry small { font-size: 10px; color: var(--text-muted); }
-.changelog-type { padding: 1px 5px; border-radius: 4px; font-size: 11px; background: var(--surface-subtle); color: var(--text-secondary); }
-.changelog-type.added { color: var(--ok); background: var(--ok-bg); }
-.changelog-type.improved { color: #245aa7; background: #edf4ff; }
-.changelog-type.fixed { color: var(--warn); background: var(--warn-bg); }
+
+.changelog-entry:first-child {
+  border-top: none;
+}
+
+.changelog-entry small {
+  padding: 1.5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #F6F7F9;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.changelog-type {
+  padding: 1.5px 7px;
+  border-radius: 4px;
+  border: 1.4px solid #7A8696;
+  font-size: 11px;
+  font-weight: 700;
+  background: #F3F5F7;
+  color: #384751;
+}
+
+.changelog-type.added { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-border); }
+.changelog-type.improved { color: #245aa7; background: #edf4ff; border-color: #84aee8; }
+.changelog-type.fixed { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-border); }
+.changelog-type.changed { color: #384751; background: #EDF1F4; border-color: #9FB0C0; }
 
 .meter-name {
   font-size: 12px;
@@ -1345,27 +1435,145 @@ input:focus, textarea:focus, select:focus {
 }
 
 .hotkey-pill {
-  border: 1px solid var(--border);
+  border: 1.5px solid #27303C;
   background: #ffffff;
-  color: var(--text-secondary);
-  border-radius: 6px;
+  color: var(--ink);
+  border-radius: 5px;
   padding: 4px 10px;
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 700;
+  box-shadow: 1.5px 1.5px 0 rgba(20, 25, 32, 0.14);
   cursor: pointer;
-  transition: background-color 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease);
+  transition: background-color 140ms var(--ease), color 140ms var(--ease), transform 70ms var(--ease), box-shadow 70ms var(--ease);
 }
 
 .hotkey-pill:hover {
-  border-color: var(--text-muted);
-  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .hotkey-pill.active {
   background: var(--ink-btn);
   border-color: var(--ink-btn);
   color: #ffffff;
+  box-shadow: 1.5px 1.5px 0 rgba(20, 25, 32, 0.25);
+}
+
+.hotkey-pill:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+/* Settings Page — Comic Card Upgrade */
+.settings-page .settings-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #141920;
+}
+
+.settings-page .settings-heading::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #141920;
+  transform: rotate(45deg);
+}
+
+.settings-comic-card {
+  border: 2px solid #141920;
+  border-radius: 9px;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 #141920;
+  overflow: hidden;
+}
+
+.settings-comic-card + .settings-comic-card {
+  margin-top: 12px;
+}
+
+.settings-card-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 11px 14px;
+  background-color: #ffffff;
+  background-image: radial-gradient(rgba(20, 25, 32, 0.08) 1px, transparent 1px);
+  background-size: 9px 9px;
+  border-bottom: 1.8px solid #141920;
+}
+
+.settings-banner-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-emblem {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  border: 1.8px solid #141920;
+  box-shadow: 2px 2px 0 #141920;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #141920;
+  background: #EDF1F4;
+}
+
+.settings-emblem.tint-mint { background: #E6F7EF; color: #0A6E49; }
+.settings-emblem.tint-amber { background: #FFF4E2; color: #9A4E06; }
+.settings-emblem.tint-sky { background: #EAF2FA; color: #1F4E79; }
+.settings-emblem.tint-slate { background: #EDF1F4; color: #1D242E; }
+
+.settings-banner-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #141920;
+  margin: 0;
+}
+
+.settings-comic-card .setting-row {
+  border-top: 1px dashed #D7DDE6;
+  padding: 11px 15px;
+}
+
+.settings-comic-card .setting-row:first-child {
+  border-top: none;
+}
+
+.settings-comic-card .disclosure-inner > .stash-row:first-child,
+.settings-comic-card .disclosure-inner > .app-row:first-child {
+  border-top: none;
+}
+
+.settings-comic-card .stash-row,
+.settings-comic-card .app-row {
+  border-top: 1px dashed #D7DDE6;
+}
+
+.settings-comic-card .toggle-track {
+  border: 1.5px solid #141920;
+  background: #E2E6EC;
+}
+
+.settings-comic-card .toggle input:checked + .toggle-track {
+  background: #1D242E;
+}
+
+.settings-comic-card .toggle-thumb {
+  top: 2px;
+  left: 2px;
+  border: 1.5px solid #141920;
 }
 
 .hotkey-alert {
@@ -1416,11 +1624,11 @@ input:focus, textarea:focus, select:focus {
   color: var(--ok);
 }
 
-/* Backlog Page */
+/* Backlog Page — Comic Strip Card Upgrade */
 .backlog-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .backlog-toolbar {
@@ -1430,7 +1638,12 @@ input:focus, textarea:focus, select:focus {
   flex-wrap: wrap;
   gap: 10px 12px;
   padding: 11px 14px;
-  background: var(--bg-card);
+  background-color: #ffffff;
+  background-image: radial-gradient(rgba(20, 25, 32, 0.06) 1px, transparent 1px);
+  background-size: 9px 9px;
+  border: 2px solid #141920;
+  border-radius: 9px;
+  box-shadow: 3.5px 3.5px 0 #141920;
 }
 
 .backlog-filters {
@@ -1452,18 +1665,23 @@ input:focus, textarea:focus, select:focus {
 .backlog-pill {
   padding: 4px 10px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
+  border: 1.5px solid #27303C;
   background: #ffffff;
-  color: var(--text-secondary);
+  color: var(--ink);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  box-shadow: 1.5px 1.5px 0 rgba(20, 25, 32, 0.12);
   cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+  transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform 70ms var(--ease), box-shadow 70ms var(--ease);
 }
 
 .backlog-pill:hover {
   background: var(--surface-hover);
-  color: var(--ink);
+}
+
+.backlog-pill:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
 }
 
 .backlog-pill.active {
@@ -1474,7 +1692,7 @@ input:focus, textarea:focus, select:focus {
 
 .backlog-pill span {
   opacity: 0.72;
-  margin-left: 3px;
+  margin-left: 4px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1490,6 +1708,7 @@ input:focus, textarea:focus, select:focus {
   min-width: 140px;
   padding: 5px 10px !important;
   font-size: 12.5px !important;
+  border: 1.4px solid #27303C !important;
 }
 
 .backlog-actions {
@@ -1502,14 +1721,22 @@ input:focus, textarea:focus, select:focus {
 .backlog-list {
   display: flex;
   flex-direction: column;
+  gap: 9px;
 }
 
 .backlog-item {
-  border-top: 1px solid var(--hairline);
+  border: 1.8px solid #141920;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 #141920;
+  overflow: hidden;
+  transition: transform var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
 }
 
-.backlog-item:first-child {
-  border-top: none;
+.backlog-item.is-done {
+  border: 1.6px dashed #8F9AA8;
+  box-shadow: 2px 2px 0 rgba(20, 25, 32, 0.14);
+  background: #FAFBFD;
 }
 
 .backlog-row {
@@ -1517,13 +1744,12 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
-  background: #ffffff;
-  transition: background-color var(--motion-fast) var(--ease);
+  padding: 10px 13px;
+  background: transparent;
 }
 
 .backlog-row:hover {
-  background: #FAFAFB;
+  background: #FAFAFC;
 }
 
 .backlog-item.is-done .backlog-title {
@@ -1541,7 +1767,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .backlog-expand-ic {
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   transition: transform var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
   flex-shrink: 0;
 }
@@ -1553,7 +1779,7 @@ input:focus, textarea:focus, select:focus {
 
 .backlog-title {
   font-size: 13.5px;
-  font-weight: 650;
+  font-weight: 750;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
@@ -1573,8 +1799,27 @@ input:focus, textarea:focus, select:focus {
 .backlog-row-side {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-shrink: 0;
+}
+
+.backlog-row-side .icon-tool {
+  border: 1.2px solid #D3DAE3;
+  background: #ffffff;
+}
+
+.backlog-row-side .icon-tool:hover {
+  border-color: #232B35;
+  background: var(--surface-hover);
+}
+
+.backlog-row-side .icon-tool.btn-danger-outline {
+  border-color: #E3A0A0;
+}
+
+.backlog-row-side .icon-tool.btn-danger-outline:hover {
+  border-color: var(--danger);
+  background: var(--danger-bg);
 }
 
 .backlog-inline-status {
@@ -1582,8 +1827,10 @@ input:focus, textarea:focus, select:focus {
   min-width: 92px;
   padding: 3.5px 24px 3.5px 8px !important;
   font-size: 11.5px !important;
-  border-radius: var(--radius-sm) !important;
-  box-shadow: none !important;
+  font-weight: 700 !important;
+  border-radius: 5px !important;
+  border-width: 1.5px !important;
+  box-shadow: 1.5px 1.5px 0 rgba(20, 25, 32, 0.14) !important;
 }
 
 .backlog-inline-status.st-doing {
@@ -1605,19 +1852,25 @@ input:focus, textarea:focus, select:focus {
 }
 
 .backlog-detail {
-  padding: 10px 14px 12px 37px;
-  border-top: 1px dashed var(--hairline);
-  background: #FAFBFD;
+  padding: 11px 14px 12px 37px;
+  border-top: 1.6px solid #141920;
+  background-color: #FAFBFD;
+  background-image: radial-gradient(rgba(20, 25, 32, 0.05) 1px, transparent 1px);
+  background-size: 9px 9px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .backlog-notes {
   margin: 0;
+  padding: 8px 10px;
+  border: 1.2px dashed #C2CBD6;
+  border-radius: 6px;
+  background: #ffffff;
   font-size: 12.5px;
   line-height: 1.6;
-  color: var(--text-secondary);
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
@@ -1630,6 +1883,12 @@ input:focus, textarea:focus, select:focus {
   gap: 10px;
   font-size: 11.5px;
   color: var(--text-muted);
+}
+
+.backlog-empty-card {
+  border: 2px dashed #8F9AA8;
+  border-radius: 9px;
+  background: #ffffff;
 }
 
 .backlog-empty {
