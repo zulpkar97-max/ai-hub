@@ -106,27 +106,27 @@ namespace CodexLauncher
             return b;
         }
 
-        // Refined Light-Mode Palette
-        public static readonly SolidColorBrush SidebarBg = BrushFromHex("#F7F7F8");
+        // Refined Light-Mode Palette (Scheme D: Precision Neo-Brutalist Lego)
+        public static readonly SolidColorBrush SidebarBg = BrushFromHex("#FFFFFF");
         public static readonly SolidColorBrush MainBg = BrushFromHex("#FFFFFF");
-        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#FFFFFF");
-        public static readonly SolidColorBrush HoverBg = BrushFromHex("#F0F1F4");
+        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#FAF9F6");
+        public static readonly SolidColorBrush HoverBg = BrushFromHex("#F7EFD2");
 
-        public static readonly SolidColorBrush Hairline = BrushFromHex("#E4E6EB");
-        public static readonly SolidColorBrush BorderStrong = BrushFromHex("#232B35");
+        public static readonly SolidColorBrush Hairline = BrushFromHex("#DCDAD2");
+        public static readonly SolidColorBrush BorderStrong = BrushFromHex("#17191E");
 
-        public static readonly SolidColorBrush TextPrimary = BrushFromHex("#141920");
-        public static readonly SolidColorBrush TextSecondary = BrushFromHex("#505B6A");
+        public static readonly SolidColorBrush TextPrimary = BrushFromHex("#17191E");
+        public static readonly SolidColorBrush TextSecondary = BrushFromHex("#505662");
 
-        public static readonly SolidColorBrush PrimaryBg = BrushFromHex("#1D242E");
-        public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#2E3745");
+        public static readonly SolidColorBrush PrimaryBg = BrushFromHex("#17191E");
+        public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#2B2F39");
 
-        public static readonly SolidColorBrush WarnText = BrushFromHex("#B45C08");
-        public static readonly SolidColorBrush WarnBg = BrushFromHex("#FFF5E7");
+        public static readonly SolidColorBrush WarnText = BrushFromHex("#B56208");
+        public static readonly SolidColorBrush WarnBg = BrushFromHex("#F7EFD2");
 
-        public static readonly SolidColorBrush DangerText = BrushFromHex("#C52828");
-        public static readonly SolidColorBrush DangerBg = BrushFromHex("#FDF1F1");
-        public static readonly SolidColorBrush DangerBorder = BrushFromHex("#C52828");
+        public static readonly SolidColorBrush DangerText = BrushFromHex("#C52B25");
+        public static readonly SolidColorBrush DangerBg = BrushFromHex("#FBDCD8");
+        public static readonly SolidColorBrush DangerBorder = BrushFromHex("#C52B25");
 
         public static void ApplySeamlessLightTitlebar(Window win)
         {
@@ -246,7 +246,7 @@ namespace CodexLauncher
             var bd = new FrameworkElementFactory(typeof(Border));
             bd.Name = "mbd";
             bd.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
-            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(0));
             bd.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Control.PaddingProperty));
             var cp = new FrameworkElementFactory(typeof(ContentPresenter));
             cp.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);

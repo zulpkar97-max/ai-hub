@@ -19,6 +19,15 @@
   let backlogProject = "all";
   let backlogStatus = "all";
   let backlogQuery = "";
+  let backlogViewMode = (() => {
+    try {
+      const saved = localStorage.getItem("aihub_backlog_view");
+      return saved === "kanban" ? "kanban" : "split";
+    } catch (_) {
+      return "split";
+    }
+  })();
+  let selectedBacklogId = "";
   const expandedSettings = new Set();
   const expandedBacklog = new Set();
   let cmdkItems = [];
@@ -40,17 +49,17 @@
     more: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>',
     edit: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     sync: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>',
-    monitor: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+    monitor: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14"/><path d="M8 21h8M12 17v4"/></svg>',
     trash: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
     close: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>',
-    ext: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>',
-    crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
-    mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
-    ledger: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3"/></svg>',
+    ext: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6H5V6h6"/></svg>',
+    crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v16h16"/><path d="M18 22V6H2"/></svg>',
+    mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
+    ledger: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3"/></svg>',
     changelog: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h5"/></svg>',
     chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
-    copy: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-    folder: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+    copy: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11"/><path d="M5 15H4V4h11v1"/></svg>',
+    folder: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3Z"/></svg>',
     pin: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z"/></svg>',
     eye: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>',
@@ -151,13 +160,13 @@
   }
 
   function planTagHtml(auth) {
-    if (!auth || !auth.logged_in) return `<span class="tag tag-warn">待登录</span>`;
+    if (!auth || !auth.logged_in) return `<span class="stamp sand">待登录</span>`;
     const p = String(auth.plan_type || "").toLowerCase();
-    if (p === "plus") return `<span class="tag tag-ok">Plus</span>`;
-    if (p === "pro") return `<span class="tag tag-pro">Pro</span>`;
-    if (p === "team" || p === "enterprise") return `<span class="tag tag-pro">${esc(p.toUpperCase())}</span>`;
-    if (p === "free") return `<span class="tag">Free</span>`;
-    return `<span class="tag">${esc(p || "已登录")}</span>`;
+    if (p === "plus") return `<span class="stamp mint">Plus</span>`;
+    if (p === "pro") return `<span class="stamp sky">Pro</span>`;
+    if (p === "team" || p === "enterprise") return `<span class="stamp sky">${esc(p.toUpperCase())}</span>`;
+    if (p === "free") return `<span class="stamp stone">Free</span>`;
+    return `<span class="stamp stone">${esc(p || "已登录")}</span>`;
   }
 
   // ==================== RENDERING ====================
@@ -165,6 +174,26 @@
   function renderAll() {
     if (!appState) return;
     renderSidebarTools();
+
+    const brandVer = $("#brand-version");
+    if (brandVer && appState.version) brandVer.textContent = appState.version;
+
+    const accounts = appState.accounts || [];
+    const design = findOpenDesign();
+    const runningCount = Number(accounts.some((acc) => acc.running)) + Number(!!appState.antigravity?.running) + Number(!!design?.running);
+    const projectCount = (appState.projects || []).filter((it) => !it.hidden).length;
+    const backlogCount = (appState.backlog_items || []).length;
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const countMap = {
+      workspace: pad2(runningCount),
+      projects: pad2(projectCount),
+      backlog: pad2(backlogCount),
+      manage: "CFG",
+    };
+    for (const [tabKey, val] of Object.entries(countMap)) {
+      const el = document.querySelector(`[data-nav-count="${tabKey}"]`);
+      if (el && el.textContent !== val) el.textContent = val;
+    }
 
     const pending = !!appState.pending_update;
     const refreshingProjects = activeTab === "projects" && !!appState.projects_refreshing;
@@ -176,7 +205,7 @@
         parts.push(iconButton("refreshProjects", "刷新项目 Git 状态", ICONS.refresh, { disabled: refreshingProjects, spinning: refreshingProjects }));
       }
       if (pending) {
-        parts.push('<button class="btn btn-soft btn-sm" data-act="applyLocalUpdate">重启应用更新</button>');
+        parts.push('<button class="btn btn-mint btn-sm" data-act="applyLocalUpdate">重启应用更新</button>');
       }
       headerActions.innerHTML = parts.join("");
       headerActions.dataset.key = headerKey;
@@ -230,33 +259,39 @@
     const shotKey = shot?.enabled && shot.registered ? shot.hotkey : "";
     const voiceKey = appState.voice_recorder_hotkey || "";
     const ledger = appState.quick_ledger_forms?.[0];
-    const version = appState.version || "v5.5.2";
+    const version = appState.version || "v5.9.0";
     const key = JSON.stringify([shotKey, voiceKey, ledger, version]);
     if (key === sidebarToolsKey) return;
     sidebarToolsKey = key;
     $("#sidebar-tools").innerHTML = `
-      <h2>快捷工具</h2>
-      <button class="btn btn-paper sidebar-tool" data-act="startScreenshot" title="${esc(shotKey || "截图")}">
-        ${ICONS.crop}<span>截图</span>${shotKey ? `<kbd aria-label="${esc(shotKey)}">${esc(shortcutLabel(shotKey))}</kbd>` : ""}
-      </button>
-      <button class="btn btn-paper sidebar-tool" data-act="startVoiceRecorder" title="${esc(voiceKey || "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
-        ${ICONS.mic}<span>AI 录音笔</span>${voiceKey ? `<kbd aria-label="${esc(voiceKey)}">${esc(shortcutLabel(voiceKey))}</kbd>` : ""}
-      </button>
-      ${ledger ? `<button class="btn btn-paper sidebar-tool" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
-        ${ICONS.ledger}<span>记账</span><span class="sidebar-tool-external">${ICONS.ext}</span>
-      </button>` : ""}
-      <button class="btn btn-paper sidebar-tool" data-act="openChangelog">
-        ${ICONS.changelog}<span>更新日志</span><kbd>${esc(version)}</kbd>
-      </button>`;
+      <div class="tools-hdr">QUICK BLOCKS</div>
+      <div class="tools-grid">
+        <button type="button" class="tool-tile" data-act="startScreenshot" title="${esc(shotKey || "截图")}">
+          <span class="tool-tile-top">${ICONS.crop}<span>截图</span></span>
+          <span class="tool-tile-sub mono">${shotKey ? esc(shortcutLabel(shotKey)) : "点击"}</span>
+        </button>
+        <button type="button" class="tool-tile" data-act="startVoiceRecorder" title="${esc(voiceKey || "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
+          <span class="tool-tile-top">${ICONS.mic}<span>录音笔</span></span>
+          <span class="tool-tile-sub mono">${voiceKey ? esc(shortcutLabel(voiceKey)) : "未启用"}</span>
+        </button>
+        ${ledger ? `<button type="button" class="tool-tile" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
+          <span class="tool-tile-top">${ICONS.ledger}<span>记账</span></span>
+          <span class="tool-tile-sub mono">WEB ↗</span>
+        </button>` : ""}
+        <button type="button" class="tool-tile" data-act="openChangelog" title="查看更新日志">
+          <span class="tool-tile-top">${ICONS.changelog}<span>日志</span></span>
+          <span class="tool-tile-sub mono">${esc(version.toUpperCase())}</span>
+        </button>
+      </div>`;
   }
 
   function iconButton(action, label, glyph, { disabled = false, danger = false, spinning = false, attrs = "" } = {}) {
-    return `<button type="button" class="btn icon-tool ${danger ? "btn-danger-outline" : "btn-ghost"}${spinning ? " is-spinning" : ""}"
+    return `<button type="button" class="btn btn-flat icon-tool ${danger ? "danger" : ""}${spinning ? " is-spinning" : ""}"
       ${action ? `data-act="${action}"` : ""} title="${esc(label)}" aria-label="${esc(label)}" ${disabled ? "disabled" : ""} ${attrs}>${glyph}</button>`;
   }
 
   function statusHtml(label, tone = "") {
-    return `<span class="status-inline ${tone}"><span class="status-dot"></span>${esc(label)}</span>`;
+    return `<span class="stamp ${tone === "running" || tone === "healthy" ? "mint" : tone === "status-error" ? "coral" : "stone"}"><span class="status-dot ${tone}"></span>${esc(label)}</span>`;
   }
 
   function toolHeading(id, icon, name, description, status = "", metadata = "") {
@@ -274,12 +309,16 @@
   }
 
   function renderQuotaMeter({ title, value, when, percent, tone = "", labelAttrs = "", valueAttrs = "", fillAttrs = "", timeAttrs = "", action = "" }) {
-    return `<div class="meter-block${action ? " meter-with-action" : ""}">
-      <span class="meter-name" ${labelAttrs}>${esc(title)}</span>
-      <strong class="meter-pct${tone ? ` tone-${tone}` : ""}" ${valueAttrs}>${esc(value)}</strong>
-      <span class="meter-reset" ${timeAttrs}>${esc(when)}</span>
-      ${action}
+    return `<div class="meter-block slot${action ? " meter-with-action" : ""}">
+      <div class="meter-top">
+        <span class="meter-name" ${labelAttrs}>${esc(title)}</span>
+        <strong class="meter-pct mono${tone ? ` tone-${tone}` : ""}" ${valueAttrs}>${esc(value)}</strong>
+      </div>
       ${percent == null ? '<div class="grad-track"></div>' : renderGradientBar(percent, tone, fillAttrs)}
+      <div class="meter-foot">
+        <span class="meter-reset mono" ${timeAttrs}>${esc(when)}</span>
+        ${action}
+      </div>
     </div>`;
   }
 
@@ -294,14 +333,14 @@
     const label = date.toDateString() === new Date().toDateString()
       ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
       : fmtDate(timestamp, true);
-    return `<time class="quota-updated" datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(label)}${automatic ? " · 自动" : ""}</time>`;
+    return `<time class="quota-updated mono" datetime="${esc(timestamp)}" title="${esc(fmtDate(timestamp))}">更新 ${esc(label)}${automatic ? " · 自动" : ""}</time>`;
   }
 
-  function desktopActions(tool, name, launchAction, stopAction, startStyle = "btn-primary") {
+  function desktopActions(tool, name, launchAction, stopAction, startStyle = "btn-dark") {
     const id = esc(tool?.id);
     const attrs = `data-id="${id}"`;
     const running = !!tool?.running;
-    return `<button class="btn ${running ? "btn-live" : startStyle} btn-sm" data-act="${launchAction}" ${attrs} ${id ? "" : "disabled"}>
+    return `<button class="btn ${running ? "btn-mint" : startStyle} btn-sm" data-act="${launchAction}" ${attrs} ${id ? "" : "disabled"}>
       ${running ? "打开" : ICONS.play + " 启动"}</button>
       ${running ? iconButton(stopAction, "关闭 " + name, ICONS.power, { danger: true, attrs }) : ""}`;
   }
@@ -340,17 +379,18 @@
   function renderWebTool(tool, profiles) {
     const profile = webIdentity(tool.id, profiles);
     const available = !!profile && appState.chrome_available !== false;
-    return `<section class="surface-card tool-card compact-tool" aria-labelledby="tool-${tool.id}">
-      <header class="tool-card-header">
+    const headTone = tool.id === "gemini" ? "mint" : "sky";
+    return `<section class="surface-card block tool-card compact-tool" aria-labelledby="tool-${tool.id}">
+      <header class="block-head ${headTone}">
         ${toolHeading("tool-" + tool.id, tool.icon, tool.name, "", statusHtml(available ? "可用" : "不可用", available ? "healthy" : "status-error"))}
         <div class="tool-actions">
-          <button class="btn btn-paper btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
+          <button class="btn btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
         </div>
       </header>
       <div class="tool-card-body">
         <div class="compact-identity">
-          <span class="tool-identity-email" data-web-email="${tool.id}" title="${esc(profile?.email)}">${esc(profile?.email || "—")}</span>
-          <select id="identity-${tool.id}" aria-label="${esc(tool.name)} Google 身份" data-web-identity="${tool.id}" ${available ? "" : "disabled"}>
+          <span class="tool-identity-email mono" data-web-email="${tool.id}" title="${esc(profile?.email)}">${esc(profile?.email || "—")}</span>
+          <select id="identity-${tool.id}" class="sel" aria-label="${esc(tool.name)} Google 身份" data-web-identity="${tool.id}" ${available ? "" : "disabled"}>
             ${profiles.length ? profiles.map((item) => `<option value="${esc(item.dir)}" ${item.dir === profile?.dir ? "selected" : ""}>${esc(item.name)}</option>`).join("") : "<option>暂无可用身份</option>"}
           </select>
         </div>
@@ -360,12 +400,12 @@
 
   function renderOpenDesign(tool) {
     const ready = !!tool;
-    return `<section class="surface-card tool-card compact-tool" aria-labelledby="tool-open-design">
-      <header class="tool-card-header">
+    return `<section class="surface-card block tool-card compact-tool" aria-labelledby="tool-open-design">
+      <header class="block-head stone">
         ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "",
           statusHtml(ready ? (tool.running ? "运行中" : "未运行") : "未安装", tool?.running ? "running" : ""))}
         <div class="tool-actions">
-          ${desktopActions(tool, "Open Design", "launchTool", "stopTool", "btn-paper")}
+          ${desktopActions(tool, "Open Design", "launchTool", "stopTool", "btn-dark")}
         </div>
       </header>
       <div class="tool-card-body compact-purpose">设计构思与原型创作</div>
@@ -396,41 +436,50 @@
     const tool = appState.antigravity || {};
     const usage = tool.usage;
     const quota = usage?.quota || {};
-    const groups = Object.keys(quota).length ? antigravityGroups(quota).map((group) => `
-      <div class="antigravity-quota-group">
-        <h3>${esc(group.name)}</h3>
-        <div class="meter-grid">${group.buckets.map((key) => {
-          const bucket = quota[key];
-          const percent = typeof bucket?.remaining_fraction === "number" && !bucket.disabled
-            ? Math.min(100, Math.max(0, bucket.remaining_fraction * 100)) : null;
-          const title = key.endsWith("-weekly") ? "每周额度" : (key.endsWith("-5h") ? "5h 额度" : "额度");
-          const value = percent != null ? percent.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) + "%"
-            : bucket?.disabled ? "不可用" : (typeof bucket?.remaining_amount === "number" ? Number(bucket.remaining_amount).toLocaleString("zh-CN") : "—");
-          return renderQuotaMeter({ title, value, when: bucket ? timeToReset(bucket.reset_time) : "暂不可读取",
-            percent, tone: percent == null ? "" : quotaTone(percent),
-            fillAttrs: `data-quota-fill="antigravity:${esc(key)}"`,
-            timeAttrs: bucket?.reset_time ? `title="${esc(fmtDate(bucket.reset_time))}"` : "" });
-        }).join("")}</div>
-      </div>`).join("") : "";
+    const groups = Object.keys(quota).length ? antigravityGroups(quota).map((group) => {
+      let hasDanger = false;
+      const metersHtml = group.buckets.map((key) => {
+        const bucket = quota[key];
+        const percent = typeof bucket?.remaining_fraction === "number" && !bucket.disabled
+          ? Math.min(100, Math.max(0, bucket.remaining_fraction * 100)) : null;
+        const tone = percent == null ? "" : quotaTone(percent);
+        if (tone === "danger") hasDanger = true;
+        const title = key.endsWith("-weekly") ? "每周额度" : (key.endsWith("-5h") ? "5h 额度" : "额度");
+        const value = percent != null ? percent.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) + "%"
+          : bucket?.disabled ? "不可用" : (typeof bucket?.remaining_amount === "number" ? Number(bucket.remaining_amount).toLocaleString("zh-CN") : "—");
+        return renderQuotaMeter({ title, value, when: bucket ? timeToReset(bucket.reset_time) : "暂不可读取",
+          percent, tone,
+          fillAttrs: `data-quota-fill="antigravity:${esc(key)}"`,
+          timeAttrs: bucket?.reset_time ? `title="${esc(fmtDate(bucket.reset_time))}"` : "" });
+      }).join("");
+      const single = group.buckets.length === 1;
+      return `
+      <div class="antigravity-quota-group ${hasDanger ? "slot-alert" : "slot"}">
+        <div class="ag-group-head">
+          <h3>${esc(group.name)}</h3>
+          ${hasDanger ? '<span class="stamp coral">额度告急</span>' : updatedAtHtml(usage?.fetched_at, tool.automatic)}
+        </div>
+        <div class="meter-grid${single ? " meter-grid-single" : ""}">${metersHtml}</div>
+      </div>`;
+    }).join("") : "";
     const error = tool.error
-      ? quotaMessage(tool.error, "quota-error", tool.cli_installed ? '<button class="btn btn-soft btn-sm" data-act="refreshAntigravity">重试</button>' : "")
+      ? quotaMessage(tool.error, "quota-error", tool.cli_installed ? '<button class="btn btn-flat btn-sm" data-act="refreshAntigravity">重试</button>' : "")
       : "";
     const info = tool.loading ? quotaMessage("正在读取额度…")
       : (!groups && !error ? quotaMessage(tool.cli_installed ? "点击刷新额度" : "暂不可读取 · CLI 未安装") : "");
-    return `<section class="surface-card tool-card" aria-labelledby="tool-antigravity">
-      <header class="tool-card-header">
-        ${toolHeading("tool-antigravity", tool.icon_url, "Antigravity", "",
+    return `<section class="surface-card block tool-card antigravity-tool" aria-labelledby="tool-antigravity">
+      <header class="block-head sky">
+        ${toolHeading("tool-antigravity", tool.icon_url, "ANTIGRAVITY", "",
           statusHtml(tool.id ? (tool.running ? "运行中" : "未运行") : "未安装", tool.running ? "running" : ""),
-          `${usage?.plan ? `<span class="tag tag-pro">${esc(usage.plan)}</span>` : ""}
-           ${usage?.email ? `<span class="tool-identity-email">${esc(usage.email)}</span>` : ""}`)}
+          `${usage?.plan ? `<span class="stamp">${esc(usage.plan)}</span>` : ""}
+           ${usage?.email ? `<span class="tool-identity-email mono">${esc(usage.email)}</span>` : ""}`)}
         <div class="tool-actions">
-          ${updatedAtHtml(usage?.fetched_at, tool.automatic)}
-          <button class="btn btn-soft btn-sm${tool.loading ? " is-spinning" : ""}" data-act="refreshAntigravity"
-            aria-busy="${!!tool.loading}" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-flat btn-sm${tool.loading ? " is-spinning" : ""}" data-act="refreshAntigravity"
+            aria-busy="${!!tool.loading}" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新</button>
           ${desktopActions(tool, "Antigravity", "launchTool", "stopTool")}
         </div>
       </header>
-      <div class="tool-card-body">
+      <div class="tool-card-body ag-body">
         ${error}${info}
         ${groups ? `<div class="antigravity-quota-grid">${groups}</div>` : ""}
       </div>
@@ -483,29 +532,30 @@
     ];
 
     return `
-      <section class="surface-card network-card" aria-label="网络状态">
-        <div class="network-data">
-          <span class="network-cell network-status ${tone}"><span class="status-dot"></span>${label}</span>
-          ${policy ? `<span class="network-cell network-policy">${esc(policy)}</span>` : ""}
-          <span class="network-cell network-node-summary" title="${esc(node)}">${esc(node)}</span>
-          <span class="network-cell network-latency ${delayTone}" title="当前节点延迟${esc(lastDelay)}">${esc(latency)}${lastDelay ? `<small>${esc(lastDelay)}</small>` : ""}</span>
-          <span class="network-cell network-traffic" title="${esc(trafficDetails)}">${esc(traffic)}</span>
+      <section class="surface-card net-bar" aria-label="网络状态">
+        <div class="net-cap ${tone}"><span class="status-dot ${tone}"></span>${label}</div>
+        <div class="net-cells">
+          ${policy ? `<span class="net-cell"><span class="net-k">策略</span><strong>${esc(policy)}</strong></span>` : ""}
+          <span class="net-cell net-node" title="${esc(node)}"><span class="net-k">节点</span><strong class="mono">${esc(node)}</strong></span>
+          <span class="net-cell" title="当前节点延迟${esc(lastDelay)}"><span class="stamp ${delayTone === "is-ok" ? "mint" : delayTone === "is-warning" ? "sand" : delayTone === "is-danger" ? "coral" : "stone"} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}</span>
+          <span class="net-cell mono" title="${esc(trafficDetails)}">${esc(traffic)}</span>
         </div>
-        <div class="network-actions utility-toolbar" role="group" aria-label="网络工具栏">
+        <div class="net-actions" role="group" aria-label="网络工具栏">
           ${tools.join("")}
-          <div class="danger-zone" role="group" aria-label="代理中断操作">${danger.join("")}</div>
+          <span class="net-sep" aria-hidden="true"></span>
+          ${danger.join("")}
         </div>
       </section>`;
   }
 
   function renderCodex(accounts) {
     const loading = accounts.some((account) => account.usage_loading);
-    return `<section class="surface-card tool-card codex-tool" aria-labelledby="codex-tool-title">
-      <header class="tool-card-header">
-        ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "Codex", accounts.length + " 个账号")}
+    return `<section class="surface-card block tool-card codex-tool" aria-labelledby="codex-tool-title">
+      <header class="block-head sand">
+        ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "CODEX", "", `<span class="stamp mono">${accounts.length} 账号</span>`)}
         <div class="tool-actions">
-          <button class="btn btn-soft btn-sm${loading ? " is-spinning" : ""}" data-act="refreshAllUsage" aria-busy="${loading}" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
-          <button class="btn btn-primary btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
+          <button class="btn btn-flat btn-sm${loading ? " is-spinning" : ""}" data-act="refreshAllUsage" aria-busy="${loading}" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
+          <button class="btn btn-dark btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
         </div>
       </header>
       <div class="codex-accounts">${accounts.length ? accounts.map(renderCodexAccount).join("") : quotaMessage("暂无账号")}</div>
@@ -524,7 +574,7 @@
     else if (auth.can_fetch_usage === false) feedback = quotaMessage("当前登录方式未提供额度");
     else if (acc.usage_loading) feedback = quotaMessage("正在查询额度…");
     else if (acc.usage_error) feedback = quotaMessage(acc.usage_error, "quota-error",
-      `<button class="btn btn-soft btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
+      `<button class="btn btn-flat btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
     else if (!windows.length) feedback = quotaMessage(usage ? "当前套餐暂无独立额度窗口" : "暂无额度数据");
 
     const meters = windows.map(([slot, w]) => {
@@ -545,22 +595,21 @@
       fillAttrs: `data-cd-fill="${esc(acc.id)}"`,
       timeAttrs: `title="${esc(fmtDate(acc.recycle_at))}"`,
       action: needsCalibration
-        ? `<button class="btn btn-soft meter-calibrate" data-act="openEditAccount" data-id="${esc(acc.id)}" title="当前回收时间与到期前 5 天相差超过 6 小时">校准时间</button>` : ""
+        ? `<button class="btn btn-flat meter-calibrate" data-act="openEditAccount" data-id="${esc(acc.id)}" title="当前回收时间与到期前 5 天相差超过 6 小时">校准时间</button>` : ""
     }));
 
     return `<article class="codex-account">
       <header class="account-top">
         <div class="app-info">
           <div class="app-name-line">
+            <span class="status-dot ${acc.running ? "running" : ""}"></span>
             <h3 class="app-name account-name">${esc(name)}</h3>
-            ${acc.is_default ? '<span class="tag">默认</span>' : ""}
+            ${acc.is_default ? '<span class="stamp stone">默认</span>' : ""}
             ${planTagHtml(auth)}
           </div>
-          <div class="app-sub account-email">${esc(email)}</div>
+          <div class="app-sub account-email mono">${esc(email)}${usage?.fetched_at ? " · " : ""}${updatedAtHtml(usage?.fetched_at, usage?.automatic)}</div>
         </div>
         <div class="account-actions">
-          ${updatedAtHtml(usage?.fetched_at, usage?.automatic)}
-          ${statusHtml(acc.running ? "运行中" : "未运行", acc.running ? "running" : "")}
           ${desktopActions(acc, name, "launchAccount", "stopAccount")}
           ${iconButton("openMoreMenu", "更多 " + name + " 操作", ICONS.more, { attrs: `data-id="${esc(acc.id)}"` })}
         </div>
@@ -578,7 +627,7 @@
     const design = findOpenDesign();
     const running = Number(accounts.some((acc) => acc.running)) + Number(!!appState.antigravity?.running) + Number(!!design?.running);
     $("#view-title").textContent = "工作台";
-    $("#view-sub").textContent = running ? `${running} 个工具运行中` : "";
+    $("#view-sub").textContent = running ? `${running} 个工具运行中 · 全部额度实时监控` : "全部核心工具就绪";
 
     const view = $("#view-content");
     if (view.querySelector("[data-web-identity]:focus")) return;
@@ -604,10 +653,10 @@
     view.dataset.page = "workspace";
     view.innerHTML = `
       ${renderNetwork(proxy)}
-      <div class="sec-heading"><h2 class="sec-title work-tools-title">AI 工作工具</h2></div>
-      ${renderCodex(accounts)}
-      ${renderAntigravity()}
-      <div class="sec-heading"><h2 class="sec-title">快捷入口</h2></div>
+      <div class="ws-grid-2">
+        ${renderCodex(accounts)}
+        ${renderAntigravity()}
+      </div>
       <div class="work-tools-grid">
         ${webTools.map((tool) => renderWebTool(tool, chromes)).join("")}
         ${renderOpenDesign(design)}
@@ -670,7 +719,7 @@
       button.setAttribute("aria-pressed", String(active));
     }
     const status = view.querySelector("#settings-hotkey-status");
-    status.className = "tag" + (shot.enabled ? shot.registered ? " tag-ok" : " tag-warn" : "");
+    status.className = "stamp" + (shot.enabled ? (shot.registered ? " mint" : " sand") : " stone");
     status.textContent = !shot.enabled ? "快捷键已关闭" : shot.registered ? "热键已生效" : "热键被占用";
     const alert = view.querySelector("#settings-hotkey-alert");
     alert.hidden = !(shot.enabled && !shot.registered && shot.error);
@@ -696,43 +745,43 @@
     const key = `${item.name || ""} ${item.folder_name || ""}`.toLowerCase();
     if (key.includes("ai hub") || key.includes("ai-hub")) {
       return {
-        tint: "tint-slate",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></svg>',
+        headTone: "mint",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 17.5h7M17.5 14v7"/></svg>',
       };
     }
     if (key.includes("astra") || key.includes("unknown")) {
       return {
-        tint: "tint-amber",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><circle cx="6.5" cy="7" r="2.8"/><circle cx="17.5" cy="6.5" r="2.5"/><circle cx="12" cy="17.5" r="3"/><path d="M9 8.2 15 6.8M8 9.4l2.7 5.5M16.2 8.8l-2.6 6"/></svg>',
+        headTone: "sky",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="15" y="4" width="5" height="5"/><rect x="9.5" y="15" width="5" height="5"/><path d="M9 6.5h6M6.5 9l4 6M17.5 9l-4 6"/></svg>',
       };
     }
     if (key.includes("留学") || key.includes("study")) {
       return {
-        tint: "tint-mint",
+        headTone: "sand",
         svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M6 10.5V16c0 1.8 2.7 3.5 6 3.5s6-1.7 6-3.5v-5.5"/><path d="M21 9v6"/></svg>',
       };
     }
     if (key.includes("runtime")) {
       return {
-        tint: "tint-sky",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m8 9 3 3-3 3M13 15h3"/></svg>',
+        headTone: "stone",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="m8 9 3 3-3 3M13 15h3"/></svg>',
       };
     }
     if (key.includes("portfolio")) {
       return {
-        tint: "tint-violet",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>',
+        headTone: "lav",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M9 9v11"/></svg>',
       };
     }
     if (key.includes("ledger") || key.includes("life")) {
       return {
-        tint: "tint-amber",
-        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M12 8h4M12 12h4M12 16h2.5"/></svg>',
+        headTone: "sand",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18"/><path d="M8 3v18M12 8h4M12 12h4M12 16h2.5"/></svg>',
       };
     }
     return {
-      tint: "tint-slate",
-      svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+      headTone: "sand",
+      svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3Z"/></svg>',
     };
   }
 
@@ -745,29 +794,32 @@
 
   function renderProjectCardsHtml(items) {
     if (items.length === 0) {
-      return '<section class="surface-card"><div class="backlog-empty">暂无登记项目，可让 AI 助手添加到本地项目列表。</div></section>';
+      return '<section class="surface-card block"><div class="backlog-empty">暂无登记项目，可让 AI 助手添加到本地项目列表。</div></section>';
     }
     return `<div class="projects-grid">${items.map((item) => {
       const theme = projectVisualTheme(item);
 
-      let stampClass = "st-plain";
+      let stampClass = "stone";
       let stampText = "普通目录";
       if (!item.exists) {
-        stampClass = "st-danger";
+        stampClass = "coral";
         stampText = "路径缺失";
       } else if (item.is_git) {
         if (item.dirty_count > 0) {
-          stampClass = "st-warn";
+          stampClass = "sand";
           stampText = `${item.dirty_count} 处改动`;
         } else {
-          stampClass = "st-ok";
+          stampClass = "mint";
           stampText = "干净";
         }
       }
 
       const branchTag = item.is_git
-        ? `<span class="tag tag-pro">${esc(item.branch || "HEAD")}</span>`
-        : '<span class="tag">本地目录</span>';
+        ? `<span class="stamp mono">${esc(item.branch || "HEAD")}</span>`
+        : '<span class="stamp stone">本地目录</span>';
+      const portTag = item.preview_port
+        ? `<span class="stamp mono">:${esc(item.preview_port)}</span>`
+        : "";
       const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
 
       const previewState = appState.project_previews?.[item.id];
@@ -775,45 +827,45 @@
       const previewRunning = previewState === "running";
       const previewTip = item.preview_port ? "本地预览 · 端口 " + item.preview_port : "运行项目的启动预览脚本";
       const previewBtn = item.has_preview
-        ? `<button class="btn btn-live btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" title="${esc(previewTip)}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : ICONS.play}<span>${previewBusy ? "处理中" : previewRunning ? "打开" : "预览"}</span></button>`
+        ? `<button class="btn ${previewRunning ? "btn-mint" : "btn-dark"} btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" title="${esc(previewTip)}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : ICONS.play}<span>${previewBusy ? "处理中" : previewRunning ? "● 预览中 · 打开" : "启动预览"}</span></button>`
         : ((item.is_self || item.id === "prj-ai-hub" || String(item.folder_name || "").toLowerCase() === "ai-hub")
-          ? '<span class="project-self-pill" title="当前正在运行的桌面软件本体"><span class="project-self-dot" aria-hidden="true"></span><span>本体运行中</span></span>'
+          ? '<span class="btn btn-mint btn-sm project-self-pill" title="当前正在运行的桌面软件本体"><span class="status-dot running" aria-hidden="true"></span><span>本体运行中</span></span>'
           : "");
       const stopPreviewBtn = previewRunning
-        ? `<button class="btn btn-danger-outline btn-sm project-stop-preview" data-act="stopProjectPreview" data-id="${esc(item.id)}" title="停止预览" aria-label="停止 ${esc(item.name)} 预览"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>`
+        ? `<button class="btn btn-flat danger btn-sm project-stop-preview" data-act="stopProjectPreview" data-id="${esc(item.id)}" title="停止预览" aria-label="停止 ${esc(item.name)} 预览"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10"/></svg></button>`
         : "";
       const remoteBtn = item.remote_url
         ? iconButton("openProjectRemote", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-url="${esc(item.remote_url)}"` })
         : "";
 
-      return `<article class="project-card" data-project-id="${esc(item.id)}">
-        <header class="project-card-head" title="按住卡头可拖动排序">
+      return `<article class="project-card block" data-project-id="${esc(item.id)}">
+        <header class="project-card-head block-head ${theme.headTone}" title="按住卡头可拖动排序">
           <div class="project-card-lead">
-            <div class="project-emblem ${theme.tint}">${theme.svg}</div>
+            <div class="project-emblem">${theme.svg}</div>
             <div class="project-head-meta">
               <div class="project-name-row">
                 <span class="project-name" title="${esc(item.name)}">${esc(item.name)}</span>
+                ${branchTag}
               </div>
-              <div class="project-sub-tags">${branchTag}</div>
             </div>
           </div>
           <div class="project-head-actions">
-            <span class="project-stamp ${stampClass}">${esc(stampText)}</span>
-            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(item.name)} 的顺序" title="按住拖动，或聚焦后用方向键排序"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg></button>
+            ${portTag}
+            <span class="stamp ${stampClass}">${esc(stampText)}</span>
+            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(item.name)} 的顺序" title="按住拖动，或聚焦后用方向键排序"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="square"/></svg></button>
           </div>
         </header>
 
         <div class="project-card-body">
           <p class="project-desc" title="${esc(descText)}">${esc(descText)}</p>
-          <div class="project-path-pill" data-act="copyProjectPath" data-path="${esc(item.path)}" title="点击复制完整路径：${esc(item.path)}">
-            ${ICONS.folder}
-            <span class="project-path">${esc(compactPathLabel(item.path))}</span>
+          <div class="path-strip" title="${esc(item.path)}">
+            <span class="project-path mono">${esc(compactPathLabel(item.path))}</span>
+            <button type="button" class="btn btn-flat btn-xs" data-act="copyProjectPath" data-path="${esc(item.path)}" title="复制完整路径">复制</button>
           </div>
         </div>
 
         <footer class="project-card-foot">
           <div class="project-foot-left">
-            <button class="btn btn-paper btn-sm" data-act="copyProjectPath" data-path="${esc(item.path)}" title="复制本地路径，方便贴给 AI 助手">${ICONS.copy}<span>复制路径</span></button>
             ${previewBtn}
             ${stopPreviewBtn}
           </div>
@@ -1085,18 +1137,22 @@
 
   const BACKLOG_PROJECTS = ["AI Hub", "Life Hub", "通用"];
   const BACKLOG_STATUSES = [
-    { id: "idea", label: "构思中" },
-    { id: "planned", label: "已排期" },
-    { id: "doing", label: "进行中" },
-    { id: "done", label: "已完成" },
-    { id: "paused", label: "搁置" },
+    { id: "idea", label: "构思中", tone: "sand" },
+    { id: "planned", label: "已排期", tone: "sky" },
+    { id: "doing", label: "进行中", tone: "mint" },
+    { id: "done", label: "已完成", tone: "stone" },
+    { id: "paused", label: "搁置", tone: "stone" },
   ];
   const BACKLOG_PRIORITIES = {
-    high: { label: "高", cls: "tag-danger", rank: 0 },
-    medium: { label: "中", cls: "tag-warn", rank: 1 },
-    low: { label: "低", cls: "", rank: 2 },
+    high: { label: "高", cls: "coral", rank: 0 },
+    medium: { label: "中", cls: "sand", rank: 1 },
+    low: { label: "低", cls: "stone", rank: 2 },
   };
   const BACKLOG_STATUS_RANK = { doing: 0, planned: 1, idea: 2, paused: 3, done: 4 };
+
+  function backlogStatusMeta(id) {
+    return BACKLOG_STATUSES.find((s) => s.id === id) || BACKLOG_STATUSES[0];
+  }
 
   function filterBacklogItems(items) {
     const q = backlogQuery.trim().toLowerCase();
@@ -1116,46 +1172,138 @@
       });
   }
 
-  function renderBacklogListHtml(filtered) {
+  function renderBacklogSplitHtml(filtered) {
     if (filtered.length === 0) {
-      return '<div class="backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
+      return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
     }
-    return `<div class="backlog-list">${filtered.map((item) => {
-      const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
-      const expanded = expandedBacklog.has(item.id);
-      const preview = String(item.notes || "").replace(/\s+/g, " ").trim();
-      const projCls = item.project === "AI Hub" ? "tag-pro" : item.project === "Life Hub" ? "tag-ok" : "";
-      const statusOpts = BACKLOG_STATUSES.map((st) =>
-        `<option value="${st.id}"${item.status === st.id ? " selected" : ""}>${st.label}</option>`
-      ).join("");
-      return `<article class="backlog-item${item.status === "done" ? " is-done" : ""}${expanded ? " is-expanded" : ""}" data-backlog-id="${esc(item.id)}">
-        <div class="backlog-row">
-          <div class="backlog-row-main" data-act="toggleBacklogDetail" data-id="${esc(item.id)}">
-            <span class="backlog-expand-ic">${ICONS.chevronDown}</span>
-            <span class="tag ${prio.cls}">${prio.label}</span>
-            <span class="tag ${projCls}">${esc(item.project || "通用")}</span>
-            <span class="backlog-title" title="${esc(item.title)}">${esc(item.title)}</span>
-            ${preview ? `<span class="backlog-preview">${esc(preview)}</span>` : ""}
-          </div>
-          <div class="backlog-row-side">
-            <select class="backlog-inline-status st-${esc(item.status || "idea")}" data-backlog-status="${esc(item.id)}" aria-label="修改状态">${statusOpts}</select>
-            ${iconButton("copyBacklogPrompt", "复制需求 Prompt 给 AI", ICONS.copy, { attrs: `data-id="${esc(item.id)}"` })}
-            ${iconButton("editBacklogItem", "编辑需求", ICONS.edit, { attrs: `data-id="${esc(item.id)}"` })}
-            ${iconButton("confirmDeleteBacklog", "删除需求", ICONS.trash, { danger: true, attrs: `data-id="${esc(item.id)}"` })}
+    const sel = filtered.find((it) => it.id === selectedBacklogId) || filtered[0];
+    selectedBacklogId = sel.id;
+    const selStatus = backlogStatusMeta(sel.status);
+    const selPrio = BACKLOG_PRIORITIES[sel.priority] || BACKLOG_PRIORITIES.medium;
+    const statusOpts = BACKLOG_STATUSES.map((st) =>
+      `<option value="${st.id}"${sel.status === st.id ? " selected" : ""}>${st.label}</option>`
+    ).join("");
+
+    const groups = [
+      { title: "进行中", tone: "mint", list: filtered.filter((it) => it.status === "doing") },
+      { title: "已排期", tone: "sky", list: filtered.filter((it) => it.status === "planned") },
+      { title: "构思中", tone: "sand", list: filtered.filter((it) => it.status === "idea") },
+      { title: "搁置 & 已完成", tone: "stone", list: filtered.filter((it) => it.status === "paused" || it.status === "done") },
+    ];
+
+    return `<div class="cp-split">
+      <section class="block cp-split-list">
+        <div class="block-head white">
+          <span>需求清单（点击查看右侧完整详情）</span>
+          <span class="stamp mono">${filtered.length} 条</span>
+        </div>
+        <div class="cp-list-scroll">
+          ${groups.filter((g) => g.list.length > 0).map((g) => `
+            <div class="cp-grp-hdr ${g.tone}">
+              <span>${g.title}</span><span class="mono">${g.list.length}</span>
+            </div>
+            ${g.list.map((it) => {
+              const pr = BACKLOG_PRIORITIES[it.priority] || BACKLOG_PRIORITIES.medium;
+              const st = backlogStatusMeta(it.status);
+              return `<div class="cp-row${it.id === sel.id ? " selected" : ""}${it.status === "done" ? " is-done" : ""}" data-act="selectBacklogItem" data-id="${esc(it.id)}">
+                <div class="cp-row-main">
+                  <span class="stamp ${pr.cls}">${pr.label}</span>
+                  <span class="stamp stone">${esc(it.project || "通用")}</span>
+                  <span class="cp-row-title" title="${esc(it.title)}">${esc(it.title)}</span>
+                </div>
+                <span class="stamp ${st.tone}">${st.label}</span>
+              </div>`;
+            }).join("")}
+          `).join("")}
+        </div>
+      </section>
+
+      <aside class="block cp-split-detail">
+        <div class="block-head ${selStatus.tone}">
+          <span class="mono">DETAIL · ${esc(sel.project || "通用")}</span>
+          <div class="cp-detail-actions">
+            <button type="button" class="btn btn-flat btn-xs" data-act="copyBacklogPrompt" data-id="${esc(sel.id)}">复制</button>
+            <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(sel.id)}">编辑</button>
+            <button type="button" class="btn btn-flat danger btn-xs" data-act="confirmDeleteBacklog" data-id="${esc(sel.id)}">删除</button>
           </div>
         </div>
-        ${expanded ? `<div class="backlog-detail">
-          <p class="backlog-notes">${esc(item.notes || "暂无详细说明，点击右侧编辑补充讨论要点。")}</p>
-          <div class="backlog-detail-foot">
-            <span>创建 ${esc(fmtDate(item.created_at))} · 更新 ${esc(fmtDate(item.updated_at))}</span>
-            <div style="display:flex;gap:6px;">
-              <button class="btn btn-paper btn-sm" data-act="copyBacklogPrompt" data-id="${esc(item.id)}">复制给 AI</button>
-              <button class="btn btn-soft btn-sm" data-act="editBacklogItem" data-id="${esc(item.id)}">编辑内容</button>
+        <div class="cp-detail-body">
+          <h2 class="cp-detail-title">${esc(sel.title)}</h2>
+          <div class="slot cp-detail-kv">
+            <div>
+              <div class="cp-kv-label">归属项目</div>
+              <strong>${esc(sel.project || "通用")}</strong>
+            </div>
+            <div>
+              <div class="cp-kv-label">当前状态（实时切换）</div>
+              <select class="sel" data-backlog-status="${esc(sel.id)}" aria-label="修改状态">${statusOpts}</select>
+            </div>
+            <div>
+              <div class="cp-kv-label">优先级</div>
+              <span class="stamp ${selPrio.cls}">${selPrio.label}优先级</span>
+            </div>
+            <div>
+              <div class="cp-kv-label">时间记录</div>
+              <span class="mono cp-kv-time" title="创建 ${esc(fmtDate(sel.created_at))}">更新 ${esc(fmtDate(sel.updated_at, true))}</span>
             </div>
           </div>
-        </div>` : ""}
-      </article>`;
-    }).join("")}</div>`;
+          <div class="cp-detail-sec">详细说明</div>
+          <p class="backlog-notes">${esc(sel.notes || "暂无详细说明，点击右上角「编辑」补充讨论要点。")}</p>
+        </div>
+      </aside>
+    </div>`;
+  }
+
+  function renderBacklogKanbanHtml(filtered) {
+    if (filtered.length === 0) {
+      return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
+    }
+    const cols = [
+      { title: "进行中", tone: "mint", items: filtered.filter((it) => it.status === "doing") },
+      { title: "已排期", tone: "sky", items: filtered.filter((it) => it.status === "planned") },
+      { title: "构思中", tone: "sand", items: filtered.filter((it) => it.status === "idea") },
+      { title: "搁置 & 已完成", tone: "stone", items: filtered.filter((it) => it.status === "paused" || it.status === "done") },
+    ];
+    return `<div class="kanban-4">${cols.map((col) => `
+      <section class="block kanban-col">
+        <header class="block-head ${col.tone}">
+          <span>${col.title}</span>
+          <span class="stamp mono">${col.items.length}</span>
+        </header>
+        <div class="kanban-cards">
+          ${col.items.length === 0
+            ? '<div class="kanban-empty">暂无记录</div>'
+            : col.items.map((item) => {
+                const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
+                const statusOpts = BACKLOG_STATUSES.map((st) =>
+                  `<option value="${st.id}"${item.status === st.id ? " selected" : ""}>${st.label}</option>`
+                ).join("");
+                return `<article class="kcard${item.status === "done" ? " is-done" : ""}" data-backlog-id="${esc(item.id)}">
+                  <div class="kcard-top">
+                    <div class="kcard-tags">
+                      <span class="stamp ${prio.cls}">${prio.label}</span>
+                      <span class="stamp stone">${esc(item.project || "通用")}</span>
+                    </div>
+                    <select class="sel kcard-status" data-backlog-status="${esc(item.id)}" aria-label="修改状态">${statusOpts}</select>
+                  </div>
+                  <div class="kcard-title">${esc(item.title)}</div>
+                  ${item.notes ? `<div class="kcard-desc">${esc(item.notes)}</div>` : ""}
+                  <div class="kcard-foot">
+                    <span class="mono kcard-date">${esc(fmtDate(item.updated_at, true))}</span>
+                    <div class="kcard-actions">
+                      <button type="button" class="btn btn-flat btn-xs" data-act="copyBacklogPrompt" data-id="${esc(item.id)}">复制</button>
+                      <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(item.id)}">编辑</button>
+                      <button type="button" class="btn btn-flat danger btn-xs" data-act="confirmDeleteBacklog" data-id="${esc(item.id)}">删</button>
+                    </div>
+                  </div>
+                </article>`;
+              }).join("")}
+        </div>
+      </section>`).join("")}</div>`;
+  }
+
+  function renderBacklogListHtml(filtered) {
+    return backlogViewMode === "kanban" ? renderBacklogKanbanHtml(filtered) : renderBacklogSplitHtml(filtered);
   }
 
   function renderBacklog(forceListOnly = false) {
@@ -1166,7 +1314,7 @@
 
     const view = $("#view-content");
     const filtered = filterBacklogItems(items);
-    const key = JSON.stringify([items, backlogProject, backlogStatus, backlogQuery, [...expandedBacklog]]);
+    const key = JSON.stringify([items, backlogProject, backlogStatus, backlogQuery, backlogViewMode, selectedBacklogId]);
 
     if (forceListOnly && view.dataset.page === "backlog") {
       const listCard = $("#backlog-list-card");
@@ -1184,7 +1332,7 @@
 
     const pillTabs = ["all", ...BACKLOG_PROJECTS].map((p) => {
       const label = p === "all" ? "全部" : p;
-      return `<button type="button" class="backlog-pill${backlogProject === p ? " active" : ""}" data-act="filterBacklogProject" data-project="${esc(p)}">${esc(label)}<span>${counts[p] || 0}</span></button>`;
+      return `<button type="button" class="seg-btn${backlogProject === p ? " active-sand" : ""}" data-act="filterBacklogProject" data-project="${esc(p)}">${esc(label)} <span class="mono">${counts[p] || 0}</span></button>`;
     }).join("");
 
     const statusFilterOpts = [
@@ -1193,15 +1341,19 @@
     ].join("");
 
     view.innerHTML = `<div class="backlog-page">
-      <section class="backlog-toolbar">
+      <section class="bl-toolbar">
         <div class="backlog-filters">
-          <div class="backlog-pills">${pillTabs}</div>
-          <select id="backlog-filter-status" class="backlog-status-select" aria-label="按状态筛选">${statusFilterOpts}</select>
+          <div class="seg" role="group" aria-label="视图切换">
+            <button type="button" class="seg-btn${backlogViewMode === "split" ? " active" : ""}" data-act="setBacklogView" data-mode="split">▤ 清单详情</button>
+            <button type="button" class="seg-btn${backlogViewMode === "kanban" ? " active" : ""}" data-act="setBacklogView" data-mode="kanban">▥ 四列看板</button>
+          </div>
+          <div class="seg" role="group" aria-label="项目筛选">${pillTabs}</div>
+          <select id="backlog-filter-status" class="sel backlog-status-select" aria-label="按状态筛选">${statusFilterOpts}</select>
           <input id="backlog-search" class="backlog-search" type="text" placeholder="搜索需求或备注..." value="${esc(backlogQuery)}" />
         </div>
         <div class="backlog-actions">
-          <button class="btn btn-paper btn-sm" data-act="exportBacklogMd"${filtered.length ? "" : " disabled"}>导出 Markdown</button>
-          <button class="btn btn-primary btn-sm" data-act="openAddBacklog">${ICONS.plus}<span>新建需求</span></button>
+          <button class="btn btn-sm" data-act="exportBacklogMd"${filtered.length ? "" : " disabled"}>导出 MD</button>
+          <button class="btn btn-dark btn-sm" data-act="openAddBacklog">${ICONS.plus}<span>新建需求</span></button>
         </div>
       </section>
       <div id="backlog-list-card">${renderBacklogListHtml(filtered)}</div>
@@ -1332,7 +1484,7 @@
       <div class="stash-row">
         <div class="stash-meta">
           <strong>${esc(sc.name)}</strong>
-          <span class="tag">${sc.requires_admin ? "公共桌面 · 需提权" : "个人桌面"}</span>
+          <span class="stamp stone">${sc.requires_admin ? "公共桌面 · 需提权" : "个人桌面"}</span>
         </div>
         <div class="stash-right">
           <span class="stash-state ${sc.hidden ? "hidden-on" : ""}">${sc.hidden ? "已隐藏" : "桌面显示中"}</span>
@@ -1348,19 +1500,19 @@
           <img class="app-icon" src="${esc(app.icon_url)}" alt="" />
           <div class="app-info"><div class="app-name">${esc(app.name)}</div><div class="app-sub">${esc(app.uninstall_method)}</div></div>
         </div>
-        <button class="btn btn-danger-outline btn-sm" data-act="confirmUninstall" data-id="${esc(app.id)}">卸载软件</button>
+        <button class="btn btn-flat danger btn-sm" data-act="confirmUninstall" data-id="${esc(app.id)}">卸载软件</button>
       </div>`).join("");
 
     view.innerHTML = `<div class="settings-page">
       <section class="settings-group" aria-labelledby="settings-hotkeys">
         <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
-        <div class="settings-comic-card">
-          <header class="settings-card-banner">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head sand">
             <div class="settings-banner-lead">
-              <div class="settings-emblem tint-amber"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg></div>
+              <div class="settings-emblem"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></svg></div>
               <h3 class="settings-banner-title">热键与状态提醒</h3>
             </div>
-            <span id="settings-hotkey-status" class="tag"></span>
+            <span id="settings-hotkey-status" class="stamp"></span>
           </header>
           <div class="setting-row">
             <div class="setting-label">全局截图快捷键</div>
@@ -1370,7 +1522,7 @@
             </div>
           </div>
           <div id="settings-hotkey-alert" class="hotkey-alert" hidden>
-            <span></span><button class="btn btn-soft btn-sm" data-act="reregisterHotkey">重新注册</button>
+            <span></span><button class="btn btn-flat btn-sm" data-act="reregisterHotkey">重新注册</button>
           </div>
           <div class="setting-row">
             <div class="setting-label">额度自动刷新与回满提醒</div>
@@ -1385,16 +1537,16 @@
 
       <section class="settings-group" aria-labelledby="settings-apps">
         <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
-        <div class="settings-comic-card">
-          <header class="settings-card-banner">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head mint">
             <div class="settings-banner-lead">
-              <div class="settings-emblem tint-mint">${ICONS.folder}</div>
+              <div class="settings-emblem">${ICONS.folder}</div>
               <h3 class="settings-banner-title">桌面图标收纳</h3>
-              <span id="stash-count" class="tag"></span>
+              <span id="stash-count" class="stamp"></span>
             </div>
             <div class="setting-actions">
-              <button class="btn btn-paper btn-sm" data-act="hideAllAiShortcuts">一键隐藏 AI 图标</button>
-              <button class="btn btn-paper btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
+              <button class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键隐藏 AI 图标</button>
+              <button class="btn btn-flat btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
               ${settingsDisclosure("stash-details", "展开明细")}
             </div>
           </header>
@@ -1403,12 +1555,12 @@
             ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
           `)}
         </div>
-        <div class="settings-comic-card">
-          <header class="settings-card-banner">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head sky">
             <div class="settings-banner-lead">
-              <div class="settings-emblem tint-sky">${ICONS.trash}</div>
+              <div class="settings-emblem">${ICONS.trash}</div>
               <h3 class="settings-banner-title">软件卸载</h3>
-              <span class="tag">已检测 ${apps.length} 个</span>
+              <span class="stamp">已检测 ${apps.length} 个</span>
             </div>
             ${settingsDisclosure("uninstall-details", "展开列表")}
           </header>
@@ -1420,10 +1572,10 @@
 
       <section class="settings-group" aria-labelledby="settings-system">
         <h2 id="settings-system" class="settings-heading">系统与窗口</h2>
-        <div class="settings-comic-card">
-          <header class="settings-card-banner">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head stone">
             <div class="settings-banner-lead">
-              <div class="settings-emblem tint-slate">${ICONS.monitor}</div>
+              <div class="settings-emblem">${ICONS.monitor}</div>
               <h3 class="settings-banner-title">常驻与托盘行为</h3>
             </div>
           </header>
@@ -2024,7 +2176,7 @@
     try { dates = changelogDates(await callHost("getChangelog")); } catch (_) { dates = []; }
     const categories = { 新增: "added", 改进: "improved", 修复: "fixed", 调整: "changed" };
     const summaries = {
-      "2026-11-22": "新增需求池与漫画风项目管理页，支持固定端口预览、全卡头拖拽排序，并统一需求池、设置与日志的粗线视觉语言。",
+      "2026-11-22": "升级至 v5.9.0 全站直角精工积木风（0px 直角、雪白微点阵、2px 墨线硬影与建筑色块），工作台改版为双列一屏，需求池新增清单详情与四列看板双视图。",
       "2026-11-21": "工作台、网络、Codex 和截图完成集中升级，新增 Antigravity 实时额度。",
       "2026-11-20": "AI Hub 初版到工作台合并，加入截图、提字与桌面图标收纳。"
     };
@@ -2304,6 +2456,18 @@
     } else if (act === "filterBacklogProject") {
       backlogProject = actBtn.dataset.project || "all";
       renderBacklog();
+    } else if (act === "setBacklogView") {
+      const mode = actBtn.dataset.mode === "kanban" ? "kanban" : "split";
+      if (mode !== backlogViewMode) {
+        backlogViewMode = mode;
+        try { localStorage.setItem("aihub_backlog_view", mode); } catch (_) { }
+        renderBacklog();
+      }
+    } else if (act === "selectBacklogItem") {
+      if (id && id !== selectedBacklogId) {
+        selectedBacklogId = id;
+        renderBacklog(true);
+      }
     } else if (act === "openAddBacklog") {
       openBacklogModal(null);
     } else if (act === "exportBacklogMd") {

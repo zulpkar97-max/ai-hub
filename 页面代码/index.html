@@ -8,13 +8,18 @@
 </head>
 <body>
   <div class="window-frame">
-    <!-- LEFT TRANSLUCENT MICA SIDEBAR -->
+    <!-- LEFT PURE WHITE SIDEBAR -->
     <aside class="sidebar">
       <div class="sidebar-top drag-region">
-        <div class="brand">
-          <img id="brand-icon" class="brand-icon" src="https://icons.aihub.local/aihub-v5.png" alt="AI Hub" />
+        <div class="brand-plate">
+          <div class="brand-icon-box">
+            <img id="brand-icon" class="brand-icon" src="https://icons.aihub.local/aihub-v5.png" alt="AI Hub" />
+          </div>
           <div class="brand-meta">
-            <div class="brand-name">AI Hub</div>
+            <div class="brand-meta-top">
+              <div class="brand-name">AI HUB</div>
+              <span id="brand-version" class="stamp mint mono">v5.9.0</span>
+            </div>
             <div class="brand-sub">本地聚合中枢</div>
           </div>
         </div>
@@ -22,32 +27,44 @@
 
       <nav class="nav-list" aria-label="主导航">
         <button class="nav-item active" data-tab="workspace" aria-current="page">
-          <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          <span class="nav-label">工作台</span>
+          <span class="nav-left">
+            <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            <span class="nav-label">工作台</span>
+          </span>
+          <span class="nav-count mono" data-nav-count="workspace">00</span>
         </button>
         <button class="nav-item" data-tab="projects">
-          <svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
-          <span class="nav-label">项目</span>
+          <span class="nav-left">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3Z"/></svg>
+            <span class="nav-label">项目</span>
+          </span>
+          <span class="nav-count mono" data-nav-count="projects">00</span>
         </button>
         <button class="nav-item" data-tab="backlog">
-          <svg class="ic" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>
-          <span class="nav-label">需求池</span>
+          <span class="nav-left">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><rect x="3.5" y="4.8" width="2.4" height="2.4" fill="currentColor" stroke="none"/><rect x="3.5" y="10.8" width="2.4" height="2.4" fill="currentColor" stroke="none"/><rect x="3.5" y="16.8" width="2.4" height="2.4" fill="currentColor" stroke="none"/></svg>
+            <span class="nav-label">需求池</span>
+          </span>
+          <span class="nav-count mono" data-nav-count="backlog">00</span>
         </button>
         <button class="nav-item" data-tab="manage">
-          <svg class="ic" viewBox="0 0 24 24"><path d="M4 7h10"/><circle cx="17" cy="7" r="2.5"/><path d="M20 17H10"/><circle cx="7" cy="17" r="2.5"/></svg>
-          <span class="nav-label">设置</span>
+          <span class="nav-left">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M4 7h10M20 7h-2"/><rect x="14" y="4.5" width="4" height="5"/><path d="M20 17H10M4 17h2"/><rect x="6" y="14.5" width="4" height="5"/></svg>
+            <span class="nav-label">设置</span>
+          </span>
+          <span class="nav-count mono" data-nav-count="manage">CFG</span>
         </button>
       </nav>
 
       <section id="sidebar-tools" class="sidebar-tools" aria-label="快捷工具"></section>
 
-      <button id="btn-batch-exit" class="sidebar-action-btn btn btn-danger-outline">
+      <button id="btn-batch-exit" class="sidebar-action-btn btn btn-coral">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
         <span>一键全部退出</span>
       </button>
     </aside>
 
-    <!-- RIGHT PURE WHITE ELEVATED WORKSPACE -->
+    <!-- RIGHT SNOW-WHITE MICRO-DOT WORKSPACE -->
     <section class="main-pane">
       <header class="main-header drag-region">
         <div class="header-left">
@@ -61,7 +78,7 @@
               <svg viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6"/></svg>
             </button>
             <button id="win-max" class="win-btn" title="最大化" aria-label="最大化">
-              <svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.2"/></svg>
+              <svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6"/></svg>
             </button>
             <button id="win-close" class="win-btn win-btn-close" title="关闭" aria-label="关闭">
               <svg viewBox="0 0 12 12"><line x1="2.5" y1="2.5" x2="9.5" y2="9.5"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/></svg>

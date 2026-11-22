@@ -29,11 +29,11 @@ namespace CodexLauncher
                 Width = 196,
                 Background = UiHelpers.MainBg,
                 BorderBrush = UiHelpers.BorderStrong,
-                BorderThickness = new Thickness(1.5),
-                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(0),
                 Padding = new Thickness(6),
                 Margin = new Thickness(10),
-                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 2, ShadowDepth = 3, Direction = 315, Opacity = 0.22 }
+                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 0, ShadowDepth = 3, Direction = 315, Opacity = 1.0 }
             };
 
             var stack = new StackPanel();
