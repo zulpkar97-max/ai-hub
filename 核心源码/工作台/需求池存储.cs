@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
 namespace CodexLauncher
@@ -36,6 +37,17 @@ namespace CodexLauncher
         private static readonly object SyncLock = new object();
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = 20 * 1024 * 1024 };
         private static readonly string BacklogFile = Path.Combine(CoreService.DataDir, "backlog.json");
+
+        private static readonly Regex ChecklistLine = new Regex(@"^(\s*-\s+)(?:\[([ xX])\]\s+)?(.*)$");
+        private static readonly List<DeletedItem> RecentlyDeleted = new List<DeletedItem>();
+
+        private sealed class DeletedItem
+        {
+            public string Receipt;
+            public BacklogItem Item;
+            public int Index;
+            public DateTimeOffset Expires;
+        }
 
         private static readonly HashSet<string> ValidProjects = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -81,6 +93,9 @@ namespace CodexLauncher
 
                 if (target == null)
                 {
+                    if (!string.IsNullOrEmpty(id))
+                        throw new InvalidOperationException("未找到对应的需求条目。");
+
                     target = new BacklogItem
                     {
                         id = "req-" + Guid.NewGuid().ToString("N").Substring(0, 10),
@@ -122,7 +137,46 @@ namespace CodexLauncher
             }
         }
 
-        internal static List<BacklogItem> DeleteItem(string id)
+        internal static List<BacklogItem> SetChecklistLine(string id, int index, string expectedText, bool isChecked)
+        {
+            lock (SyncLock)
+            {
+                var store = ReadStore();
+                var target = store.items.FirstOrDefault(item => item.id == id);
+                if (target == null) throw new InvalidOperationException("未找到对应的需求条目。");
+
+                var lines = (target.notes ?? "").Replace("\r\n", "\n").Split('\n');
+                var match = index >= 0 && index < lines.Length ? ChecklistLine.Match(lines[index]) : null;
+                if (match == null || !match.Success || match.Groups[3].Value != expectedText)
+                    throw new InvalidOperationException("清单内容已变更，请重新检查后再勾选。");
+
+                lines[index] = match.Groups[1].Value + (isChecked ? "[x] " : "[ ] ") + expectedText;
+                target.notes = string.Join("\n", lines);
+                target.updated_at = DateTimeOffset.Now.ToString("o");
+                WriteStore(store);
+                return store.items.Select(Clone).ToList();
+            }
+        }
+
+        internal static List<BacklogItem> SetMetadata(string id, string field, string value)
+        {
+            lock (SyncLock)
+            {
+                var store = ReadStore();
+                var target = store.items.FirstOrDefault(item => item.id == id);
+                if (target == null) throw new InvalidOperationException("未找到对应的需求条目。");
+
+                if (field == "priority" && ValidPriorities.Contains(value)) target.priority = value;
+                else if (field == "project" && ValidProjects.Contains(value)) target.project = value;
+                else throw new InvalidOperationException("无效的需求属性。");
+
+                target.updated_at = DateTimeOffset.Now.ToString("o");
+                WriteStore(store);
+                return store.items.Select(Clone).ToList();
+            }
+        }
+
+        internal static List<BacklogItem> DeleteItem(string id, out string receipt)
         {
             if (string.IsNullOrWhiteSpace(id))
                 throw new InvalidOperationException("缺少需求标识。");
@@ -130,11 +184,38 @@ namespace CodexLauncher
             lock (SyncLock)
             {
                 var store = ReadStore();
-                int removed = store.items.RemoveAll(item => string.Equals(item.id, id, StringComparison.Ordinal));
-                if (removed == 0)
-                    throw new InvalidOperationException("未找到要删除的需求条目。");
+                int index = store.items.FindIndex(item => item.id == id);
+                if (index < 0) throw new InvalidOperationException("未找到要删除的需求条目。");
 
+                var removed = store.items[index];
+                store.items.RemoveAt(index);
                 WriteStore(store);
+
+                var now = DateTimeOffset.UtcNow;
+                RecentlyDeleted.RemoveAll(entry => entry.Expires <= now);
+                if (RecentlyDeleted.Count >= 20) RecentlyDeleted.RemoveAt(0);
+                receipt = Guid.NewGuid().ToString("N");
+                RecentlyDeleted.Add(new DeletedItem { Receipt = receipt, Item = removed, Index = index, Expires = now.AddMinutes(2) });
+                return store.items.Select(Clone).ToList();
+            }
+        }
+
+        internal static List<BacklogItem> RestoreItem(string receipt)
+        {
+            lock (SyncLock)
+            {
+                var now = DateTimeOffset.UtcNow;
+                RecentlyDeleted.RemoveAll(entry => entry.Expires <= now);
+                var entryToRestore = RecentlyDeleted.FirstOrDefault(entry => entry.Receipt == receipt);
+                if (entryToRestore == null) throw new InvalidOperationException("撤销已过期。");
+
+                var store = ReadStore();
+                if (store.items.Any(item => item.id == entryToRestore.Item.id))
+                    throw new InvalidOperationException("该需求已存在。");
+
+                store.items.Insert(Math.Min(entryToRestore.Index, store.items.Count), entryToRestore.Item);
+                WriteStore(store);
+                RecentlyDeleted.Remove(entryToRestore);
                 return store.items.Select(Clone).ToList();
             }
         }
@@ -158,6 +239,7 @@ namespace CodexLauncher
                     }
                 }
                 WriteStore(store);
+                RecentlyDeleted.Clear();
                 return store.items.Select(Clone).ToList();
             }
         }

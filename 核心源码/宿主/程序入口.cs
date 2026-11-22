@@ -35,7 +35,7 @@ namespace CodexLauncher
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("启动账号失败：\n" + ex.Message, "AI Hub", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show("启动账号失败：\n" + ex.Message, "AI BASE", MessageBoxButton.OK, MessageBoxImage.Error);
                     return 1;
                 }
             }
@@ -111,7 +111,7 @@ namespace CodexLauncher
             }
             catch (Exception ex)
             {
-                MessageBox.Show("无法启动 AI Hub：\n" + ex.Message, "AI Hub", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("无法启动 AI BASE：\n" + ex.Message, "AI BASE", MessageBoxButton.OK, MessageBoxImage.Error);
                 return 1;
             }
         }

@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.6";
+        public const string AppVersion = "v5.9.7";
         private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -622,20 +622,42 @@ namespace CodexLauncher
         {
             foreach (string name in new[] { "clash-verge", "verge-mihomo" })
             {
-                try
+                foreach (var process in Process.GetProcessesByName(name))
                 {
-                    foreach (var p in Process.GetProcessesByName(name))
-                        try { p.Kill(); } catch { }
+                    using (process)
+                    {
+                        try { if (!process.HasExited) process.Kill(); }
+                        catch (InvalidOperationException) { if (!process.HasExited) throw; }
+                    }
                 }
-                catch { }
             }
+            WaitForProxyState(false);
         }
 
         public static void RestartClashVerge()
         {
+            string exe = FindClashVergeExe();
+            if (string.IsNullOrEmpty(exe))
+                throw new InvalidOperationException("未找到 Clash Verge 可执行文件。");
+
             StopClashVerge();
-            Thread.Sleep(700);
-            OpenOrStartClashVerge();
+            Process.Start(new ProcessStartInfo { FileName = exe, UseShellExecute = true });
+            WaitForProxyState(true);
+        }
+
+        private static void WaitForProxyState(bool running)
+        {
+            var timer = Stopwatch.StartNew();
+            do
+            {
+                var status = GetProxyStatus();
+                if (running ? status.PortListening && status.ClashProcessRunning : !status.Running) return;
+                Thread.Sleep(200);
+            }
+            while (timer.ElapsedMilliseconds < (running ? 12000 : 4000));
+            throw new InvalidOperationException(running
+                ? "Clash Verge 启动后，代理端口未就绪。"
+                : "Clash Verge 或代理端口仍在运行，未能确认关闭。");
         }
 
         // ==================== CHROME PROFILES ====================

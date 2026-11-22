@@ -17,6 +17,7 @@ namespace CodexLauncher
 
         private AccountsStore _store;
         private int _settingsRevision;
+        private int _backlogRevision;
         private List<AccountViewModel> _accounts = new List<AccountViewModel>();
         private ProxyStatusInfo _proxy = new ProxyStatusInfo();
         private readonly ClashNetwork _network = new ClashNetwork();
@@ -47,6 +48,7 @@ namespace CodexLauncher
             if (_refreshInFlight) return;
             _refreshInFlight = true;
             int settingsRevision = _settingsRevision;
+            int backlogRevision = _backlogRevision;
             bool refreshChrome = includeChrome || _chromeProfiles.Count == 0;
 
             ThreadPool.QueueUserWorkItem(_ =>
@@ -92,7 +94,7 @@ namespace CodexLauncher
                     if (proxy != null) _proxy = proxy;
                     if (chromes != null) _chromeProfiles = chromes;
                     if (shortcuts != null) _desktopShortcuts = shortcuts;
-                    if (backlogItems != null) _backlogItems = backlogItems;
+                    if (backlogItems != null && backlogRevision == _backlogRevision) _backlogItems = backlogItems;
                     if (projectRoots != null) _projectRoots = projectRoots;
                     if (projects != null)
                     {

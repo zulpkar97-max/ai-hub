@@ -56,7 +56,7 @@ namespace CodexLauncher
         private bool _hotkeyRegistered = false;
         private string _hotkeyError = "";
         private DispatcherTimer _screenshotDelayTimer;
-        private const string UiProtocol = "4";
+        private const string UiProtocol = "5";
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
             { "/index.html", "text/html; charset=utf-8" },
@@ -316,7 +316,7 @@ namespace CodexLauncher
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "初始化界面引擎失败：\n" + ex.Message, "AI Hub", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(this, "初始化界面引擎失败：\n" + ex.Message, "AI BASE", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

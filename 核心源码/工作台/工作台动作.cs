@@ -184,22 +184,21 @@ namespace CodexLauncher
                         break;
 
                     case "proxyStop":
-                        CoreService.StopClashVerge();
-                        SendToastToJs("已关闭 Clash Verge", false);
-                        RefreshAsync(false);
-                        break;
-
                     case "proxyRestart":
-                        SendToastToJs("正在重启 Clash Verge...", false);
-                        ThreadPool.QueueUserWorkItem(_ =>
+                        await RunNetworkAction(reqId, () =>
                         {
-                            try { CoreService.RestartClashVerge(); } catch { }
-                            Dispatcher.BeginInvoke(new Action(() =>
+                            try
                             {
-                                SendToastToJs("已重启 Clash Verge", false);
-                                RefreshAsync(false);
-                            }));
+                                if (action == "proxyStop") CoreService.StopClashVerge();
+                                else CoreService.RestartClashVerge();
+                                return null;
+                            }
+                            catch (System.ComponentModel.Win32Exception ex)
+                            {
+                                throw new InvalidOperationException("无法操作 Clash Verge：" + ex.Message, ex);
+                            }
                         });
+                        RefreshAsync(false);
                         break;
 
                     case "launchAccount":
@@ -480,7 +479,7 @@ namespace CodexLauncher
                                 && HotkeyHelper.TryParse(_store.settings.screenshot_hotkey, out screenshotModifiers, out screenshotKey)
                                 && HotkeyHelper.TryParse(VoiceRecorderShortcut.Display, out recorderModifiers, out recorderKey)
                                 && screenshotModifiers == recorderModifiers && screenshotKey == recorderKey)
-                                throw new InvalidOperationException("AI Hub 截图正在使用录音笔的快捷键，请先更换截图快捷键。");
+                                throw new InvalidOperationException("AI BASE 截图正在使用录音笔的快捷键，请先更换截图快捷键。");
                             VoiceRecorderShortcut.Send();
                             break;
                         }
@@ -608,6 +607,7 @@ namespace CodexLauncher
                             AuthParser.GetStr(data, "status"),
                             AuthParser.GetStr(data, "priority"),
                             AuthParser.GetStr(data, "notes"));
+                        _backlogRevision++;
                         PushFullState();
                         ReplyJs(reqId, true, null, null);
                         SendToastToJs(string.IsNullOrEmpty(AuthParser.GetStr(data, "id")) ? "已添加到需求池" : "需求已更新", false);
@@ -617,15 +617,47 @@ namespace CodexLauncher
                         _backlogItems = BacklogStorage.SetStatus(
                             AuthParser.GetStr(data, "id"),
                             AuthParser.GetStr(data, "status"));
+                        _backlogRevision++;
+                        PushFullState();
+                        ReplyJs(reqId, true, null, null);
+                        break;
+
+                    case "setBacklogCheck":
+                        {
+                            int line;
+                            if (!int.TryParse(AuthParser.GetStr(data, "line"), out line))
+                                throw new InvalidOperationException("无效的清单位置。");
+                            _backlogItems = BacklogStorage.SetChecklistLine(AuthParser.GetStr(data, "id"), line,
+                                AuthParser.GetStr(data, "text"), AuthParser.GetStr(data, "checked") == "1");
+                            _backlogRevision++;
+                            PushFullState();
+                            ReplyJs(reqId, true, null, null);
+                            break;
+                        }
+
+                    case "setBacklogMetadata":
+                        _backlogItems = BacklogStorage.SetMetadata(AuthParser.GetStr(data, "id"),
+                            AuthParser.GetStr(data, "field"), AuthParser.GetStr(data, "value"));
+                        _backlogRevision++;
                         PushFullState();
                         ReplyJs(reqId, true, null, null);
                         break;
 
                     case "deleteBacklogItem":
-                        _backlogItems = BacklogStorage.DeleteItem(AuthParser.GetStr(data, "id"));
+                        {
+                            string receipt;
+                            _backlogItems = BacklogStorage.DeleteItem(AuthParser.GetStr(data, "id"), out receipt);
+                            _backlogRevision++;
+                            PushFullState();
+                            ReplyJs(reqId, true, receipt, null);
+                            break;
+                        }
+
+                    case "restoreBacklogItem":
+                        _backlogItems = BacklogStorage.RestoreItem(AuthParser.GetStr(data, "receipt"));
+                        _backlogRevision++;
                         PushFullState();
                         ReplyJs(reqId, true, null, null);
-                        SendToastToJs("已删除需求", false);
                         break;
 
                     case "copyText":
@@ -880,7 +912,11 @@ namespace CodexLauncher
                                     if (parsed.TryGetValue("backlog_items", out blObj) && blObj != null)
                                     {
                                         var blList = Json.ConvertToType<List<BacklogItem>>(blObj);
-                                        if (blList != null) _backlogItems = BacklogStorage.ReplaceItems(blList);
+                                        if (blList != null)
+                                        {
+                                            _backlogItems = BacklogStorage.ReplaceItems(blList);
+                                            _backlogRevision++;
+                                        }
                                     }
                                     PushFullState();
                                     RefreshAsync(true);
@@ -899,7 +935,9 @@ namespace CodexLauncher
             catch (Exception ex)
             {
                 ReplyJs(reqId, false, null, ex.Message);
-                SendToastToJs(ex.Message, true);
+                if (action != "setBacklogCheck" && action != "setBacklogMetadata"
+                    && action != "deleteBacklogItem" && action != "restoreBacklogItem")
+                    SendToastToJs(ex.Message, true);
             }
         }
 
