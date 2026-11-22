@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Hub &amp; Life Hub · Design System 标本页</title>
+  <style>
+    /* ==========================================================================
+       AI HUB / LIFE HUB — UNIFIED DESIGN TOKENS (v1.0 Draft)
+       核心 DNA：0px 锐利直角 · 纯白与雪白微点阵 · 60 线网点焦点 · 低饱和朱砂红印章
+       ========================================================================== */
+    :root {
+      /* 1. Surfaces 表面材质 */
+      --surface-white: #FFFFFF;        /* 纯白：侧栏、顶栏、卡片主面、弹窗正文 */
+      --surface-canvas: #FAF9F6;       /* 雪白点阵底：右侧主画布 */
+      --surface-canvas-dot: #D9D7D0;   /* 画布点阵：1px / 18px 步距 */
+      --surface-paper: #FAF9F7;        /* 浅纸面：次按钮、表单底框、摘要块 */
+      --surface-tone: #F8F9F8;         /* 网点底：激活导航、弹窗顶栏、状态头 */
+      --surface-hover: #F5F6F5;        /* 轻悬停纸底 */
+
+      /* 2. Ink & Borders 墨线与灰阶 */
+      --ink: #17191E;                  /* 主墨黑：标题、焦点框、硬影、主按钮 */
+      --ink-hover: #2C303A;            /* 墨黑主按钮悬停加深/微提亮 */
+      --text-body: #262B33;            /* 正文深墨灰 */
+      --text-secondary: #505662;       /* 次级说明文字 */
+      --text-muted: #7E8591;           /* 弱信息、时间、版本号 */
+      --line-struct: #CFD5D3;          /* 建筑分隔线：侧栏右界、顶栏底界、弹窗底线 */
+      --line-subtle: #E4E7E6;          /* 内部发丝线：网格内框、卡片内分割 */
+      --line-control: #C6CCCA;         /* 纸卡控件默认边框 */
+
+      /* 3. Semantic Accents 仅保留 3 个克制语义色 */
+      --ok: #0C7C52;                   /* 翡翠深绿文字 */
+      --ok-fill: #14A06D;              /* 翡翠绿方点 / 正常进度条 */
+      --warn: #B56208;                 /* 琥珀深字 */
+      --warn-fill: #E38D17;            /* 琥珀进度条 / 临期提醒 */
+      --danger: #C9524A;               /* 低饱和朱砂红（默认印章底色） */
+      --danger-hover: #B92620;         /* 正砖红（悬停加深 / 危险文字） */
+
+      /* 4. Elevation 硬影阶梯（严格 3 档） */
+      --shadow-paper: 1.5px 1.5px 0 #D8DCDC;  /* Level 1：浅灰纸影（静置次控件） */
+      --shadow-card: 2px 2px 0 #E0E3E2;       /* Level 1+：建筑容器微影（铭牌/网络条/卡片） */
+      --shadow-ink: 2px 2px 0 #17191E;        /* Level 2：墨黑实心硬影（激活态/印章按钮） */
+      --shadow-modal: 3px 3px 0 #17191E;      /* Level 3：弹窗浮层硬影 */
+
+      /* 5. Motion */
+      --t-press: 60ms;
+      --t-fast: 90ms;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      border-radius: 0 !important;
+      outline: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--surface-canvas);
+      background-image: radial-gradient(var(--surface-canvas-dot) 1px, transparent 1px);
+      background-size: 18px 18px;
+      color: var(--ink);
+      font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      font-size: 13.5px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .mono {
+      font-family: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .screentone {
+      background-color: var(--surface-tone);
+      background-image: radial-gradient(rgba(23, 25, 30, 0.11) 0.65px, transparent 0.65px);
+      background-size: 4.5px 4.5px;
+    }
+
+    .hatch {
+      background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 3px,
+        rgba(23, 25, 30, 0.08) 3px,
+        rgba(23, 25, 30, 0.08) 4px
+      );
+    }
+
+    .ic {
+      width: 14.5px;
+      height: 14.5px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      flex-shrink: 0;
+    }
+
+    /* ==================== PAGE SHELL ==================== */
+    .shell {
+      display: flex;
+      min-height: 100vh;
+      max-width: 1440px;
+      margin: 0 auto;
+      border-left: 1.5px solid var(--ink);
+      border-right: 1.5px solid var(--ink);
+      background: transparent;
+    }
+
+    .toc {
+      width: 224px;
+      flex-shrink: 0;
+      background: var(--surface-white);
+      border-right: 1px solid var(--line-struct);
+      padding: 18px 14px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .toc-brand {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      align-items: stretch;
+    }
+    .toc-brand-main {
+      flex: 1;
+      padding: 9px 10px;
+    }
+    .toc-brand-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .toc-brand-sub {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .toc-brand-tag {
+      width: 26px;
+      border-left: 1px solid var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      writing-mode: vertical-rl;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      padding-top: 0.2em;
+      color: var(--text-secondary);
+    }
+
+    .toc-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .toc-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7.5px 10px;
+      text-decoration: none;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      font-size: 12.5px;
+      font-weight: 550;
+      transition: border-color var(--t-fast) ease, background-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .toc-link:hover {
+      background: var(--surface-hover);
+      border-color: var(--line-control);
+      color: var(--ink);
+    }
+    .toc-link.is-active {
+      background-color: var(--surface-tone);
+      background-image: radial-gradient(rgba(23, 25, 30, 0.11) 0.65px, transparent 0.65px);
+      background-size: 4.5px 4.5px;
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-ink);
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .toc-dot {
+      display: none;
+      width: 6px;
+      height: 6px;
+      background: var(--ok-fill);
+    }
+    .toc-link.is-active .toc-dot {
+      display: inline-block;
+    }
+
+    .toc-foot {
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px dashed var(--line-struct);
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 46px;
+      background: var(--surface-white);
+      border-bottom: 1px solid var(--line-struct);
+      padding: 0 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 14.5px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .topbar-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      padding-left: 11px;
+      border-left: 1px solid var(--line-subtle);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot-ok { width: 5px; height: 5px; background: var(--ok-fill); display: inline-block; }
+    .dot-warn { width: 5px; height: 5px; background: var(--warn-fill); display: inline-block; }
+    .dot-danger { width: 5px; height: 5px; background: var(--danger); display: inline-block; }
+
+    .content {
+      padding: 24px 28px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* ==================== SECTION BLOCKS ==================== */
+    .sec {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scroll-margin-top: 66px;
+    }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line-struct);
+    }
+    .sec-title-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .sec-num {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    .sec h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .sec-note {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .panel {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      padding: 16px 18px;
+    }
+    .panel-soft {
+      background: var(--surface-white);
+      border: 1px solid var(--line-struct);
+      padding: 14px 16px;
+    }
+    .sub-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin: 0 0 10px;
+      text-transform: uppercase;
+    }
+
+    /* ==================== 01. COLOR & SURFACE SWATCHES ==================== */
+    .swatch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+      gap: 10px;
+    }
+    .swatch {
+      border: 1px solid var(--line-struct);
+      background: var(--surface-white);
+      display: flex;
+      flex-direction: column;
+    }
+    .swatch-chip {
+      height: 52px;
+      border-bottom: 1px solid var(--line-subtle);
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: 6px;
+    }
+    .swatch-chip.is-canvas {
+      background-color: var(--surface-canvas);
+      background-image: radial-gradient(var(--surface-canvas-dot) 1px, transparent 1px);
+      background-size: 14px 14px;
+    }
+    .swatch-body {
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .swatch-name {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .swatch-token {
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+    .swatch-use {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .ban-strip {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px dashed var(--line-struct);
+      background: var(--surface-paper);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .ban-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border: 1px solid var(--line-struct);
+      background: var(--surface-white);
+      text-decoration: line-through;
+      color: var(--text-muted);
+      font-size: 11.5px;
+    }
+    .ban-dot {
+      width: 10px;
+      height: 10px;
+      border: 1px solid rgba(23, 25, 30, 0.25);
+      display: inline-block;
+    }
+
+    /* ==================== 02. ELEVATION SCALE ==================== */
+    .elev-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .elev-card {
+      background: var(--surface-white);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .elev-0 { border: 1px solid var(--line-subtle); }
+    .elev-1 { border: 1px solid var(--ink); box-shadow: var(--shadow-card); }
+    .elev-2 { border: 1.5px solid var(--ink); box-shadow: var(--shadow-ink); }
+    .elev-title { font-size: 13px; font-weight: 800; }
+    .elev-spec { font-size: 11px; color: var(--text-muted); }
+    .elev-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+    /* ==================== 03 & 04. UNIFIED BUTTONS & 2 HOVER LAWS ==================== */
+    button { font-family: inherit; cursor: pointer; }
+
+    /* Standard 1: Primary Ink Stamp */
+    .ds-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 12.5px;
+      font-weight: 650;
+      padding: 8px 14px;
+      white-space: nowrap;
+      transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease, box-shadow var(--t-fast) ease, transform var(--t-press) ease;
+    }
+    .ds-btn-primary {
+      background: var(--ink);
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--shadow-ink);
+      color: var(--surface-white);
+    }
+    .ds-btn-primary:hover {
+      background: var(--ink-hover);
+    }
+    .ds-btn-primary:active {
+      transform: translate(2px, 2px);
+      box-shadow: none;
+    }
+
+    /* Standard 2: Focus / Active Halftone Stamp (User Favorite #1) */
+    .ds-btn-focus {
+      background-color: var(--surface-tone);
+      background-image: radial-gradient(rgba(23, 25, 30, 0.11) 0.65px, transparent 0.65px);
+      background-size: 4.5px 4.5px;
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-ink);
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .ds-btn-focus:hover {
+      background-color: #EFF2F0;
+    }
+    .ds-btn-focus:active {
+      transform: translate(1.5px, 1.5px);
+      box-shadow: none;
+    }
+
+    /* Standard 3: Paper Elevation Secondary (Sidebar Tools / Secondary Actions) */
+    .ds-btn-paper {
+      background: var(--surface-paper);
+      border: 1px solid var(--line-control);
+      box-shadow: var(--shadow-paper);
+      color: var(--text-body);
+    }
+    .ds-btn-paper:hover {
+      background: var(--surface-white);
+      border-color: var(--ink);
+      box-shadow: 1.5px 1.5px 0 var(--ink);
+      color: var(--ink);
+    }
+    .ds-btn-paper:active {
+      transform: translate(1px, 1px);
+      box-shadow: none;
+    }
+
+    /* Standard 4: Vermilion Danger Stamp (User Favorite #2) */
+    .ds-btn-danger {
+      background: var(--danger);
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--shadow-ink);
+      color: var(--surface-white);
+    }
+    .ds-btn-danger:hover {
+      background: var(--danger-hover);
+    }
+    .ds-btn-danger:active {
+      transform: translate(2px, 2px);
+      box-shadow: none;
+    }
+
+    /* Standard 5: Frameless Ghost Icon */
+    .ds-icon-btn {
+      width: 30px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      display: inline-grid;
+      place-items: center;
+      transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease, transform var(--t-press) ease;
+    }
+    .ds-icon-btn:hover {
+      background: var(--surface-white);
+      border-color: var(--ink);
+      color: var(--ink);
+    }
+    .ds-icon-btn:active {
+      background: #ECEEEB;
+      transform: translate(1px, 1px);
+    }
+    .ds-icon-btn.is-danger:hover {
+      background: var(--danger);
+      border-color: var(--ink);
+      color: var(--surface-white);
+    }
+    .ds-icon-btn.is-danger:active {
+      background: var(--danger-hover);
+      border-color: var(--ink);
+      color: var(--surface-white);
+    }
+
+    .hover-law-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .law-box {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+    }
+    .law-head {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line-struct);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .law-head strong { font-size: 13px; }
+    .law-body {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .law-desc {
+      margin: 0;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .demo-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    /* Unified Log Tab Comparison */
+    .log-tab-compare {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      background: var(--surface-paper);
+      border: 1px solid var(--line-subtle);
+    }
+    .mini-plate {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      display: inline-flex;
+      align-items: stretch;
+      height: 48px;
+    }
+    .mini-plate-left {
+      padding: 0 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .mini-plate-left strong { font-size: 13px; line-height: 1.15; }
+    .mini-plate-left span { font-size: 10px; color: var(--text-muted); }
+    .mini-log-unified {
+      width: 26px;
+      border: none;
+      border-left: 1px solid var(--ink);
+      writing-mode: vertical-rl;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      padding-top: 0.2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      background-color: var(--surface-tone);
+      background-image: radial-gradient(rgba(23, 25, 30, 0.11) 0.65px, transparent 0.65px);
+      background-size: 4.5px 4.5px;
+      transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .mini-log-unified:hover {
+      background-color: #EAECEB;
+      color: var(--ink);
+    }
+    .mini-log-dark {
+      width: 26px;
+      border: none;
+      border-left: 1px solid var(--ink);
+      writing-mode: vertical-rl;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      padding-top: 0.2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      background-color: var(--surface-tone);
+      background-image: radial-gradient(rgba(23, 25, 30, 0.11) 0.65px, transparent 0.65px);
+      background-size: 4.5px 4.5px;
+      transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .mini-log-dark:hover {
+      background-color: var(--ink);
+      background-image: none;
+      color: var(--surface-white);
+    }
+
+    .nav-demo-item {
+      width: 170px;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12.5px;
+      font-weight: 550;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color var(--t-fast) ease, background-color var(--t-fast) ease, color var(--t-fast) ease;
+    }
+    .nav-demo-item:hover {
+      background: var(--surface-hover);
+      border-color: var(--line-control);
+      color: var(--ink);
+    }
+
+    /* ==================== 05. ATOMS: FORMS, TAGS, METERS ==================== */
+    .atoms-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    input[type="checkbox"].ds-chk {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      border: 1.5px solid #8A919C;
+      background: var(--surface-white);
+      cursor: pointer;
+      transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease;
+    }
+    input[type="checkbox"].ds-chk:hover { border-color: var(--ink); }
+    input[type="checkbox"].ds-chk:checked {
+      background-color: var(--ink);
+      border-color: var(--ink);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.2 6.3 4.8 8.9 9.8 3.2' fill='none' stroke='%23FFFFFF' stroke-width='1.9' stroke-linecap='square' stroke-linejoin='miter'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 11px 11px;
+    }
+
+    .ds-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      cursor: pointer;
+      font-size: 12.5px;
+    }
+    .ds-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+    .ds-toggle-track {
+      width: 34px;
+      height: 18px;
+      border: 1.5px solid var(--ink);
+      background: var(--surface-paper);
+      position: relative;
+      transition: background-color var(--t-fast) ease;
+    }
+    .ds-toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 11px;
+      height: 11px;
+      background: var(--ink);
+      transition: transform 110ms ease, background-color 110ms ease;
+    }
+    .ds-toggle input:checked + .ds-toggle-track {
+      background: var(--ink);
+    }
+    .ds-toggle input:checked + .ds-toggle-track .ds-toggle-thumb {
+      transform: translateX(16px);
+      background: var(--ok-fill);
+    }
+
+    .ds-input {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--line-control);
+      background: var(--surface-white);
+      color: var(--ink);
+      font-size: 12.5px;
+    }
+    .ds-input:focus {
+      border-color: var(--ink);
+    }
+
+    .ds-tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 1.5px 6px;
+      border: 1px solid var(--line-struct);
+      background: var(--surface-paper);
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .ds-tag.is-ink { border-color: var(--ink); background: var(--surface-white); color: var(--ink); }
+    .ds-tag.is-ok { border-color: #B4DCCB; background: var(--surface-white); color: var(--ok); }
+    .ds-tag.is-danger { border-color: #DFB5B2; background: var(--surface-white); color: var(--danger-hover); }
+
+    .meter-demo {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .meter-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .meter-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+    }
+    .meter-track {
+      height: 7px;
+      border: 1px solid var(--ink);
+      background-color: var(--surface-paper);
+      position: relative;
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+    }
+    .meter-fill.ok { background: var(--ok-fill); }
+    .meter-fill.warn { background: var(--warn-fill); }
+    .meter-fill.danger { background: var(--danger); }
+
+    /* ==================== 06. COMPOSITE MOCKS (AI HUB + LIFE HUB) ==================== */
+    /* Network bar with Vermilion End-Cap */
+    .net-mock {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      min-height: 40px;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+    }
+    .net-mock-cap {
+      border-right: 1px solid var(--line-struct);
+      padding: 0 13px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+    .net-mock-cells {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 12px;
+      gap: 0;
+      overflow: hidden;
+    }
+    .net-mock-cell {
+      padding: 0 12px;
+      border-right: 1px solid var(--line-subtle);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .net-mock-cell:first-child { padding-left: 0; }
+    .net-mock-cell:last-child { border-right: none; }
+    .net-mock-k { color: var(--text-muted); font-size: 11px; }
+    .net-mock-neutral {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 0 8px;
+    }
+    .net-mock-danger-cap {
+      background: var(--danger);
+      border-left: 1px solid var(--ink);
+      display: flex;
+      align-items: stretch;
+    }
+    .net-mock-danger-btn {
+      width: 36px;
+      border: none;
+      background: transparent;
+      color: var(--surface-white);
+      display: grid;
+      place-items: center;
+      transition: background-color var(--t-fast) ease;
+    }
+    .net-mock-danger-btn + .net-mock-danger-btn {
+      border-left: 1px solid rgba(255, 255, 255, 0.22);
+    }
+    .net-mock-danger-btn:hover {
+      background: var(--danger-hover);
+    }
+
+    .preview-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .card-specimen {
+      background: var(--surface-white);
+      border: 1px solid var(--ink);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+    }
+    .card-specimen-head {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line-struct);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .card-specimen-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .card-specimen-body {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .inner-slot {
+      border: 1px solid var(--line-subtle);
+      background: var(--surface-white);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .inner-slot.is-alert {
+      border-color: var(--danger);
+      border-left: 3px solid var(--danger);
+      background: #FFFDFC;
+    }
+    .inner-slot-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* ==================== 07. ROADMAP CHECKLIST ==================== */
+    .roadmap-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .road-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 12.5px;
+    }
+    .road-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 9px;
+      border: 1px solid var(--line-subtle);
+      background: var(--surface-white);
+    }
+    .road-list li.is-done {
+      background: var(--surface-paper);
+      color: var(--text-secondary);
+    }
+    .road-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      margin-left: auto;
+      border: 1px solid var(--line-struct);
+      color: var(--text-muted);
+    }
+    .road-list li.is-done .road-badge {
+      border-color: #B4DCCB;
+      color: var(--ok);
+      background: var(--surface-white);
+    }
+
+    @media (max-width: 1020px) {
+      .elev-grid, .atoms-grid, .hover-law-grid, .preview-2col, .roadmap-grid {
+        grid-template-columns: 1fr;
+      }
+      .toc { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- LEFT DIRECTORY (Using the Exact Same Sidebar Language) -->
+    <aside class="toc">
+      <div class="toc-brand">
+        <div class="toc-brand-main">
+          <div class="toc-brand-title">DESIGN SYSTEM</div>
+          <div class="toc-brand-sub">AI Hub · Life Hub 共用母版</div>
+        </div>
+        <div class="toc-brand-tag screentone">规范</div>
+      </div>
+
+      <nav class="toc-nav" id="toc-nav">
+        <a class="toc-link is-active" href="#sec-tokens"><span>01 · 色板与材质</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-elevation"><span>02 · 线宽与硬影</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-hover"><span>03 · Hover 二大铁律</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-buttons"><span>04 · 标准按钮家族</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-atoms"><span>05 · 表单与指标原子</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-composites"><span>06 · 实战样板预览</span><span class="toc-dot"></span></a>
+        <a class="toc-link" href="#sec-roadmap"><span>07 · 改造进度总览</span><span class="toc-dot"></span></a>
+      </nav>
+
+      <div class="toc-foot">
+        <strong>核心信条</strong><br />
+        严格 0px 锐利直角<br />
+        黑白灰作骨，三色作点睛<br />
+        先定标本，再按图施工
+      </div>
+    </aside>
+
+    <!-- RIGHT SPECIMEN CANVAS -->
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1>设计系统与 Design Token 标本页</h1>
+          <span class="topbar-sub"><span class="dot-ok"></span>v1.0 草案 · 鼠标可逐个实测 Hover 与按下手感</span>
+        </div>
+        <span class="mono" style="font-size:11px;color:var(--text-muted);">AI HUB / LIFE HUB</span>
+      </header>
+
+      <div class="content">
+        <!-- 01. COLOR & SURFACE TOKENS -->
+        <section class="sec" id="sec-tokens">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">01</span><h2>色板与材质（仅留黑白灰 + 3 个克制语义色）</h2></div>
+            <span class="sec-note">全站所有组件只能引用这些 Token，严禁私自新增色值</span>
+          </div>
+
+          <div class="panel">
+            <p class="sub-label">表面与线稿色阶</p>
+            <div class="swatch-grid">
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#FFFFFF;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">纯白控制面</div>
+                  <div class="swatch-token mono">--surface-white · #FFFFFF</div>
+                  <div class="swatch-use">侧栏、顶栏、卡片与弹窗主面</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip is-canvas"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">雪白微点阵</div>
+                  <div class="swatch-token mono">--surface-canvas · #FAF9F6</div>
+                  <div class="swatch-use">主工作区画布（1px / 18px 点阵）</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#FAF9F7;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">浅纸次面</div>
+                  <div class="swatch-token mono">--surface-paper · #FAF9F7</div>
+                  <div class="swatch-use">快捷纸卡、弹窗底栏、摘要块</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip screentone"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">60 线极细网点</div>
+                  <div class="swatch-token mono">--surface-tone · 4.5px dot</div>
+                  <div class="swatch-use">激活导航、弹窗顶栏、状态帽</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#CFD5D3;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">建筑细灰线</div>
+                  <div class="swatch-token mono">--line-struct · #CFD5D3</div>
+                  <div class="swatch-use">侧栏右界、顶栏底界、虚线分割</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#17191E;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">主墨黑</div>
+                  <div class="swatch-token mono">--ink · #17191E</div>
+                  <div class="swatch-use">标题、主框、焦点硬影、主按钮</div>
+                </div>
+              </div>
+            </div>
+
+            <p class="sub-label" style="margin-top:16px;">3 个唯一允许的语义点睛色</p>
+            <div class="swatch-grid">
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#14A06D;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">翡翠绿 · 运行 / 充裕</div>
+                  <div class="swatch-token mono">--ok-fill · #14A06D</div>
+                  <div class="swatch-use">激活方点、运行状态、额度 &gt;30%</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#C9524A;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">低饱和朱砂红 · 危险 / 告急</div>
+                  <div class="swatch-token mono">--danger · #C9524A → #B92620</div>
+                  <div class="swatch-use">退出印章、关闭悬停、额度 ≤10%</div>
+                </div>
+              </div>
+              <div class="swatch">
+                <div class="swatch-chip" style="background:#E38D17;"></div>
+                <div class="swatch-body">
+                  <div class="swatch-name">琥珀 · 预警 / 临期</div>
+                  <div class="swatch-token mono">--warn-fill · #E38D17</div>
+                  <div class="swatch-use">额度 10%–30%、临近回收倒计时</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ban-strip">
+              <strong>已淘汰禁区（不再用于主界面）：</strong>
+              <span class="ban-chip"><span class="ban-dot" style="background:#F7EFD2;"></span>暖米黄大块卡头 / 悬停</span>
+              <span class="ban-chip"><span class="ban-dot" style="background:#D8E9F4;"></span>冰川蓝大块卡头</span>
+              <span class="ban-chip"><span class="ban-dot" style="background:#FBDCD8;"></span>浅粉底配红字（低对比）</span>
+              <span class="ban-chip"><span class="ban-dot" style="background:#2563EB;"></span>浏览器原生圆角蓝勾</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 02. ELEVATION & STROKE SCALE -->
+        <section class="sec" id="sec-elevation">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">02</span><h2>线宽与硬影阶梯（严格 3 档，彻底消除阴影泛滥）</h2></div>
+            <span class="sec-note">重影只留给「焦点」与「实心按钮」，静态容器只用浅灰微影</span>
+          </div>
+
+          <div class="elev-grid">
+            <div class="elev-card elev-0">
+              <div class="elev-title">Level 0 · 平面发丝格</div>
+              <div class="elev-spec mono">1px solid #E4E7E6 · 无阴影</div>
+              <div class="elev-desc">用于卡片内部的额度格、列表行、输入槽。不加黑框、不加阴影，保证画面轻盈透气。</div>
+            </div>
+            <div class="elev-card elev-1">
+              <div class="elev-title">Level 1 · 建筑容器与静置纸卡</div>
+              <div class="elev-spec mono">1px solid #17191E + 2px 2px 0 #E0E3E2</div>
+              <div class="elev-desc">用于左上铭牌、网络状态条、工作台主卡片。有清晰的线稿轮廓，但浅灰微影绝不喧宾夺主。</div>
+            </div>
+            <div class="elev-card elev-2">
+              <div class="elev-title">Level 2 · 焦点印章与强动作</div>
+              <div class="elev-spec mono">1px/1.5px solid #17191E + 2px 2px 0 #17191E</div>
+              <div class="elev-desc">仅留给当前激活导航、主操作按钮、朱砂红退出印章、弹窗（3px 影），一眼锁定视觉焦点。</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 03. TWO HOVER LAWS -->
+        <section class="sec" id="sec-hover">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">03</span><h2>全站 Hover 交互收拢：只留 2 条铁律</h2></div>
+            <span class="sec-note">把原来 5、6 种乱飞的悬停，统一收束成下面 2 种可预期的物理手感</span>
+          </div>
+
+          <div class="hover-law-grid">
+            <div class="law-box">
+              <div class="law-head screentone">
+                <strong>铁律 ① · 浅色 / 无框控件 → 「墨线聚拢」</strong>
+                <span class="mono" style="font-size:10.5px;color:var(--text-muted);">浅灰/无框 → 墨黑锐化</span>
+              </div>
+              <div class="law-body">
+                <p class="law-desc">任何白底、浅纸底或无框控件，悬停时<strong>不跳黑块、不跳黄底</strong>，统一表现为边框与阴影向主墨黑 <code>#17191E</code> 聚拢锐化，按下向右下回落 <code>1px</code> 并收影。</p>
+                <div class="demo-row">
+                  <button type="button" class="ds-btn ds-btn-paper" style="width:140px;justify-content:space-between;">
+                    <span style="display:inline-flex;align-items:center;gap:7px;">
+                      <svg class="ic" viewBox="0 0 24 24"><path d="M6 2v16h16"/><path d="M18 22V6H2"/></svg>截图
+                    </span>
+                    <span style="color:var(--text-muted);font-size:11px;">›</span>
+                  </button>
+                  <button type="button" class="nav-demo-item">
+                    <span>项目（非激活导航）</span>
+                    <span class="mono" style="font-size:10px;color:var(--text-muted);">HOVER</span>
+                  </button>
+                  <button type="button" class="ds-icon-btn" title="刷新">
+                    <svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                  </button>
+                </div>
+
+                <div class="log-tab-compare">
+                  <div style="font-size:11.5px;color:var(--text-secondary);width:100%;">
+                    <strong>「日志」竖签悬停二选一对比（请把鼠标放上去试）：</strong>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <div class="mini-plate">
+                      <div class="mini-plate-left"><strong>AI HUB</strong><span>统一聚墨版（推荐）</span></div>
+                      <button type="button" class="mini-log-unified">日志</button>
+                    </div>
+                    <span style="font-size:10.5px;color:var(--text-muted);">网点底微加深 + 字转墨黑（符合铁律 ①）</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <div class="mini-plate">
+                      <div class="mini-plate-left"><strong>AI HUB</strong><span>原版反黑</span></div>
+                      <button type="button" class="mini-log-dark">日志</button>
+                    </div>
+                    <span style="font-size:10.5px;color:var(--text-muted);">原版：悬停整条反转纯黑</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="law-box">
+              <div class="law-head screentone">
+                <strong>铁律 ② · 实心印章 / 焦点块 → 「同色加深一档」</strong>
+                <span class="mono" style="font-size:10.5px;color:var(--text-muted);">原位不变 · 按下压实 2px</span>
+              </div>
+              <div class="law-body">
+                <p class="law-desc">你最喜欢的「网点焦点块」和「朱砂红印章」以及深炭主按钮，悬停全部<strong>保持位置与硬影重量严格不动</strong>，只做极克制的同色深浅变化；按下统一向右下压实 <code>2px</code> 并收起硬影。</p>
+                <div class="demo-row">
+                  <button type="button" class="ds-btn ds-btn-focus" style="min-width:154px;justify-content:space-between;">
+                    <span>工作台（最爱 #1）</span>
+                    <span style="width:6px;height:6px;background:var(--ok-fill);"></span>
+                  </button>
+                  <button type="button" class="ds-btn ds-btn-danger">
+                    <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+                    一键全部退出（最爱 #2）
+                  </button>
+                  <button type="button" class="ds-btn ds-btn-primary">
+                    <svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    添加账号（主动作）
+                  </button>
+                </div>
+                <p class="law-desc" style="margin-top:4px;">
+                  <strong>特例收口</strong>：所有「关闭/退出类小图标」（主窗 <code>×</code>、弹窗 <code>×</code>、卡片 <code>⏻</code>）默认无框极轻，悬停统一变为同款朱砂红 <code>#C9524A</code> 实心方印 + 纯白图标：
+                  <button type="button" class="ds-icon-btn is-danger" title="关闭窗口" style="vertical-align:middle;margin-left:6px;">
+                    <svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                  <button type="button" class="ds-icon-btn is-danger" title="关闭应用" style="vertical-align:middle;">
+                    <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+                  </button>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 04. STANDARD BUTTON FAMILY -->
+        <section class="sec" id="sec-buttons">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">04</span><h2>全站标准按钮家族（严禁新增第 6 种）</h2></div>
+            <span class="sec-note">所有页面按钮直接从这 5 个类里挑，点击体验统一按压回弹</span>
+          </div>
+
+          <div class="panel">
+            <div class="demo-row" style="gap:14px;">
+              <button type="button" class="ds-btn ds-btn-primary">▶ 启动 / 保存（Primary）</button>
+              <button type="button" class="ds-btn ds-btn-focus"><span class="dot-ok"></span>打开运行中（Focus / Live）</button>
+              <button type="button" class="ds-btn ds-btn-paper">↻ 刷新额度 / 取消（Paper）</button>
+              <button type="button" class="ds-btn ds-btn-danger">确认全部退出（Danger）</button>
+              <span style="display:inline-flex;align-items:center;gap:4px;padding-left:10px;border-left:1px solid var(--line-subtle);">
+                <button type="button" class="ds-icon-btn" title="切换"><svg class="ic" viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg></button>
+                <button type="button" class="ds-icon-btn" title="外部打开"><svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6H5V6h6"/></svg></button>
+                <button type="button" class="ds-icon-btn is-danger" title="关闭"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 05. ATOMS -->
+        <section class="sec" id="sec-atoms">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">05</span><h2>表单、标签与进度轨道原子件</h2></div>
+            <span class="sec-note">严格 0px 直角 · 彻底消灭浏览器默认蓝</span>
+          </div>
+
+          <div class="atoms-grid">
+            <div class="panel-soft">
+              <p class="sub-label">0px 选择器与输入框</p>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <label class="check-row"><input type="checkbox" class="ds-chk" checked /> Codex · Plus 回收号</label>
+                <label class="check-row"><input type="checkbox" class="ds-chk" /> 同时退出 AI Hub</label>
+                <label class="ds-toggle">
+                  <input type="checkbox" checked />
+                  <span class="ds-toggle-track"><span class="ds-toggle-thumb"></span></span>
+                  <span>额度自动刷新与回满提醒</span>
+                </label>
+                <input type="text" class="ds-input" value="zulpkar97@gmail.com" />
+              </div>
+            </div>
+
+            <div class="panel-soft">
+              <p class="sub-label">克制单色标签（不再五颜六色）</p>
+              <div class="demo-row" style="gap:7px;">
+                <span class="ds-tag is-ink">新增</span>
+                <span class="ds-tag">改进</span>
+                <span class="ds-tag">默认</span>
+                <span class="ds-tag">Google AI Pro</span>
+                <span class="ds-tag is-ok"><span class="dot-ok"></span>运行中</span>
+                <span class="ds-tag is-danger"><span class="dot-danger"></span>额度告急</span>
+              </div>
+              <p style="margin:12px 0 0;font-size:11.5px;color:var(--text-muted);">
+                文字层级与方点承担语义，底色一律保持纯白或浅纸，视觉彻底安静下来。
+              </p>
+            </div>
+
+            <div class="panel-soft">
+              <p class="sub-label">额度 / 习惯进度轨道（版画斜纹）</p>
+              <div class="meter-demo">
+                <div class="meter-row">
+                  <div class="meter-top"><span>5h 额度（&gt;30%）</span><strong class="mono" style="color:var(--ok);">91%</strong></div>
+                  <div class="meter-track hatch"><div class="meter-fill ok" style="width:91%;"></div></div>
+                </div>
+                <div class="meter-row">
+                  <div class="meter-top"><span>每月额度（10–30%）</span><strong class="mono" style="color:var(--warn);">17%</strong></div>
+                  <div class="meter-track hatch"><div class="meter-fill warn" style="width:17%;"></div></div>
+                </div>
+                <div class="meter-row">
+                  <div class="meter-top"><span>每周额度（≤10%）</span><strong class="mono" style="color:var(--danger-hover);">1.11%</strong></div>
+                  <div class="meter-track hatch"><div class="meter-fill danger" style="width:4%;"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 06. COMPOSITE PREVIEWS -->
+        <section class="sec" id="sec-composites">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">06</span><h2>实战样板：同一套 Token 组装 AI Hub 与 Life Hub</h2></div>
+            <span class="sec-note">先看整体气场对不对，满意了我们再按这个标准大改工作台</span>
+          </div>
+
+          <!-- Network Bar with Vermilion End-Cap -->
+          <div>
+            <p class="sub-label">网络状态条 · 你刚提的「去多余分割线 + 右端实心朱砂红收口」</p>
+            <div class="net-mock">
+              <div class="net-mock-cap screentone"><span class="dot-ok" style="width:6px;height:6px;"></span>网络正常</div>
+              <div class="net-mock-cells">
+                <span class="net-mock-cell"><span class="net-mock-k">策略</span><strong>AI 服务</strong></span>
+                <span class="net-mock-cell"><span class="net-mock-k">节点</span><strong class="mono">JP日本·经济 0.3x</strong></span>
+                <span class="net-mock-cell"><strong class="mono" style="color:var(--ok);">81 ms</strong></span>
+                <span class="net-mock-cell mono" style="color:var(--text-secondary);">剩余 89.56 GB</span>
+              </div>
+              <div class="net-mock-neutral">
+                <button type="button" class="ds-icon-btn" title="刷新网络状态"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+                <button type="button" class="ds-icon-btn" title="切换节点"><svg class="ic" viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg></button>
+                <button type="button" class="ds-icon-btn" title="打开 Clash Verge"><svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6H5V6h6"/></svg></button>
+              </div>
+              <div class="net-mock-danger-cap">
+                <button type="button" class="net-mock-danger-btn" title="重启代理"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg></button>
+                <button type="button" class="net-mock-danger-btn" title="关闭代理"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Side-by-Side: AI Hub Workspace Card vs Life Hub Card -->
+          <div class="preview-2col">
+            <div class="card-specimen">
+              <div class="card-specimen-head screentone">
+                <div class="card-specimen-title">
+                  <span>ANTIGRAVITY</span>
+                  <span class="ds-tag is-ok"><span class="dot-ok"></span>运行中</span>
+                  <span class="ds-tag">Google AI Pro</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <button type="button" class="ds-btn ds-btn-paper" style="padding:4px 9px;font-size:11.5px;">刷新</button>
+                  <button type="button" class="ds-btn ds-btn-focus" style="padding:4px 10px;font-size:11.5px;">打开</button>
+                  <button type="button" class="ds-icon-btn is-danger" title="关闭"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button>
+                </div>
+              </div>
+              <div class="card-specimen-body">
+                <div class="inner-slot">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:12.5px;">Gemini Models</strong>
+                    <span class="mono" style="font-size:10.5px;color:var(--text-muted);">更新 18:14</span>
+                  </div>
+                  <div class="inner-slot-grid">
+                    <div class="meter-row">
+                      <div class="meter-top"><span style="color:var(--text-secondary);">5h 额度</span><strong class="mono" style="color:var(--ok);">100%</strong></div>
+                      <div class="meter-track hatch"><div class="meter-fill ok" style="width:100%;"></div></div>
+                    </div>
+                    <div class="meter-row">
+                      <div class="meter-top"><span style="color:var(--text-secondary);">每周额度</span><strong class="mono" style="color:var(--ok);">56.5%</strong></div>
+                      <div class="meter-track hatch"><div class="meter-fill ok" style="width:56.5%;"></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="inner-slot is-alert">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:12.5px;">Claude and GPT Models</strong>
+                    <span class="ds-tag is-danger"><span class="dot-danger"></span>额度告急</span>
+                  </div>
+                  <div class="inner-slot-grid">
+                    <div class="meter-row">
+                      <div class="meter-top"><span style="color:var(--text-secondary);">5h 额度</span><strong class="mono" style="color:var(--ok);">100%</strong></div>
+                      <div class="meter-track hatch"><div class="meter-fill ok" style="width:100%;"></div></div>
+                    </div>
+                    <div class="meter-row">
+                      <div class="meter-top"><span style="color:var(--text-secondary);">每周额度</span><strong class="mono" style="color:var(--danger-hover);">1.11%</strong></div>
+                      <div class="meter-track hatch"><div class="meter-fill danger" style="width:3%;"></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-specimen">
+              <div class="card-specimen-head screentone">
+                <div class="card-specimen-title">
+                  <span>LIFE HUB · 日常看板样板</span>
+                  <span class="ds-tag">同套 Token 直接复用</span>
+                </div>
+                <button type="button" class="ds-btn ds-btn-primary" style="padding:4px 10px;font-size:11.5px;">+ 速记</button>
+              </div>
+              <div class="card-specimen-body">
+                <div class="inner-slot">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:12.5px;">今日饮食与营养进度</strong>
+                    <span class="mono" style="font-size:10.5px;color:var(--text-muted);">11 月 22 日</span>
+                  </div>
+                  <div class="inner-slot-grid">
+                    <div class="meter-row">
+                      <div class="meter-top"><span style="color:var(--text-secondary);">蛋白质</span><strong class="mono" style="color:var(--ok);">118 / 130g</strong></div>
+                      <div class="meter-track hatch"><div class="meter-fill ok" style="width:90%;"></div></div>
+                    </div>
+                    <div class="meter-row">
+                      <div class="meter-top"><span style="color:var(--text-secondary);">碳水预算</span><strong class="mono" style="color:var(--warn);">剩余 22%</strong></div>
+                      <div class="meter-track hatch"><div class="meter-fill warn" style="width:22%;"></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="inner-slot">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:12.5px;">高频习惯打卡</strong>
+                    <span class="ds-tag is-ok"><span class="dot-ok"></span>今日 2/3</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <label class="check-row"><input type="checkbox" class="ds-chk" checked /> <span>晨间补剂（维生素 D3 + 鱼油）</span></label>
+                    <label class="check-row"><input type="checkbox" class="ds-chk" checked /> <span>力量训练 45 分钟</span></label>
+                    <label class="check-row"><input type="checkbox" class="ds-chk" /> <span>23:30 前放下手机准备入睡</span></label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 07. ROADMAP -->
+        <section class="sec" id="sec-roadmap">
+          <div class="sec-head">
+            <div class="sec-title-wrap"><span class="sec-num mono">07</span><h2>改造进度总览</h2></div>
+            <span class="sec-note">本标本页定稿后，按下面清单逐项收口，不再反复返工</span>
+          </div>
+
+          <div class="roadmap-grid">
+            <div class="panel-soft">
+              <p class="sub-label">已完成（边缘与基础层）</p>
+              <ul class="road-list">
+                <li class="is-done"><span class="dot-ok"></span>左侧栏（切分铭牌 + 竖排日志 + 纵向纸卡 + 朱砂退出）<span class="road-badge">已完成</span></li>
+                <li class="is-done"><span class="dot-ok"></span>全窗口 1.5px 墨线外描边 + Win11 原生 0px 直角<span class="road-badge">已完成</span></li>
+                <li class="is-done"><span class="dot-ok"></span>通用弹窗底座 + 0px 自定义复选框 + 退出勾选清单<span class="road-badge">已完成</span></li>
+                <li class="is-done"><span class="dot-ok"></span>「更新日志」固定高度左右分栏<span class="road-badge">已完成</span></li>
+                <li class="is-done"><span class="dot-ok"></span>托盘右键菜单 + 自定义 0px WPF 桌面通知浮窗<span class="road-badge">已完成</span></li>
+              </ul>
+            </div>
+
+            <div class="panel-soft">
+              <p class="sub-label">待定稿后按图推进</p>
+              <ul class="road-list">
+                <li><span class="dot-warn"></span>敲定本页 Hover 规则与顶栏去留 → 写入唯一 Token 源<span class="road-badge">下一步</span></li>
+                <li><span class="dot-warn"></span>网络状态条右端实心朱砂红收口块<span class="road-badge">第 1 站</span></li>
+                <li><span class="dot-warn"></span>工作台主卡（Codex / Antigravity / 底排入口）全量轻量化<span class="road-badge">第 2 站</span></li>
+                <li><span class="dot-warn"></span>「项目」「需求池」「设置」三页按同一 Token 刷齐<span class="road-badge">第 3 站</span></li>
+                <li><span class="dot-warn"></span>直接迁移这套 Token 与标本作为 Life Hub 起始规范<span class="road-badge">复用</span></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Smooth active TOC highlight on click & scroll
+    const links = [...document.querySelectorAll(".toc-link")];
+    const sections = links.map((a) => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+    const setActive = (id) => {
+      links.forEach((a) => a.classList.toggle("is-active", a.getAttribute("href") === "#" + id));
+    };
+    links.forEach((a) => a.addEventListener("click", () => setActive(a.getAttribute("href").slice(1))));
+    const obs = new IntersectionObserver((entries) => {
+      const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (vis) setActive(vis.target.id);
+    }, { rootMargin: "-20% 0px -65% 0px" });
+    sections.forEach((s) => obs.observe(s));
+  </script>
+</body>
+</html>

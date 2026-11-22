@@ -923,9 +923,6 @@ kbd {
   background: #DCE0DF;
   margin: 0 3px;
 }
-  background: var(--hairline);
-  margin: 0 2px;
-}
 
 .ws-grid-2 {
   display: grid;
