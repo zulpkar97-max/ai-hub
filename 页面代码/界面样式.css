@@ -363,12 +363,12 @@ kbd {
   flex-shrink: 0;
 }
 
-/* High-Contrast Bottom Exit Button — Crisp White + Jet-Black Text + Vivid Crimson Signal */
+/* High-Contrast Bottom Exit Button — Muted Vermilion Hanko Stamp Default, Deep Brick Hover */
 .sidebar-exit-btn {
-  background: var(--white);
-  border: 1.5px solid var(--danger);
-  box-shadow: 2px 2px 0 var(--danger);
-  color: var(--ink);
+  background: #C9524A;
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--white);
   padding: 8px 10px;
   font-size: 12.5px;
   font-weight: 650;
@@ -376,23 +376,18 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  transition: border-color 100ms ease, color 100ms ease, background-color 100ms ease, box-shadow 100ms ease, transform var(--motion-press) ease;
+  transition: background-color 100ms ease, transform var(--motion-press) ease;
 }
 
 .sidebar-exit-btn .ic {
-  color: var(--danger-fill);
+  color: var(--white);
   stroke-width: 1.9;
-  transition: color 100ms ease;
 }
 
 .sidebar-exit-btn:hover {
-  background: var(--danger);
+  background: #B92620;
   border-color: var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
-  color: var(--white);
-}
-
-.sidebar-exit-btn:hover .ic {
   color: var(--white);
 }
 
