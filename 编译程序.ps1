@@ -6,10 +6,10 @@ $root = $PSScriptRoot
 $msbuild = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe'
 $project = Join-Path $root 'AIHub.csproj'
 $stageDir = Join-Path $root ('.aihub-build-' + [guid]::NewGuid().ToString('N') + '.tmp')
-$stage = Join-Path $stageDir 'CodexLauncher.exe'
-$output = if ($PrepareUpdate) { Join-Path $root 'CodexLauncher.next.exe' }
+$stage = Join-Path $stageDir 'AI BASE.exe'
+$output = if ($PrepareUpdate) { Join-Path $root 'AI BASE.next.exe' }
     elseif ($OutputPath) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath) }
-    else { Join-Path $root 'CodexLauncher.exe' }
+    else { Join-Path $root 'AI BASE.exe' }
 
 try {
     & $msbuild $project '/nologo' '/verbosity:minimal' "/p:OutputFile=$stage"
@@ -22,7 +22,7 @@ try {
         Write-Output "已生成待应用更新包：$output"
     } else {
         [IO.File]::Copy($stage, $output, $true)
-        Write-Output "已完成 AI Hub 编译：$output"
+        Write-Output "已完成 AI BASE 编译：$output"
     }
 } finally {
     if ([IO.File]::Exists($stage)) { [IO.File]::Delete($stage) }

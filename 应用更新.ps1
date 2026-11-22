@@ -8,8 +8,8 @@
 
 $ErrorActionPreference = 'Stop'
 $updateRoot = $PSScriptRoot
-$installedProgram = Join-Path $updateRoot 'CodexLauncher.exe'
-$pendingProgram = Join-Path $updateRoot 'CodexLauncher.next.exe'
+$installedProgram = Join-Path $updateRoot 'AI BASE.exe'
+$pendingProgram = Join-Path $updateRoot 'AI BASE.next.exe'
 $updateTemporary = Join-Path $updateRoot ('.aihub-update-' + $ReadyToken + '.tmp')
 $rollbackProgram = $updateTemporary + '.previous'
 $updateReady = $null

@@ -1,20 +1,20 @@
-# AI Hub
+# AI BASE
 
-AI Hub 是面向 Windows 11 的本地 AI 聚合中枢与 Codex 多账号隔离启动器，采用原生 Windows 11 云母通透（Mica）宿主窗口与嵌入式 WebView2 界面引擎构建。
+AI BASE 是面向 Windows 11 的本地 AI 聚合中枢与 Codex 多账号隔离启动器，采用原生 Windows 11 云母通透（Mica）宿主窗口与嵌入式 WebView2 界面引擎构建。
 
-工作台集中展示代理状态、Codex 多账号及额度、Antigravity 额度和常用 AI 工具。侧栏提供「工作台」与「设置」两项导航，截图、AI 录音笔、快速记账、批量退出和更新日志均可直接访问。全站使用透明底几何图标和冷纸石色版画样式。
+工作台集中展示代理状态、Codex 多账号及额度、Antigravity 额度和常用 AI 工具。侧栏提供「工作台」「项目」「需求池」「设置」「设计系统」五项导航，截图、录音、记账、批量退出和更新日志均可直接访问。全站使用直角精工积木风（Scheme D）与暖墨纸本版画样式。
 
 仓库：<https://github.com/zulpkar97-max/ai-hub>。本地项目目录统一命名为 `ai-hub`。完整演进记录见 [更新日志.md](./更新日志.md)。
 
 ## 启动与编译
 
-直接运行根目录下的 `CodexLauncher.exe` 即可启动。源码编译使用 Windows 11 自带的 64 位 .NET Framework MSBuild 和 WinRT 元数据。`AIHub.csproj` 声明编译源码、嵌入资源及仓库自带的 WebView2 SDK 引用。在 Windows PowerShell 中进入项目目录，运行：
+直接运行根目录下的 `AI BASE.exe` 即可启动。源码编译使用 Windows 11 自带的 64 位 .NET Framework MSBuild 和 WinRT 元数据。`AIHub.csproj` 声明编译源码、嵌入资源及仓库自带的 WebView2 SDK 引用。在 Windows PowerShell 中进入项目目录，运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1
 ```
 
-若当前 `CodexLauncher.exe` 正在运行，可生成热替换更新包并由应用内一键平滑切换：
+若当前 `AI BASE.exe` 正在运行，可生成热替换更新包并由应用内一键平滑切换：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareUpdate
@@ -60,7 +60,7 @@ py -3.12 -m venv $ocrEnv
 
 ## 目录
 
-- `页面代码/`：前端界面层，包含 `index.html`、`界面样式.css`、`工作台交互.js` 与 `协议版本.txt`。
+- `页面代码/`：前端界面层，包含 `index.html`、`设计系统.html`、`界面样式.css`、`工作台交互.js` 与 `协议版本.txt`。
 - `核心源码/宿主/`：程序入口、WPF 窗口、托盘、WebView 消息桥和本地更新协调。
 - `核心源码/工作台/`：页面动作、状态组装与轮询、账号额度调度。
 - `核心源码/账号/`：Antigravity CLI 额度读取与缓存。
@@ -70,7 +70,7 @@ py -3.12 -m venv $ocrEnv
 - `核心源码/核心服务.cs`、`核心源码/数据模型.cs`：共用的本机服务、账号隔离和数据结构。
 - `资源/`：透明底几何图标、多分辨率 ICO、Windows 应用清单、OCR 脚本和 WebView2 SDK 依赖文件。
 - `AIHub.csproj`、`编译程序.ps1`、`应用更新.ps1`：构建声明、编译入口与运行期更新脚本。
-- `CodexLauncher.exe`：当前随仓库提供的启动程序，由编译脚本生成。桌面快捷方式指向这个文件。
+- `AI BASE.exe`：当前随仓库提供的启动程序，由编译脚本生成。桌面快捷方式指向这个文件。
 - `更新日志.md`：从 v1.0 至当前版本的完整演进说明。
 
 ## 核心机制与数据隔离

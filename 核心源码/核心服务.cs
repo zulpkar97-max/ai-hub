@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.8";
+        public const string AppVersion = "v5.9.9";
         private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -1517,12 +1517,34 @@ namespace CodexLauncher
                     catch (InvalidOperationException) { }
                 }
 
-                for (int i = 0; i < 12; i++)
+                for (int i = 0; i < 3; i++)
                 {
                     if (GetProfilePids(profileId, userData, ScanCodexProcesses(true)).Count == 0) return;
-                    Thread.Sleep(200);
+                    Thread.Sleep(120);
                 }
-                throw new InvalidOperationException("Codex 仍在运行。请在 Codex 或系统托盘选择退出，然后重试。");
+
+                // Force-kill remaining profile processes (Electron tray/background workers)
+                var remainingPids = GetProfilePids(profileId, userData, ScanCodexProcesses(true));
+                foreach (int pid in remainingPids)
+                {
+                    try
+                    {
+                        using (var process = Process.GetProcessById(pid))
+                        {
+                            process.Kill();
+                            process.WaitForExit(1500);
+                        }
+                    }
+                    catch (ArgumentException) { }
+                    catch (InvalidOperationException) { }
+                    catch (System.ComponentModel.Win32Exception) { }
+                }
+
+                for (int i = 0; i < 8; i++)
+                {
+                    if (GetProfilePids(profileId, userData, ScanCodexProcesses(true)).Count == 0) return;
+                    Thread.Sleep(150);
+                }
             }
         }
 

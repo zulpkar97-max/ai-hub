@@ -34,6 +34,8 @@ namespace CodexLauncher
         private string _lastRefreshError;
 
         private bool _refreshInFlight = false;
+        private bool _refreshQueued = false;
+        private bool _refreshQueuedChrome = false;
         private DispatcherTimer _pollTimer;
         private List<DesktopShortcutInfo> _desktopShortcuts = new List<DesktopShortcutInfo>();
         private List<BacklogItem> _backlogItems = new List<BacklogItem>();
@@ -45,8 +47,15 @@ namespace CodexLauncher
 
         private void RefreshAsync(bool includeChrome)
         {
-            if (_refreshInFlight) return;
+            if (_refreshInFlight)
+            {
+                _refreshQueued = true;
+                if (includeChrome) _refreshQueuedChrome = true;
+                return;
+            }
             _refreshInFlight = true;
+            _refreshQueued = false;
+            _refreshQueuedChrome = false;
             int settingsRevision = _settingsRevision;
             int backlogRevision = _backlogRevision;
             bool refreshChrome = includeChrome || _chromeProfiles.Count == 0;
@@ -116,6 +125,14 @@ namespace CodexLauncher
                     if (refreshError != null && refreshError != _lastRefreshError)
                         SendToastToJs(refreshError, true);
                     _lastRefreshError = refreshError;
+
+                    if (_refreshQueued && !_wakeStop)
+                    {
+                        bool nextChrome = _refreshQueuedChrome;
+                        _refreshQueued = false;
+                        _refreshQueuedChrome = false;
+                        RefreshAsync(nextChrome);
+                    }
                 }));
             });
         }

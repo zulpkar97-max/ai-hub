@@ -30,7 +30,7 @@
     }
   })();
   let selectedBacklogId = "";
-  const expandedSettings = new Set();
+  const expandedSettings = new Set(["stash-details", "uninstall-details"]);
   const expandedBacklog = new Set();
   let networkBusy = "";
   let onNetworkPickerClose = null;
@@ -69,7 +69,9 @@
     node: gSvg("g-node"),
     term: gSvg("g-term"),
     workspace: gSvg("g-workspace"),
+    grip: gSvg("g-grip"),
   };
+  const PULSE_LOADER = `<span class="dot-loader" aria-hidden="true"><span></span><span></span><span></span></span>`;
 
   function esc(str) {
     return String(str ?? "")
@@ -206,16 +208,19 @@
     if (headerKey !== headerActions.dataset.key) {
       const parts = [];
       if (activeTab === "workspace") {
-        parts.push(`<button type="button" class="btn btn-paper btn-sm${refreshingWorkspace ? " is-spinning" : ""}" data-act="refreshAllQuotas" aria-disabled="${refreshingWorkspace}" aria-busy="${refreshingWorkspace}">${ICONS.refresh} 刷新全部额度</button>`);
+        parts.push(`<button type="button" class="btn btn-paper btn-sm" style="min-width:112px;" data-act="refreshAllQuotas" aria-disabled="${refreshingWorkspace}" aria-busy="${refreshingWorkspace}">${refreshingWorkspace ? PULSE_LOADER + " <span>刷新中</span>" : ICONS.refresh + " <span>刷新全部额度</span>"}</button>`);
       } else if (activeTab === "projects") {
-        parts.push(`<button type="button" class="btn btn-paper btn-sm${refreshingProjects ? " is-spinning" : ""}" data-act="refreshProjects" ${refreshingProjects ? "disabled" : ""}>${ICONS.refresh} 检测 Git</button>`);
-        parts.push(`<button type="button" class="btn btn-dark btn-sm" data-act="openAddProject">${ICONS.plus} 导入项目</button>`);
+        parts.push(`<button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="refreshProjects" ${refreshingProjects ? "disabled" : ""}>${refreshingProjects ? PULSE_LOADER : ICONS.refresh + " <span>检测 Git</span>"}</button>`);
+        parts.push(`<button type="button" class="btn btn-dark btn-sm btn-w-pair" data-act="openAddProject">${ICONS.plus} <span>导入项目</span></button>`);
       } else if (activeTab === "backlog") {
-        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="exportBacklogMd">导出 MD</button>`);
-        parts.push(`<button type="button" class="btn btn-dark btn-sm" data-act="openAddBacklog">${ICONS.plus} 新建需求</button>`);
+        parts.push(`<button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="exportBacklogMd"><span>导出 MD</span></button>`);
+        parts.push(`<button type="button" class="btn btn-dark btn-sm btn-w-pair" data-act="openAddBacklog">${ICONS.plus} <span>新建需求</span></button>`);
       } else if (activeTab === "manage") {
-        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="openDataDir">${ICONS.folder} 打开数据目录</button>`);
-        if (appState.version) parts.push(`<span class="header-version mono">${esc(appState.version)}</span>`);
+        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="openDataDir">${ICONS.folder} <span>打开数据目录</span></button>`);
+        if (appState.version) parts.push(`<button type="button" class="header-version-badge mono" data-act="openChangelog" data-tip="查看更新日志">${esc(appState.version)}</button>`);
+      } else if (activeTab === "design") {
+        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="openDesignCopyMenu" data-tip="一键复制可独立运行的设计系统 HTML 源码">${ICONS.copy} <span>复制代码</span> ${ICONS.chevronDown}</button>`);
+        parts.push(`<button type="button" class="btn btn-dark btn-sm" data-act="openDesignSystemExternal" data-tip="在默认浏览器中全屏打开设计系统.html"><span>浏览器打开</span> ${ICONS.ext}</button>`);
       }
       if (pending) {
         parts.push('<button class="btn btn-mint btn-sm" data-act="applyLocalUpdate">重启应用更新</button>');
@@ -232,10 +237,23 @@
       else el.removeAttribute("aria-current");
     });
 
+    const view = $("#view-content");
+    view.classList.toggle("is-design-view", activeTab === "design");
+
     if (activeTab === "workspace") renderUnifiedWorkspace();
     else if (activeTab === "projects") renderProjects();
     else if (activeTab === "backlog") renderBacklog();
+    else if (activeTab === "design") renderDesignSystem();
     else renderManage();
+  }
+
+  function renderDesignSystem() {
+    $("#view-title").textContent = "设计系统";
+    $("#view-sub").textContent = "v1.2 松烟暖墨 · 0px 建筑线稿规范 (01–10)";
+    const view = $("#view-content");
+    if (view.dataset.page === "design" && view.querySelector("#design-sys-frame")) return;
+    view.dataset.page = "design";
+    view.innerHTML = `<iframe id="design-sys-frame" class="design-sys-frame" src="https://aihub.local/%E8%AE%BE%E8%AE%A1%E7%B3%BB%E7%BB%9F.html?embed=1" title="AI BASE & LIFE BASE 设计系统"></iframe>`;
   }
 
   function switchTab(tab) {
@@ -245,7 +263,6 @@
     if (projectDrag) finishProjectDrag(false);
     activeTab = tab;
     try { localStorage.setItem("aihub_last_tab", tab); } catch (_) { }
-    expandedSettings.clear();
     renderAll();
     const view = $("#view-content");
     view.scrollTop = 0;
@@ -350,9 +367,8 @@
     const id = esc(tool?.id);
     const attrs = `data-id="${id}"`;
     const running = !!tool?.running;
-    return `<button class="btn ${running ? "btn-focus" : startStyle} btn-sm" data-act="${launchAction}" ${attrs} ${id ? "" : "disabled"}>
-      ${running ? '<span class="dot-ok-sq" aria-hidden="true"></span> 打开' : ICONS.play + " 启动"}</button>
-      ${running ? `<span class="v-sep" aria-hidden="true"></span>` + iconButton(stopAction, "关闭 " + name, ICONS.power, { danger: true, attrs }) : ""}`;
+    return `<button type="button" class="btn ${running ? "btn-focus" : startStyle} btn-sm btn-w-act" data-act="${running ? stopAction : launchAction}" ${attrs} ${id ? "" : "disabled"}>
+      ${running ? ICONS.power + " <span>关闭</span>" : ICONS.play + " <span>启动</span>"}</button>`;
   }
 
   function timeToReset(timestamp) {
@@ -393,7 +409,7 @@
       <header class="block-head">
         ${toolHeading("tool-" + tool.id, tool.icon, tool.name, "")}
         <div class="tool-actions">
-          <button class="btn btn-paper btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
+          <button type="button" class="btn btn-paper btn-sm btn-w-act" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}><span>打开</span> ${ICONS.ext}</button>
         </div>
       </header>
       <div class="tool-card-body">
@@ -411,13 +427,17 @@
     const ready = !!tool;
     return `<section class="surface-card block tool-card compact-tool" aria-labelledby="tool-open-design">
       <header class="block-head">
-        ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "",
-          statusHtml(ready ? (tool.running ? "运行中" : "未运行") : "未安装", tool?.running ? "running" : ""))}
+        ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "")}
         <div class="tool-actions">
           ${desktopActions(tool, "Open Design", "launchTool", "stopTool", "btn-dark")}
         </div>
       </header>
-      <div class="tool-card-body compact-purpose">设计构思与原型创作</div>
+      <div class="tool-card-body compact-purpose">
+        <span class="compact-identity">
+          ${statusHtml(ready ? (tool.running ? "运行中" : "未运行") : "未安装", tool?.running ? "running" : "")}
+          <span class="tool-identity-email">本地桌面端 · 原型工作区</span>
+        </span>
+      </div>
     </section>`;
   }
 
@@ -466,7 +486,7 @@
       <div class="antigravity-quota-group ${hasDanger ? "slot-alert" : "slot"}">
         <div class="ag-group-head">
           <h3>${esc(group.name)}</h3>
-          ${hasDanger ? '<span class="stamp quota-alert-badge">额度告急</span>' : ""}
+          ${hasDanger ? '<span class="stamp quota-alert-badge"><span class="dot-danger-sq" aria-hidden="true"></span><span>额度告急</span></span>' : ""}
         </div>
         <div class="meter-grid${single ? " meter-grid-single" : ""}">${metersHtml}</div>
       </div>`;
@@ -474,19 +494,22 @@
     const error = tool.error
       ? quotaMessage(tool.error, "quota-error", tool.cli_installed ? '<button class="btn btn-flat btn-sm" data-act="refreshAntigravity">重试</button>' : "")
       : "";
-    const info = tool.loading ? quotaMessage("正在读取额度…")
-      : (!groups && !error ? quotaMessage(tool.cli_installed ? "点击刷新额度" : "暂不可读取 · CLI 未安装") : "");
+    // Never insert a layout-shifting "正在读取额度…" banner when quota groups are already on screen!
+    const info = (!groups && !error)
+      ? (tool.loading ? quotaMessage("正在读取额度…") : quotaMessage(tool.cli_installed ? "点击刷新额度" : "暂不可读取 · CLI 未安装"))
+      : "";
     return `<section class="surface-card block tool-card antigravity-tool" aria-labelledby="tool-antigravity">
       <header class="block-head">
         ${toolHeading("tool-antigravity", tool.icon_url, "ANTIGRAVITY", "",
           statusHtml(tool.id ? (tool.running ? "运行中" : "未运行") : "未安装", tool.running ? "running" : ""))}
         <div class="tool-actions">
           ${updatedAtHtml(usage?.fetched_at, tool.automatic)}
-          <button class="btn btn-paper btn-sm${tool.loading ? " is-spinning" : ""}" data-act="refreshAntigravity"
-            aria-busy="${!!tool.loading}" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新</button>
+          <button type="button" class="btn btn-paper btn-sm btn-w-act" data-act="refreshAntigravity"
+            aria-busy="${!!tool.loading}" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${tool.loading ? PULSE_LOADER : ICONS.refresh + " <span>刷新</span>"}</button>
           ${desktopActions(tool, "Antigravity", "launchTool", "stopTool")}
         </div>
       </header>
+      ${tool.loading && groups ? '<div class="card-marquee" aria-hidden="true"></div>' : ""}
       <div class="tool-card-body ag-body">
         ${updatedAtHtml(usage?.fetched_at, tool.automatic, true)}
         ${usage?.email || usage?.plan ? `<div class="ag-account-strip"><span class="mono">${esc(usage.email || "")}</span><span>${esc(usage.plan || "")}</span></div>` : ""}
@@ -515,7 +538,8 @@
     const network = appState.network || {};
     const state = proxy.running ? (network.state === "stopped" ? "unknown" : network.state) : "stopped";
     const isDegraded = proxy.running && (state === "timeout" || state === "unavailable");
-    const isSwitching = !!networkBusy;
+    const isRefreshing = networkBusy === "refresh";
+    const isSwitching = !!networkBusy && !isRefreshing;
     const capCls = isDegraded ? "is-degraded" : (!proxy.running ? "" : (state === "reachable" ? "is-ok" : "is-warn"));
     const dotCls = isDegraded ? "is-danger" : (!proxy.running ? "" : (state === "reachable" ? "is-ok" : ""));
     const lifecycleLabel = ({ proxyStop: "正在关闭代理", proxyRestart: "正在重启代理" })[networkBusy];
@@ -536,12 +560,12 @@
       : "NIVA Network";
 
     const canInlinePick = proxy.running && network.can_select && appState.network_japan_picker && !networkBusy;
-    const refreshLabel = networkBusy === "refresh" ? "刷新中…" : "刷新网络状态";
+    const refreshLabel = isRefreshing ? "刷新中…" : "刷新网络状态";
 
     let cellsHtml = "";
     let actionsHtml = "";
     if (isSwitching) {
-      cellsHtml = `<span class="net-cell"><span class="dot-loader" aria-hidden="true"><span></span><span></span><span></span></span><span>${lifecycleLabel ? `${lifecycleLabel}…` : "正在探测并应用网络状态…"}</span></span>`;
+      cellsHtml = `<span class="net-cell">${PULSE_LOADER}<span>${lifecycleLabel ? `${lifecycleLabel}…` : "正在探测并应用网络状态…"}</span></span>`;
       actionsHtml = `<button type="button" class="btn btn-flat btn-sm" disabled>处理中</button>`;
     } else if (!proxy.running) {
       cellsHtml = `<span class="net-cell" style="color:var(--text-muted)">本地 Clash Verge 未启动，点击右侧拉起</span>`;
@@ -550,7 +574,7 @@
       cellsHtml = `
         ${policy ? `<span class="net-cell"><span class="net-k">策略</span><strong>${esc(policy)}</strong></span>` : ""}
         <span class="net-cell net-node"><button type="button" class="net-node-btn mono" title="${esc(node)}" data-act="toggleInlineNodeCombo" aria-expanded="false" ${canInlinePick ? "" : "disabled"}><span>${esc(node)}</span>${canInlinePick ? ICONS.chevronDown : ""}</button></span>
-        <span class="net-cell"><span class="stamp coral mono">${esc(latency)}</span></span>`;
+        <span class="net-cell">${isRefreshing ? PULSE_LOADER : `<span class="stamp coral mono">${esc(latency)}</span>`}</span>`;
       actionsHtml = `
         <button type="button" class="btn btn-dark btn-sm" data-act="rescueFastestNode">${ICONS.bolt} 一键换最快节点</button>
         <span class="net-sep" aria-hidden="true"></span>
@@ -562,10 +586,10 @@
         <span class="net-cell net-node" data-tip="点击就地切换节点">${canInlinePick
           ? `<button type="button" class="net-node-btn mono" title="${esc(node)}" data-act="toggleInlineNodeCombo" aria-expanded="false"><span>${esc(node)}</span>${ICONS.chevronDown}</button>`
           : `<strong class="mono">${esc(node)}</strong>`}</span>
-        <span class="net-cell" data-tip="当前节点延迟${esc(lastDelay)}"><span class="net-latency ${delayTone} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}</span>
+        <span class="net-cell" data-tip="当前节点延迟${esc(lastDelay)}">${isRefreshing ? PULSE_LOADER : `<span class="net-latency ${delayTone} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}`}</span>
         <span class="net-cell mono" data-tip="${esc(trafficDetails)}">${esc(traffic)}</span>`;
       actionsHtml = `
-        ${iconButton("refreshNetwork", refreshLabel, ICONS.refresh, { disabled: !appState.network_status_refresh })}
+        ${iconButton("refreshNetwork", refreshLabel, isRefreshing ? PULSE_LOADER : ICONS.refresh, { disabled: !appState.network_status_refresh || isRefreshing })}
         ${iconButton("openNetworkPicker", "打开完整节点选择器", ICONS.switch, { disabled: !canInlinePick })}
         ${iconButton("proxyOpen", "打开 Clash Verge", ICONS.ext)}
         <span class="net-sep" aria-hidden="true"></span>
@@ -590,10 +614,11 @@
         ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "CODEX", "", `<span class="stamp mono">${accounts.length} 账号</span>`)}
         <div class="tool-actions">
           ${updatedAtHtml(latestTs, anyAuto)}
-          <button class="btn btn-paper btn-sm${loading ? " is-spinning" : ""}" data-act="refreshAllUsage" aria-busy="${loading}" data-tip="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
-          <button class="btn btn-dark btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
+          <button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="refreshAllUsage" aria-busy="${loading}" ${loading ? "disabled" : ""} data-tip="刷新所有 Codex 账号的额度">${loading ? PULSE_LOADER : ICONS.refresh + " <span>刷新额度</span>"}</button>
+          <button type="button" class="btn btn-dark btn-sm btn-w-pair" data-act="openAddAccount">${ICONS.plus} <span>添加账号</span></button>
         </div>
       </header>
+      ${loading ? '<div class="card-marquee" aria-hidden="true"></div>' : ""}
       <div class="codex-accounts">${updatedAtHtml(latestTs, anyAuto, true)}${accounts.length ? accounts.map(renderCodexAccount).join("") : quotaMessage("暂无账号")}</div>
     </section>`;
   }
@@ -608,8 +633,8 @@
     let feedback = "";
     if (!auth.logged_in) feedback = quotaMessage("登录后可读取剩余额度");
     else if (auth.can_fetch_usage === false) feedback = quotaMessage("当前登录方式未提供额度");
-    else if (acc.usage_loading) feedback = quotaMessage("正在查询额度…");
-    else if (acc.usage_error) feedback = quotaMessage(acc.usage_error, "quota-error",
+    else if (acc.usage_loading && !windows.length) feedback = quotaMessage("正在查询额度…");
+    else if (acc.usage_error && !windows.length) feedback = quotaMessage(acc.usage_error, "quota-error",
       `<button class="btn btn-flat btn-sm" data-act="refreshUsage" data-id="${esc(acc.id)}" aria-label="重试 ${esc(name)} 的额度查询">重试</button>`);
     else if (!windows.length) feedback = quotaMessage(usage ? "当前套餐暂无独立额度窗口" : "暂无额度数据");
 
@@ -751,8 +776,9 @@
 
   function settingsDisclosure(id, label) {
     const open = expandedSettings.has(id);
-    return `<button class="btn btn-soft btn-sm settings-disclosure" data-act="toggleSettingsDetails" data-id="${id}"
-      data-collapsed-label="${label}" aria-controls="${id}" aria-expanded="${open}"><span>${open ? "收起" : label}</span>${ICONS.chevronDown}</button>`;
+    const expandedLabel = label.replace("展开", "收起");
+    return `<button type="button" class="btn btn-soft btn-sm btn-w-row settings-disclosure" data-act="toggleSettingsDetails" data-id="${id}"
+      data-collapsed-label="${label}" data-expanded-label="${expandedLabel}" aria-controls="${id}" aria-expanded="${open}"><span>${open ? expandedLabel : label}</span>${ICONS.chevronDown}</button>`;
   }
 
   function disclosurePanel(id, open, content) {
@@ -779,8 +805,10 @@
       button.setAttribute("aria-pressed", String(active));
     }
     const status = view.querySelector("#settings-hotkey-status");
-    status.className = "stamp" + (shot.enabled ? (shot.registered ? " mint" : " sand") : " stone");
-    status.textContent = !shot.enabled ? "快捷键已关闭" : shot.registered ? "热键已生效" : "热键被占用";
+    status.className = "stamp" + (shot.enabled ? (shot.registered ? " semantic-ok" : " semantic-warn") : " stone");
+    status.innerHTML = !shot.enabled
+      ? "<span>快捷键已关闭</span>"
+      : (shot.registered ? '<span class="dot-ok-sq" aria-hidden="true"></span><span>热键已生效</span>' : '<span class="dot-warn-sq" aria-hidden="true"></span><span>热键被占用</span>');
     const alert = view.querySelector("#settings-hotkey-alert");
     alert.hidden = !(shot.enabled && !shot.registered && shot.error);
     alert.querySelector("span").textContent = shot.error || "";
@@ -813,6 +841,12 @@
 
   // ==================== PROJECTS PAGE ====================
 
+  function normBrandText(text) {
+    return String(text || "")
+      .replace(/\bAI Hub\b/gi, "AI BASE")
+      .replace(/\bLife Hub\b/gi, "LIFE BASE");
+  }
+
   function projectVisualTheme(item) {
     const key = `${item.name || ""} ${item.folder_name || ""}`.toLowerCase();
     if (key.includes("ai hub") || key.includes("ai-hub") || key.includes("ai base")) return { svg: ICONS.workspace };
@@ -835,6 +869,7 @@
     }
     return `<div class="projects-grid">${items.map((item) => {
       const theme = projectVisualTheme(item);
+      const displayName = normBrandText(item.name);
       const isDefaultBranch = item.branch === "main" || item.branch === "master";
       let statusMeta = "";
       if (!item.exists) {
@@ -851,19 +886,16 @@
         statusMeta = `<span class="project-clean-meta">本地目录</span>`;
       }
 
-      const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
+      const descText = normBrandText(item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。"));
       const previewState = appState.project_previews?.[item.id];
       const previewBusy = previewState === "busy";
       const previewRunning = previewState === "running";
       const portSuffix = item.preview_port ? ` :${item.preview_port}` : "";
       const previewBtn = item.has_preview
-        ? `<button class="btn ${previewRunning ? "btn-focus" : "btn-dark"} btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" data-tip="${esc(item.preview_port ? "本地预览 · 端口 " + item.preview_port : "运行启动预览脚本")}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : (previewRunning ? '<span class="dot-ok-sq" aria-hidden="true"></span>' : ICONS.play)}<span>${previewBusy ? "处理中" : previewRunning ? `${portSuffix.trim() || "预览中"} 打开` : `启动${portSuffix || "预览"}`}</span></button>`
+        ? `<button type="button" class="btn ${previewRunning ? "btn-focus" : "btn-dark"} btn-sm btn-w-pair" data-act="${previewRunning ? "stopProjectPreview" : "launchProjectPreview"}" data-id="${esc(item.id)}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? PULSE_LOADER : (previewRunning ? ICONS.power : ICONS.play)}<span>${previewBusy ? "处理中" : previewRunning ? `关闭${portSuffix}` : `启动${portSuffix || "预览"}`}</span></button>`
         : ((item.is_self || item.id === "prj-ai-hub" || String(item.folder_name || "").toLowerCase() === "ai-hub")
-          ? '<span class="stamp semantic-ok project-self-pill" data-tip="当前正在运行的桌面软件本体"><span class="dot-ok-sq" aria-hidden="true"></span><span>本体运行中</span></span>'
+          ? '<span class="stamp semantic-ok project-self-pill"><span class="dot-ok-sq" aria-hidden="true"></span><span>本体运行中</span></span>'
           : "");
-      const stopPreviewBtn = previewRunning
-        ? `<span class="v-sep" aria-hidden="true"></span>` + iconButton("stopProjectPreview", "停止预览", ICONS.power, { danger: true, attrs: `data-id="${esc(item.id)}"` })
-        : "";
       const agIcon = appState.antigravity?.icon_url;
       const agGlyph = agIcon ? `<img class="project-tool-icon" src="${esc(agIcon)}" alt="" />` : '<span class="project-tool-letter" aria-hidden="true">A</span>';
 
@@ -873,13 +905,13 @@
             <div class="project-emblem">${theme.svg}</div>
             <div class="project-head-meta">
               <div class="project-name-row">
-                <span class="project-name" title="${esc(item.name)}">${esc(item.name)}</span>
+                <span class="project-name" title="${esc(displayName)}">${esc(displayName)}</span>
                 ${statusMeta}
               </div>
             </div>
           </div>
           <div class="project-head-actions">
-            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(item.name)} 的顺序" data-tip="拖动或方向键排序"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="square"/></svg></button>
+            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(displayName)} 的顺序" data-tip="拖动或方向键排序">${ICONS.grip}</button>
           </div>
         </header>
 
@@ -894,7 +926,6 @@
         <footer class="project-card-foot">
           <div class="project-foot-left">
             ${previewBtn}
-            ${stopPreviewBtn}
           </div>
           <div class="project-foot-right">
             ${iconButton("openProjectFolder", "打开目录", ICONS.folder, { attrs: `data-path="${esc(item.path)}" data-tip="打开文件夹"` })}
@@ -1163,7 +1194,7 @@
 
   // ==================== BACKLOG PAGE ====================
 
-  const BACKLOG_PROJECTS = ["AI Hub", "Life Hub", "通用"];
+  const BACKLOG_PROJECTS = ["AI BASE", "LIFE BASE", "通用"];
   const BACKLOG_STATUSES = [
     { id: "idea", label: "构思中", tone: "sand" },
     { id: "planned", label: "已排期", tone: "sky" },
@@ -1178,6 +1209,13 @@
   };
   const BACKLOG_STATUS_RANK = { doing: 0, planned: 1, idea: 2, paused: 3, done: 4 };
 
+  function normBacklogProject(proj) {
+    const p = String(proj || "").trim();
+    if (/^ai\s*(hub|base)$/i.test(p)) return "AI BASE";
+    if (/^life\s*(hub|base)$/i.test(p)) return "LIFE BASE";
+    return p || "通用";
+  }
+
   function backlogStatusMeta(id) {
     return BACKLOG_STATUSES.find((s) => s.id === id) || BACKLOG_STATUSES[0];
   }
@@ -1186,9 +1224,10 @@
     const q = backlogQuery.trim().toLowerCase();
     return [...items]
       .filter((it) => {
-        if (backlogProject !== "all" && it.project !== backlogProject) return false;
+        const proj = normBacklogProject(it.project);
+        if (backlogProject !== "all" && proj !== backlogProject) return false;
         if (backlogStatus !== "all" && it.status !== backlogStatus) return false;
-        if (q && !`${it.title || ""} ${it.notes || ""} ${it.project || ""}`.toLowerCase().includes(q)) return false;
+        if (q && !`${normBrandText(it.title)} ${normBrandText(it.notes)} ${proj}`.toLowerCase().includes(q)) return false;
         return true;
       })
       .sort((a, b) => {
@@ -1201,7 +1240,7 @@
   }
 
   function renderBacklogNotesHtml(item) {
-    const raw = String(item.notes || "");
+    const raw = normBrandText(item.notes || "");
     if (!raw.trim()) {
       return {
         progressBadge: "",
@@ -1233,7 +1272,7 @@
           <span>${esc(text)}</span>
         </label>`);
     }
-    const progressBadge = total ? `<span class="stamp ${done === total ? "mint" : "stone"} mono">${done}/${total}</span>` : "";
+    const progressBadge = total ? `<span class="stamp ${done === total ? "semantic-ok" : "stone"} mono">${done}/${total}</span>` : "";
     const bodyHtml = blocks.map(({ kind, lines }) => {
       if (kind === "checks") return `<div class="bl-checklist">${lines.join("")}</div>`;
       const prose = lines.join("\n").trim();
@@ -1248,7 +1287,10 @@
     }
     const sel = filtered.find((it) => it.id === selectedBacklogId) || filtered[0];
     selectedBacklogId = sel.id;
-    const selPrio = BACKLOG_PRIORITIES[sel.priority] || BACKLOG_PRIORITIES.medium;
+    const selProj = normBacklogProject(sel.project);
+    const selTitle = normBrandText(sel.title);
+    const selPrioKey = BACKLOG_PRIORITIES[sel.priority] ? sel.priority : "medium";
+    const selPrio = BACKLOG_PRIORITIES[selPrioKey];
     const statusOpts = BACKLOG_STATUSES.map((st) =>
       `<option value="${st.id}"${sel.status === st.id ? " selected" : ""}>${st.label}</option>`
     ).join("");
@@ -1276,14 +1318,16 @@
             ${g.list.map((it) => {
               const pr = BACKLOG_PRIORITIES[it.priority] || BACKLOG_PRIORITIES.medium;
               const st = backlogStatusMeta(it.status);
+              const proj = normBacklogProject(it.project);
+              const title = normBrandText(it.title);
               const dateShort = it.updated_at ? fmtDate(it.updated_at, true).split(" ")[0] : "";
               const advNext = it.status === "idea" ? "planned" : (it.status === "planned" ? "doing" : (it.status === "doing" ? "done" : ""));
               const advLabel = advNext === "planned" ? "→ 排期" : (advNext === "doing" ? "→ 进行中" : (advNext === "done" ? "✓ 完成" : ""));
               return `<div class="cp-row${it.id === sel.id ? " selected" : ""}${it.status === "done" ? " is-done" : ""}" data-act="selectBacklogItem" data-id="${esc(it.id)}">
                 <div class="cp-row-main">
                   <span class="stamp ${pr.cls}">${pr.label}</span>
-                  <span class="stamp stone">${esc(it.project || "通用")}</span>
-                  <span class="cp-row-title" title="${esc(it.title)}">${esc(it.title)}</span>
+                  <span class="stamp stone">${esc(proj)}</span>
+                  <span class="cp-row-title" title="${esc(title)}">${esc(title)}</span>
                 </div>
                 <div class="cp-row-right">
                   ${g.merged ? `<span class="stamp ${st.tone}">${st.label}</span>` : `<span class="cp-row-date mono${advNext ? " can-hide" : ""}">${esc(dateShort)}</span>`}
@@ -1297,7 +1341,7 @@
 
       <aside class="block cp-split-detail">
         <div class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
-          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>详情 · ${esc(sel.project || "通用")}</span></span>
+          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>详情 · ${esc(selProj)}</span></span>
           <div class="cp-detail-actions">
             <button type="button" class="btn btn-primary btn-xs" data-act="copyBacklogPrompt" data-id="${esc(sel.id)}" data-tip="打包项目路径与详细说明为 AI Prompt">复制 Prompt</button>
             <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(sel.id)}">编辑</button>
@@ -1305,13 +1349,13 @@
           </div>
         </div>
         <div class="cp-detail-body">
-          <h2 class="cp-detail-title">${esc(sel.title)}</h2>
+          <h2 class="cp-detail-title">${esc(selTitle)}</h2>
           <div class="slot cp-detail-kv">
             <div>
               <div class="cp-kv-label">归属项目</div>
               <div style="display:flex;align-items:center;gap:5px;">
-                <button type="button" class="kv-pill-btn" data-act="openBacklogProjectMenu" data-id="${esc(sel.id)}" data-tip="点击切换归属项目">${esc(sel.project || "通用")} ${ICONS.chevronDown}</button>
-                <button type="button" class="btn btn-flat btn-xs" data-act="jumpToProject" data-project="${esc(sel.project || "")}" data-tip="跳转到项目页">${ICONS.ext}</button>
+                <button type="button" class="kv-pill-btn" data-act="openBacklogProjectMenu" data-id="${esc(sel.id)}" data-tip="点击切换归属项目"><span>${esc(selProj)}</span>${ICONS.chevronDown}</button>
+                <button type="button" class="kv-jump-btn" data-act="jumpToProject" data-project="${esc(selProj)}" data-tip="跳转到项目页">${ICONS.ext}</button>
               </div>
             </div>
             <div>
@@ -1321,12 +1365,12 @@
             <div>
               <div class="cp-kv-label">优先级（点击切换）</div>
               <button type="button" class="kv-pill-btn" data-act="openBacklogPriorityMenu" data-id="${esc(sel.id)}" data-tip="点击快速切换优先级">
-                <span class="stamp ${selPrio.cls}">${selPrio.label}优先级</span>${ICONS.chevronDown}
+                <span class="kv-pill-lead"><span class="prio-dot ${selPrioKey}" aria-hidden="true"></span><span>${selPrio.label}优先级</span></span>${ICONS.chevronDown}
               </button>
             </div>
             <div>
               <div class="cp-kv-label">时间记录</div>
-              <span class="mono cp-kv-time" data-tip="创建 ${esc(fmtDate(sel.created_at))}">更新 ${esc(fmtDate(sel.updated_at, true))}</span>
+              <span class="mono cp-kv-time" style="display:inline-flex;align-items:center;height:28px;" data-tip="创建 ${esc(fmtDate(sel.created_at))}">更新 ${esc(fmtDate(sel.updated_at, true))}</span>
             </div>
           </div>
           <div class="cp-detail-sec" style="display:flex;align-items:center;gap:8px;"><span>详细说明</span>${notesRendered.progressBadge}</div>
@@ -1357,6 +1401,9 @@
             ? '<div class="kanban-empty">拖入卡片到此处</div>'
             : col.items.map((item) => {
                 const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
+                const proj = normBacklogProject(item.project);
+                const title = normBrandText(item.title);
+                const notes = normBrandText(item.notes);
                 const statusOpts = BACKLOG_STATUSES.map((st) =>
                   `<option value="${st.id}"${item.status === st.id ? " selected" : ""}>${st.label}</option>`
                 ).join("");
@@ -1364,12 +1411,12 @@
                   <div class="kcard-top">
                     <div class="kcard-tags">
                       <span class="stamp ${prio.cls}">${prio.label}</span>
-                      <span class="stamp stone">${esc(item.project || "通用")}</span>
+                      <span class="stamp stone">${esc(proj)}</span>
                     </div>
                     <select class="sel kcard-status" data-backlog-status="${esc(item.id)}" aria-label="修改状态">${statusOpts}</select>
                   </div>
-                  <div class="kcard-title">${esc(item.title)}</div>
-                  ${item.notes ? `<div class="kcard-desc">${esc(item.notes)}</div>` : ""}
+                  <div class="kcard-title">${esc(title)}</div>
+                  ${notes ? `<div class="kcard-desc">${esc(notes)}</div>` : ""}
                   <div class="kcard-foot">
                     <span class="mono kcard-date">${esc(fmtDate(item.updated_at, true))}</span>
                     <div class="kcard-actions">
@@ -1413,7 +1460,7 @@
     view.dataset.page = "backlog";
 
     const counts = { all: items.length };
-    for (const p of BACKLOG_PROJECTS) counts[p] = items.filter((it) => it.project === p).length;
+    for (const p of BACKLOG_PROJECTS) counts[p] = items.filter((it) => normBacklogProject(it.project) === p).length;
 
     const pillTabs = ["all", ...BACKLOG_PROJECTS].map((p) => {
       const label = p === "all" ? "全部" : p;
@@ -1447,8 +1494,9 @@
 
   function openBacklogModal(editItem) {
     const isEdit = !!editItem;
+    const defaultProj = editItem ? normBacklogProject(editItem.project) : (backlogProject !== "all" ? backlogProject : "LIFE BASE");
     const projectOpts = BACKLOG_PROJECTS.map((p) =>
-      `<option value="${esc(p)}"${(editItem?.project || (backlogProject !== "all" ? backlogProject : "Life Hub")) === p ? " selected" : ""}>${esc(p)}</option>`
+      `<option value="${esc(p)}"${defaultProj === p ? " selected" : ""}>${esc(p)}</option>`
     ).join("");
     const statusOpts = BACKLOG_STATUSES.map((st) =>
       `<option value="${st.id}"${(editItem?.status || "idea") === st.id ? " selected" : ""}>${st.label}</option>`
@@ -1465,7 +1513,7 @@
       <form id="f-backlog" class="modal-body">
         <div class="field">
           <label>需求标题</label>
-          <input id="bl-title" type="text" required placeholder="一句话描述想做的模块或改进..." value="${esc(editItem?.title || "")}" />
+          <input id="bl-title" type="text" required placeholder="一句话描述想做的模块或改进..." value="${esc(normBrandText(editItem?.title || ""))}" />
         </div>
         <div class="field-grid-3">
           <div class="field"><label>归属项目</label><select id="bl-project">${projectOpts}</select></div>
@@ -1474,7 +1522,7 @@
         </div>
         <div class="field">
           <label>详细说明与讨论要点（可选）</label>
-          <textarea id="bl-notes" rows="6" placeholder="记录核心功能点、UI 设想、数据来源或避坑备注...">${esc(editItem?.notes || "")}</textarea>
+          <textarea id="bl-notes" rows="6" placeholder="记录核心功能点、UI 设想、数据来源或避坑备注...">${esc(normBrandText(editItem?.notes || ""))}</textarea>
         </div>
       </form>
       <div class="modal-footer">
@@ -1506,15 +1554,15 @@
   }
 
   function resolveBacklogRepoPath(projectLabel) {
-    const p = String(projectLabel || "").toLowerCase();
+    const p = normBacklogProject(projectLabel).toLowerCase();
     if (!p || p === "通用") return "";
     const projects = appState?.projects || [];
     const hit = projects.find((it) => {
       const n = String(it.name || "").toLowerCase();
       const f = String(it.folder_name || "").toLowerCase();
       if (n === p || f === p) return true;
-      if ((p === "ai hub" || p === "ai base") && (f === "ai-hub" || n.includes("ai hub"))) return true;
-      if (p === "life hub" && (f === "life-hub" || n.includes("life"))) return true;
+      if ((p === "ai hub" || p === "ai base") && (f === "ai-hub" || n.includes("ai hub") || n.includes("ai base"))) return true;
+      if ((p === "life hub" || p === "life base") && (f === "life-hub" || n.includes("life"))) return true;
       return false;
     });
     return hit?.path || "";
@@ -1524,14 +1572,15 @@
     if (!item) return;
     const statusLabel = BACKLOG_STATUSES.find((s) => s.id === item.status)?.label || item.status;
     const prioLabel = BACKLOG_PRIORITIES[item.priority]?.label || "中";
-    const repoPath = resolveBacklogRepoPath(item.project);
+    const proj = normBacklogProject(item.project);
+    const repoPath = resolveBacklogRepoPath(proj);
     const promptText = [
       `请帮我推进以下开发需求：`,
-      `- 项目归属：${item.project || "通用"}`,
+      `- 项目归属：${proj}`,
       repoPath ? `- 本地仓库路径：${repoPath}` : "",
-      `- 需求标题：${item.title}`,
+      `- 需求标题：${normBrandText(item.title)}`,
       `- 当前状态：${statusLabel}（优先级：${prioLabel}）`,
-      item.notes ? `- 详细说明：\n${item.notes}` : "",
+      item.notes ? `- 详细说明：\n${normBrandText(item.notes)}` : "",
     ].filter(Boolean).join("\n");
     try {
       await callHost("copyText", { text: promptText });
@@ -1548,9 +1597,10 @@
     for (const item of filtered) {
       const st = BACKLOG_STATUSES.find((s) => s.id === item.status)?.label || item.status;
       const pr = BACKLOG_PRIORITIES[item.priority]?.label || "中";
-      lines.push(`- [${item.status === "done" ? "x" : " "}] **[${item.project}] ${item.title}**（${st} · ${pr}优）`);
+      const proj = normBacklogProject(item.project);
+      lines.push(`- [${item.status === "done" ? "x" : " "}] **[${proj}] ${normBrandText(item.title)}**（${st} · ${pr}优）`);
       if (item.notes) {
-        for (const noteLine of String(item.notes).split("\n")) lines.push(`  ${noteLine}`);
+        for (const noteLine of String(normBrandText(item.notes)).split("\n")) lines.push(`  ${noteLine}`);
       }
     }
     try {
@@ -1568,7 +1618,7 @@
     const apps = appState.installed_apps || [];
     const view = $("#view-content");
     $("#view-title").textContent = "设置";
-    $("#view-sub").textContent = "";
+    $("#view-sub").textContent = "全局热键 · 桌面收纳 · 常驻与备份";
     const key = JSON.stringify([shortcuts.map(({ id, name, requires_admin }) => [id, name, requires_admin]), apps]);
     if (key === settingsRenderKey && view.dataset.page === "manage") {
       syncSettingsFields(view, settings, shot, shortcuts);
@@ -1586,8 +1636,8 @@
     const stashRows = shortcuts.map((sc) => `
       <div class="stash-row">
         <div class="stash-meta">
-          <strong>${esc(sc.name)}</strong>
-          <span class="stamp stone">${sc.requires_admin ? "公共桌面 · 需提权" : "个人桌面"}</span>
+          <span class="stamp stone stash-tag">${sc.requires_admin ? "公共 · 提权" : "个人桌面"}</span>
+          <strong>${esc(normBrandText(sc.name))}</strong>
         </div>
         <div class="stash-right">
           <div class="stash-seg" data-stash-seg="${esc(sc.id)}" role="group" aria-label="收纳 ${esc(sc.name)}">
@@ -1602,106 +1652,110 @@
           <img class="app-icon" src="${esc(app.icon_url)}" alt="" />
           <div class="app-info"><div class="app-name">${esc(app.name)}</div><div class="app-sub">${esc(app.uninstall_method)}</div></div>
         </div>
-        <button class="btn btn-paper uninstall-trigger btn-sm" data-act="confirmUninstall" data-id="${esc(app.id)}">卸载软件</button>
+        <button type="button" class="btn btn-paper uninstall-trigger btn-sm btn-w-row" data-act="confirmUninstall" data-id="${esc(app.id)}">卸载软件</button>
       </div>`).join("");
 
     view.innerHTML = `<div class="settings-page">
-      <section class="settings-group" aria-labelledby="settings-hotkeys">
-        <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
-        <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head">
-            <div class="settings-banner-lead">
-              <div class="settings-emblem">${ICONS.key}</div>
-              <h3 class="settings-banner-title">热键与状态提醒</h3>
+      <div class="settings-col">
+        <section class="settings-group" aria-labelledby="settings-hotkeys">
+          <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
+          <div class="settings-comic-card block">
+            <header class="settings-card-banner block-head">
+              <div class="settings-banner-lead">
+                <div class="settings-emblem">${ICONS.key}</div>
+                <h3 class="settings-banner-title">热键与状态提醒</h3>
+              </div>
+              <span id="settings-hotkey-status" class="stamp"></span>
+            </header>
+            <div class="setting-row">
+              <div class="setting-label">全局截图快捷键</div>
+              <div class="setting-actions">
+                <div class="hotkey-pills">${hotkeyPills}</div>
+                <span class="v-sep" aria-hidden="true"></span>
+                ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
+              </div>
             </div>
-            <span id="settings-hotkey-status" class="stamp"></span>
-          </header>
-          <div class="setting-row">
-            <div class="setting-label">全局截图快捷键</div>
-            <div class="setting-actions">
-              <div class="hotkey-pills">${hotkeyPills}</div>
-              <span class="v-sep" aria-hidden="true"></span>
-              ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
+            <div id="settings-hotkey-alert" class="hotkey-alert" hidden>
+              <span></span><button class="btn btn-flat btn-sm" data-act="reregisterHotkey">重新注册</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">额度自动刷新与回满提醒</div>
+              ${settingSwitch("quota_auto_refresh", "额度自动刷新与回满提醒", settings.quota_auto_refresh !== false)}
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">周期回收号不足 48 小时提醒</div>
+              ${settingSwitch("expiry_balloon_alert", "周期回收号不足 48 小时提醒", settings.expiry_balloon_alert)}
             </div>
           </div>
-          <div id="settings-hotkey-alert" class="hotkey-alert" hidden>
-            <span></span><button class="btn btn-flat btn-sm" data-act="reregisterHotkey">重新注册</button>
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">额度自动刷新与回满提醒</div>
-            ${settingSwitch("quota_auto_refresh", "额度自动刷新与回满提醒", settings.quota_auto_refresh !== false)}
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">周期回收号不足 48 小时提醒</div>
-            ${settingSwitch("expiry_balloon_alert", "周期回收号不足 48 小时提醒", settings.expiry_balloon_alert)}
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="settings-group" aria-labelledby="settings-apps">
-        <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
-        <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head">
-            <div class="settings-banner-lead">
-              <div class="settings-emblem">${ICONS.folder}</div>
-              <h3 class="settings-banner-title">桌面图标收纳</h3>
-              <span id="stash-count" class="stamp"></span>
+        <section class="settings-group" aria-labelledby="settings-system">
+          <h2 id="settings-system" class="settings-heading">系统与窗口</h2>
+          <div class="settings-comic-card block">
+            <header class="settings-card-banner block-head">
+              <div class="settings-banner-lead">
+                <div class="settings-emblem">${ICONS.monitor}</div>
+                <h3 class="settings-banner-title">常驻、自启与备份</h3>
+              </div>
+            </header>
+            <div class="setting-row">
+              <div><div class="setting-label">开机静默启动到托盘</div>
+                <div class="group-sub">开机后直接后台常驻系统托盘，随时响应全局截图与快速唤起。</div></div>
+              ${settingSwitch("auto_start_silent", "开机静默启动到托盘", settings.auto_start_silent)}
             </div>
-            <div class="setting-actions">
-              <button class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键收纳 AI 图标</button>
-              <button class="btn btn-flat btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
-              ${settingsDisclosure("stash-details", "展开明细")}
+            <div class="setting-row">
+              <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
+                <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
+              ${settingSwitch("minimize_to_tray", "关闭窗口时缩到系统托盘", settings.minimize_to_tray)}
             </div>
-          </header>
-          ${disclosurePanel("stash-details", expandedSettings.has("stash-details"), `
-            ${stashRows || '<div class="setting-row">未检测到可收纳的快捷方式</div>'}
-            ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
-          `)}
-        </div>
-        <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head">
-            <div class="settings-banner-lead">
-              <div class="settings-emblem">${ICONS.trash}</div>
-              <h3 class="settings-banner-title">软件卸载</h3>
-              <span class="stamp">已检测 ${apps.length} 个</span>
+            <div class="setting-row">
+              <div><div class="setting-label">配置与需求池本地备份</div>
+                <div class="group-sub">导出或恢复设置与需求池记录（不含账号登录态与密钥）。</div></div>
+              <div class="setting-actions">
+                <button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="exportBackupJson">导出备份</button>
+                <button type="button" class="btn btn-flat btn-sm btn-w-pair" data-act="importBackupJson">导入恢复</button>
+              </div>
             </div>
-            ${settingsDisclosure("uninstall-details", "展开列表")}
-          </header>
-          ${disclosurePanel("uninstall-details", expandedSettings.has("uninstall-details"), `
-            ${uninstallRows || '<div class="setting-row">未检测到支持卸载的桌面应用</div>'}
-          `)}
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
 
-      <section class="settings-group" aria-labelledby="settings-system">
-        <h2 id="settings-system" class="settings-heading">系统与窗口</h2>
-        <div class="settings-comic-card block">
-          <header class="settings-card-banner block-head">
-            <div class="settings-banner-lead">
-              <div class="settings-emblem">${ICONS.monitor}</div>
-              <h3 class="settings-banner-title">常驻、自启与备份</h3>
-            </div>
-          </header>
-          <div class="setting-row">
-            <div><div class="setting-label">开机静默启动到托盘</div>
-              <div class="group-sub">开机后直接后台常驻系统托盘，随时响应全局截图与快速唤起。</div></div>
-            ${settingSwitch("auto_start_silent", "开机静默启动到托盘", settings.auto_start_silent)}
+      <div class="settings-col">
+        <section class="settings-group" aria-labelledby="settings-apps">
+          <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
+          <div class="settings-comic-card block">
+            <header class="settings-card-banner block-head">
+              <div class="settings-banner-lead">
+                <div class="settings-emblem">${ICONS.folder}</div>
+                <h3 class="settings-banner-title">桌面图标收纳</h3>
+                <span id="stash-count" class="stamp"></span>
+              </div>
+              <div class="setting-actions">
+                <button type="button" class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键收纳 AI 图标</button>
+                <button type="button" class="btn btn-flat btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
+                ${settingsDisclosure("stash-details", "展开明细")}
+              </div>
+            </header>
+            ${disclosurePanel("stash-details", expandedSettings.has("stash-details"), `
+              ${stashRows || '<div class="setting-row">未检测到可收纳的快捷方式</div>'}
+              ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
+            `)}
           </div>
-          <div class="setting-row">
-            <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
-              <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
-            ${settingSwitch("minimize_to_tray", "关闭窗口时缩到系统托盘", settings.minimize_to_tray)}
+          <div class="settings-comic-card block">
+            <header class="settings-card-banner block-head">
+              <div class="settings-banner-lead">
+                <div class="settings-emblem">${ICONS.trash}</div>
+                <h3 class="settings-banner-title">软件卸载</h3>
+                <span class="stamp">已检测 ${apps.length} 个</span>
+              </div>
+              ${settingsDisclosure("uninstall-details", "展开列表")}
+            </header>
+            ${disclosurePanel("uninstall-details", expandedSettings.has("uninstall-details"), `
+              ${uninstallRows || '<div class="setting-row">未检测到支持卸载的桌面应用</div>'}
+            `)}
           </div>
-          <div class="setting-row">
-            <div><div class="setting-label">配置与需求池本地备份</div>
-              <div class="group-sub">导出或恢复设置与需求池记录（不含账号登录态与密钥）。</div></div>
-            <div class="setting-actions">
-              <button type="button" class="btn btn-paper btn-sm" data-act="exportBackupJson">导出 JSON 备份</button>
-              <button type="button" class="btn btn-flat btn-sm" data-act="importBackupJson">导入恢复</button>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>`;
     syncSettingsFields(view, settings, shot, shortcuts);
   }
@@ -2049,8 +2103,23 @@
       if (loading || networkBusy) return;
       loading = true;
       pendingGroup = group;
-      message.textContent = "正在读取节点…";
-      renderControls();
+      let loadTimer = null;
+      if (!picker.nodes.length) {
+        message.textContent = "正在读取节点…";
+        renderControls();
+      } else {
+        policies.querySelectorAll("[data-policy]").forEach((btn) => {
+          const active = btn.dataset.policy === group;
+          btn.classList.toggle("active", active);
+          btn.setAttribute("aria-pressed", String(active));
+        });
+        loadTimer = setTimeout(() => {
+          if (loading && isOpen()) {
+            message.textContent = "正在读取节点…";
+            renderControls();
+          }
+        }, 180);
+      }
       try {
         const result = await callHost("listNetworkNodes", { group });
         if (!isOpen()) return;
@@ -2065,6 +2134,7 @@
           list.innerHTML = '<div class="network-node-empty"><button class="btn btn-soft btn-sm" data-picker-retry>重新读取</button></div>';
         }
       } finally {
+        clearTimeout(loadTimer);
         loading = false;
         if (isOpen()) renderControls();
       }
@@ -2695,7 +2765,7 @@
       return;
     }
     if (!modalOpen && e.ctrlKey && !e.shiftKey && !e.altKey) {
-      const tabMap = { "1": "workspace", "2": "projects", "3": "backlog", "4": "manage" };
+      const tabMap = { "1": "workspace", "2": "projects", "3": "backlog", "4": "manage", "5": "design" };
       if (tabMap[e.key]) {
         e.preventDefault();
         switchTab(tabMap[e.key]);
@@ -2737,7 +2807,7 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"], [data-act="openBacklogPriorityMenu"], [data-act="openBacklogProjectMenu"], [data-act="openProjectMoreMenu"]')) closePopover();
+    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"], [data-act="openBacklogPriorityMenu"], [data-act="openBacklogProjectMenu"], [data-act="openProjectMoreMenu"], [data-act="openDesignCopyMenu"]')) closePopover();
     if (activeComboEl && !e.target.closest('.combo-popover, [data-act="toggleInlineNodeCombo"]')) closeInlineNodeCombo();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
 
@@ -2787,7 +2857,26 @@
       if (expanded === null) return;
       if (expanded) expandedSettings.add(id);
       else expandedSettings.delete(id);
-      actBtn.querySelector("span").textContent = expanded ? "收起" : actBtn.dataset.collapsedLabel;
+      actBtn.querySelector("span").textContent = expanded ? (actBtn.dataset.expandedLabel || "收起") : actBtn.dataset.collapsedLabel;
+    }
+    else if (act === "openDesignCopyMenu") {
+      const pop = $("#popover-menu");
+      pop.innerHTML = `
+        <button type="button" class="pop-item" data-act="triggerDsCopy" data-mode="current">${ICONS.copy} <span>复制当前分页独立 HTML</span></button>
+        <button type="button" class="pop-item" data-act="triggerDsCopy" data-mode="aibase">${ICONS.workspace} <span>复制 AI BASE 专属 HTML</span></button>
+        <button type="button" class="pop-item" data-act="triggerDsCopy" data-mode="lifebase">${ICONS.ledger} <span>复制 LIFE BASE 专属 HTML</span></button>
+        <div class="pop-sep"></div>
+        <button type="button" class="pop-item" data-act="triggerDsCopy" data-mode="all">${ICONS.changelog} <span>复制全量 10 页完整 HTML</span></button>`;
+      positionPopover(pop, actBtn);
+    }
+    else if (act === "triggerDsCopy") {
+      closePopover();
+      const mode = actBtn.dataset.mode || "current";
+      const frame = $("#design-sys-frame");
+      frame?.contentWindow?.postMessage({ type: "ds-request-copy", mode }, "*");
+    }
+    else if (act === "openDesignSystemExternal") {
+      postAction("openDesignSystemExternal");
     }
     else if (act === "reregisterHotkey") postAction("reregisterHotkey");
     else if (act === "setScreenshotHotkey") postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: actBtn.dataset.hk });
@@ -3040,6 +3129,15 @@
     }
   }, 1000);
 
+  window.addEventListener("message", (ev) => {
+    const msg = ev.data;
+    if (msg && typeof msg === "object" && msg.type === "ds-copy-html" && msg.html) {
+      callHost("copyText", { text: msg.html })
+        .then(() => showToast(`已复制「${msg.label || "设计系统 HTML"}」（${Math.round(msg.html.length / 1024)} KB）`))
+        .catch((err) => showToast(err.message, true));
+    }
+  });
+
   if (webview) {
     webview.addEventListener("message", (ev) => {
       const msg = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
@@ -3052,7 +3150,7 @@
           if (appState?.just_updated) {
             try {
               const saved = localStorage.getItem("aihub_last_tab");
-              if (["workspace", "projects", "backlog", "manage"].includes(saved) && saved !== activeTab) {
+              if (["workspace", "projects", "backlog", "manage", "design"].includes(saved) && saved !== activeTab) {
                 activeTab = saved;
                 if (saved === "manage") postAction("refreshInstalledApps");
                 else if (saved === "projects") postAction("refreshProjects");

@@ -4,5 +4,6 @@ __pycache__/
 *.previous
 *.bak
 CodexLauncher.next.exe
+AI BASE.next.exe
 .vs/
 /bin/

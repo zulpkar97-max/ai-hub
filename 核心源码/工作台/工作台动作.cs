@@ -927,6 +927,19 @@ namespace CodexLauncher
                             break;
                         }
 
+                    case "openDesignSystemExternal":
+                        {
+                            string dsPath = Path.Combine(CoreService.BaseDir, "页面代码", "设计系统.html");
+                            if (!File.Exists(dsPath)) throw new InvalidOperationException("未找到设计系统.html 文件。");
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = dsPath,
+                                UseShellExecute = true
+                            });
+                            ReplyJs(reqId, true, null, null);
+                            break;
+                        }
+
                     default:
                         ReplyJs(reqId, false, null, "不支持的操作。");
                         break;

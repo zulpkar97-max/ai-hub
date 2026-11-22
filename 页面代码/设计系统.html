@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI BASE &amp; LIFE BASE · Design System 终版标本 (v1.2)</title>
+  <title>AI BASE &amp; LIFE BASE · 设计系统 (v1.2)</title>
   <style>
     /* ==========================================================================
        AI BASE / LIFE BASE — UNIFIED DESIGN SYSTEM v1.2 (LIGHT ONLY)
@@ -70,9 +70,10 @@
       --danger-border: var(--p-danger-200);
       --danger-tint: var(--p-danger-50);
 
-      /* Elevation (严格 4 阶硬影) */
+      /* Elevation (严格 4 阶硬影 + 深墨主按钮 1px 纸白切缝双层立体影) */
       --shadow-l1: 2px 2px 0 var(--p-shadow-l1);
       --shadow-l2: 2px 2px 0 var(--ink);
+      --shadow-l2-cut: 1px 1px 0 var(--p-canvas), 2px 2px 0 var(--ink);
       --shadow-l3: 4px 4px 0 var(--ink);
 
       /* Typography (严格整数 6 阶，零半像素) */
@@ -184,6 +185,87 @@
       grid-template-columns: 244px 1fr;
       height: 100vh;
       overflow: hidden;
+    }
+    body.is-embed .shell {
+      grid-template-columns: 1fr;
+    }
+    body.is-embed .toc {
+      display: none;
+    }
+    body.is-embed .stage-inner {
+      max-width: none;
+    }
+    .embed-nav {
+      display: none;
+      align-items: center;
+      gap: 3px;
+      flex-wrap: wrap;
+    }
+    body.is-embed .embed-nav {
+      display: inline-flex;
+    }
+    .embed-page-btn {
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid var(--line-struct);
+      background: var(--surface-paper);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .embed-page-btn:hover:not(.is-active) {
+      border-color: var(--ink);
+      color: var(--ink);
+      background: var(--surface-white);
+    }
+    .embed-page-btn.is-active {
+      border-color: var(--ink);
+      background: var(--ink);
+      color: var(--surface-white);
+    }
+    .copy-code-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    .copy-code-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 5px);
+      width: 246px;
+      background: var(--surface-white);
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--shadow-l2);
+      padding: 4px;
+      z-index: 300;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .copy-code-wrap.is-open .copy-code-menu {
+      display: flex;
+    }
+    .copy-code-opt {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 7px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .copy-code-opt:hover {
+      background: var(--surface-hover);
+      border-color: var(--ink);
+    }
+    .copy-code-opt small {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
     }
 
     .toc {
@@ -532,12 +614,15 @@
       pointer-events: auto;
     }
     .ds-btn-sm { height: 28px; padding: 0 11px; font-size: var(--fs-sm); }
+    .ds-w-act { min-width: 72px; }
+    .ds-w-row { width: 88px; }
+    .ds-w-pair { min-width: 92px; }
 
-    /* 1. 主动作深炭实心 */
+    /* 1. 主动作深炭实心（1px 纸白切缝双层立体影，彻底消除黑底+黑影粘连缺角） */
     .ds-btn-primary {
       background: var(--ink);
       color: var(--surface-white);
-      box-shadow: var(--shadow-l2);
+      box-shadow: var(--shadow-l2-cut);
     }
     .ds-btn-primary:hover:not(:disabled) { background: var(--ink-hover); }
     .ds-btn-primary:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
@@ -555,11 +640,11 @@
     .ds-btn-focus:hover:not(:disabled) { background-color: var(--surface-tone-hover); }
     .ds-btn-focus:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 
-    /* 3. 常规浅纸按钮 */
+    /* 3. 常规浅纸按钮（边框与主墨色对齐，消除并排视觉高低差） */
     .ds-btn-paper {
       background: var(--surface-paper);
-      border-color: var(--line-control);
-      color: var(--text-body);
+      border-color: var(--ink);
+      color: var(--ink);
       box-shadow: var(--shadow-l1);
     }
     .ds-btn-paper:hover:not(:disabled) {
@@ -700,7 +785,8 @@
       background-color: var(--surface-white);
       background-image: var(--crosshair-svg);
       background-size: 24px 24px;
-      border: 2px solid var(--ok-fill);
+      border: 2px solid var(--ink);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.88);
       cursor: crosshair;
       z-index: 3;
     }
@@ -1220,8 +1306,8 @@
       height: 1px;
     }
     .ds-toggle-track {
-      width: 34px;
-      height: 18px;
+      width: 36px;
+      height: 20px;
       border: 1.5px solid var(--ink);
       background: var(--surface-paper);
       position: relative;
@@ -1230,14 +1316,16 @@
     .ds-toggle-thumb {
       position: absolute;
       top: 2px; left: 2px;
-      width: 11px; height: 11px;
+      width: 13px; height: 13px;
       background: var(--ink);
+      border: 1px solid var(--ink);
       transition: transform var(--t-fast) ease, background-color var(--t-fast) ease;
     }
-    .ds-toggle input:checked + .ds-toggle-track { background: var(--ink); }
+    .ds-toggle input:checked + .ds-toggle-track { background: var(--ok-fill); }
     .ds-toggle input:checked + .ds-toggle-track .ds-toggle-thumb {
       transform: translateX(16px);
-      background: var(--ok-fill);
+      background: var(--surface-white);
+      border-color: var(--ink);
     }
     /* v1.2 无障碍修复：键盘 Tab 聚焦隐藏 input 时在轨道外亮起 2px 锐利焦点框 */
     .ds-toggle:has(input:focus-visible) .ds-toggle-track {
@@ -1291,9 +1379,10 @@
     }
     .toast-item {
       position: relative;
-      background: var(--ink);
-      color: var(--surface-white);
+      background: var(--surface-white);
+      color: var(--ink);
       border: 1.5px solid var(--ink);
+      border-left: 4px solid var(--ok-fill);
       box-shadow: var(--shadow-l2);
       padding: 10px 12px 13px;
       display: flex;
@@ -1301,11 +1390,17 @@
       justify-content: space-between;
       gap: 10px;
       font-size: var(--fs-sm);
+      font-weight: 600;
       overflow: hidden;
     }
+    .toast-item.is-warn {
+      border-left-color: var(--warn-fill);
+    }
     .toast-item.is-danger {
-      background: var(--danger);
+      background: var(--danger-tint);
       border-color: var(--ink);
+      border-left: 4px solid var(--danger);
+      color: var(--danger-hover);
     }
     .toast-left {
       display: flex;
@@ -1314,27 +1409,30 @@
       min-width: 0;
     }
     .toast-undo {
-      border: 1px solid rgba(255,255,255,0.6);
-      background: transparent;
-      color: #FFF;
+      border: 1px solid var(--ink);
+      background: var(--surface-paper);
+      color: var(--ink);
       font-size: var(--fs-xs);
       font-weight: 700;
       padding: 2px 8px;
       flex-shrink: 0;
     }
-    .toast-undo:hover { background: #FFF; color: var(--ink); border-color: #FFF; }
+    .toast-undo:hover { background: var(--ink); color: #FFF; border-color: var(--ink); }
     .toast-progress {
       position: absolute;
       left: 0; right: 0; bottom: 0;
       height: 3px;
-      background: rgba(255,255,255,0.22);
+      background: var(--line-subtle);
     }
     .toast-progress-bar {
       height: 100%;
       width: 100%;
-      background: #FFFFFF;
+      background: var(--ink);
       transform-origin: left center;
       animation: toastShrink var(--toast-ms, 4000ms) linear forwards;
+    }
+    .toast-item.is-danger .toast-progress-bar {
+      background: var(--danger);
     }
     .toast-item:hover .toast-progress-bar {
       animation-play-state: paused;
@@ -2305,7 +2403,7 @@
       <!-- 定妆三格铭牌实装 -->
       <div class="np-v12">
         <div class="np-v12-icon cell-tone">
-          <div class="icon-tile tile-bare core-emerald" data-sync-ai style="width:38px;height:38px;">
+          <div class="icon-tile tile-bare core-amber" data-sync-ai style="width:38px;height:38px;">
             <svg viewBox="0 0 100 100"><use href="#ico-ai-std" /></svg>
           </div>
         </div>
@@ -2316,10 +2414,10 @@
           </div>
           <div class="np-v12-sub">尽在其中</div>
         </div>
-        <button type="button" class="np-v12-spine tone-strong" id="sidebar-spine-btn" title="切换日志竖签激活态">标本</button>
+        <button type="button" class="np-v12-spine tone-strong" id="sidebar-spine-btn" title="切换日志竖签激活态">设计</button>
       </div>
 
-      <nav class="toc-nav" id="toc-nav" aria-label="标本目录">
+      <nav class="toc-nav" id="toc-nav" aria-label="设计系统目录">
         <button type="button" class="toc-btn is-active" data-page="01"><span>01 · 品牌图标与铭牌</span></button>
         <button type="button" class="toc-btn" data-page="02"><span>02 · 色板、画布与字阶</span></button>
         <button type="button" class="toc-btn" data-page="03"><span>03 · 16px 折角图标与物理</span></button>
@@ -2333,10 +2431,10 @@
       </nav>
 
       <div class="toc-foot">
-        <strong>v1.2 终版设计信条</strong><br />
+        <strong>v1.2 终版设计系统</strong><br />
         严格 0px 锐利直角 · 无暗夜模式<br />
         渐隐建筑十字 · 松烟暖墨三色<br />
-        先定死标本，再按图施工
+        支持分页/分端一键复制独立代码
       </div>
     </aside>
 
@@ -2348,6 +2446,18 @@
         <div class="topbar-left">
           <span class="topbar-num" id="tb-num">01</span>
           <span class="topbar-title" id="tb-title">品牌图标与三格铭牌定妆</span>
+          <div class="embed-nav" id="embed-nav" aria-label="分页切换">
+            <button type="button" class="embed-page-btn is-active" data-page="01">01 品牌</button>
+            <button type="button" class="embed-page-btn" data-page="02">02 色板</button>
+            <button type="button" class="embed-page-btn" data-page="03">03 图标</button>
+            <button type="button" class="embed-page-btn" data-page="04">04 按钮</button>
+            <button type="button" class="embed-page-btn" data-page="05">05 控件</button>
+            <button type="button" class="embed-page-btn" data-page="06">06 浮层</button>
+            <button type="button" class="embed-page-btn" data-page="07">07 AI BASE</button>
+            <button type="button" class="embed-page-btn" data-page="08">08 LIFE BASE</button>
+            <button type="button" class="embed-page-btn" data-page="09">09 通则</button>
+            <button type="button" class="embed-page-btn" data-page="10">10 截图</button>
+          </div>
           <span class="topbar-sub" id="tb-sub">暖白图纸卡饱满占比 · 拆前墙通透步梯 · AI BASE / LIFE BASE</span>
         </div>
         <div class="topbar-right">
@@ -2358,6 +2468,18 @@
           <div class="ds-seg" id="density-seg" title="预览双端空间密度">
             <button type="button" class="ds-seg-btn is-active" data-density="compact">紧凑 · AI</button>
             <button type="button" class="ds-seg-btn" data-density="cozy">舒展 · LIFE</button>
+          </div>
+          <div class="copy-code-wrap" id="copy-code-wrap">
+            <button type="button" class="ds-btn ds-btn-sm ds-btn-primary" id="copy-code-trigger" aria-expanded="false">
+              <span>复制代码</span>
+              <svg class="svg16" style="width:13px;height:13px;"><use href="#g-chev"/></svg>
+            </button>
+            <div class="copy-code-menu" id="copy-code-menu" role="menu">
+              <button type="button" class="copy-code-opt" data-copy-mode="current"><span>复制当前分页独立 HTML</span><small id="copy-cur-label">Page 01</small></button>
+              <button type="button" class="copy-code-opt" data-copy-mode="aibase"><span>复制 AI BASE 专属 HTML</span><small>01-07,10</small></button>
+              <button type="button" class="copy-code-opt" data-copy-mode="lifebase"><span>复制 LIFE BASE 专属 HTML</span><small>01-06,08</small></button>
+              <button type="button" class="copy-code-opt" data-copy-mode="all"><span>复制全量 10 页完整 HTML</span><small>01-10</small></button>
+            </div>
           </div>
           <span class="mono" style="font-size:11px;color:var(--text-muted);" id="tb-counter">1 / 10</span>
         </div>
@@ -2377,10 +2499,10 @@
                     <button type="button" class="ds-seg-btn" data-wall="dark">Win11 深任务栏</button>
                     <button type="button" class="ds-seg-btn" data-wall="light">Win11 浅任务栏</button>
                   </div>
-                  <div class="ds-seg" id="ai-core-seg" title="切换 AI BASE 核心色（含朱砂红品牌点睛）">
+                  <div class="ds-seg" id="ai-core-seg" title="切换 AI BASE 核心色（已拍板统一琥珀暖）">
+                    <button type="button" class="ds-seg-btn is-active" data-core="core-amber">AI 琥珀暖</button>
                     <button type="button" class="ds-seg-btn" data-core="core-vermilion">AI 朱砂红</button>
-                    <button type="button" class="ds-seg-btn is-active" data-core="core-emerald">AI 翡翠绿</button>
-                    <button type="button" class="ds-seg-btn" data-core="core-amber">AI 琥珀</button>
+                    <button type="button" class="ds-seg-btn" data-core="core-emerald">AI 翡翠绿</button>
                     <button type="button" class="ds-seg-btn" data-core="core-ink">AI 墨黑</button>
                     <button type="button" class="ds-seg-btn" data-core="core-idle">待机灰</button>
                   </div>
@@ -2397,12 +2519,12 @@
                   <div style="display:flex;align-items:center;gap:26px;flex-wrap:wrap;">
                     <!-- AI BASE -->
                     <div style="display:flex;align-items:center;gap:14px;">
-                      <div class="icon-tile tile-paper core-emerald" id="hero-ai-tile" style="width:84px;height:84px;">
+                      <div class="icon-tile tile-paper core-amber" id="hero-ai-tile" style="width:84px;height:84px;">
                         <svg viewBox="0 0 100 100"><use href="#ico-ai-std" /></svg>
                       </div>
                       <div style="display:flex;flex-direction:column;gap:4px;">
                         <strong style="font-size:16px;">AI BASE</strong>
-                        <span style="font-size:12px;opacity:0.8;">三臂互锁 + 翡翠绿核 · 尽在其中</span>
+                        <span style="font-size:12px;opacity:0.8;">三臂互锁 + 琥珀暖核 · 尽在其中</span>
                         <div style="display:flex;gap:6px;margin-top:2px;">
                           <button type="button" class="ds-btn ds-btn-sm ds-btn-paper" data-dl="ai-std">下载标准 SVG</button>
                           <button type="button" class="ds-btn ds-btn-sm ds-btn-flat" data-dl="ai-micro">16px 微缩版</button>
@@ -2608,24 +2730,29 @@
           </section>
 
           <!-- ==================== 04 · 按钮家族与防误触 ==================== -->
-          <section class="page-view" data-view="04" data-title="标准按钮家族、中危 3 秒武装与 0px 加载态" data-sub="统一高度 sm=28px / md=32px · 点击中危按钮实测 3s 武装倒计时与右下角撤销条">
+          <section class="page-view" data-view="04" data-title="标准按钮家族、四档等宽规范与非开即关单按钮" data-sub="锁死 sm=28px / md=32px 盒模型 · 1px 纸白切缝主按钮硬影 · 非开即关 [▶ 启动] ↔ [⏻ 关闭]">
             <div class="panel">
               <div class="panel-head">
-                <h2><span class="head-bar"></span>1. 全站 7 类标准按钮（鼠标可逐个实测悬停与按压）</h2>
-                <span class="mono" style="font-size:11px;color:var(--text-muted);">sm: 28px · md: 32px</span>
+                <h2><span class="head-bar"></span>1. 全站标准按钮家族 &amp; 四档场景等宽规范（锁死高度零偏差）</h2>
+                <span class="mono" style="font-size:11px;color:var(--text-muted);">sm: 28px · md: 32px · 72 / 88 / 92px 等宽</span>
               </div>
               <div class="panel-body">
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                  <button type="button" class="ds-btn ds-btn-primary"><svg class="svg16"><use href="#g-play"/></svg>启动服务</button>
-                  <button type="button" class="ds-btn ds-btn-focus"><span class="dot dot-ok"></span>打开 Antigravity</button>
-                  <button type="button" class="ds-btn ds-btn-paper"><svg class="svg16"><use href="#g-refresh"/></svg>刷新额度</button>
-                  <button type="button" class="ds-btn ds-btn-flat ds-btn-sm"><svg class="svg16"><use href="#g-crop"/></svg>截图</button>
-                  <button type="button" class="ds-btn ds-btn-danger"><svg class="svg16"><use href="#g-power"/></svg>一键全部退出</button>
-                  <button type="button" class="ds-btn ds-btn-paper" disabled>刷新中...</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-act"><svg class="svg16"><use href="#g-refresh"/></svg>刷新</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-primary ds-w-act"><svg class="svg16"><use href="#g-play"/></svg>启动</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-focus ds-w-act"><svg class="svg16"><use href="#g-power"/></svg>关闭</button>
                   <div class="v-sep"></div>
-                  <button type="button" class="icon-btn" data-tip="常规无框图标"><svg class="svg16"><use href="#g-refresh"/></svg></button>
-                  <button type="button" class="icon-btn is-danger" data-tip="关闭 / 退出（悬停朱砂红）"><svg class="svg16"><use href="#g-close"/></svg></button>
-                  <button type="button" class="icon-btn is-danger" data-tip="停止实例"><svg class="svg16"><use href="#g-power"/></svg></button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-pair"><svg class="svg16"><use href="#g-refresh"/></svg>刷新额度</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-primary ds-w-pair">+ 添加账号</button>
+                  <div class="v-sep"></div>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-row">展开明细 ⌄</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-row">收起明细 ⌄</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-row">卸载软件</button>
+                  <div class="v-sep"></div>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-danger"><svg class="svg16"><use href="#g-power"/></svg>一键全部退出</button>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);">
+                  <strong>三大铁律：</strong>① <code>.ds-btn-primary</code> 采用 <code>1px 纸白切缝 + 2px 墨影</code> 双层立体影，彻底消除黑底配黑影的粘连锯齿；② <code>.ds-btn-sm</code> 严格锁死 <code>height: 28px; padding: 0 10px; box-sizing: border-box</code>，并排按钮上下基线 100% 齐平；③ 应用运行态统一为单一等宽按钮 <code>[▶ 启动] ↔ [⏻ 关闭]</code>，绝不同时展示「打开 + 关闭」。
                 </div>
               </div>
             </div>
@@ -2837,10 +2964,8 @@
                   <span class="ds-tag">Google AI Pro</span>
                 </h2>
                 <div style="display:flex;align-items:center;gap:8px;">
-                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper"><svg class="svg16"><use href="#g-refresh"/></svg>刷新</button>
-                  <button type="button" class="ds-btn ds-btn-sm ds-btn-focus"><span class="dot dot-ok"></span>打开</button>
-                  <div class="v-sep"></div>
-                  <button type="button" class="icon-btn is-danger" data-tip="关闭 Antigravity 实例（已设 1px 隔离线防误触）"><svg class="svg16"><use href="#g-power"/></svg></button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-act"><svg class="svg16"><use href="#g-refresh"/></svg>刷新</button>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-focus ds-w-act"><svg class="svg16"><use href="#g-power"/></svg>关闭</button>
                 </div>
               </div>
               <div class="panel-body">
@@ -3084,15 +3209,15 @@
           </section>
 
           <!-- ==================== 10 · 截图与 OCR 浮层 0px 定妆 ==================== -->
-          <section class="page-view" data-view="10" data-title="截图工具栏、放大镜与 OCR 窗 0px 视觉定妆" data-sub="零圆角、零模糊 DropShadowEffect · 点击取景框内可实测 [01][02][03] 0px 方形序号印章">
+          <section class="page-view" data-view="10" data-title="截图工具栏、放大镜与 OCR 窗 0px 视觉定妆" data-sub="暖墨取景框 · 3 色精简 + 默认 1.5px 细线 · [01] 双击附加说明文字 · 单击任意标注可拖动或按 Delete 单独删除">
             <div class="panel">
               <div class="panel-head">
-                <h2><span class="head-bar"></span>1. 截图浮层实景定妆（点击取景框内可连续打 0px 序号方章，色块切换零横跳）</h2>
-                <button type="button" class="ds-btn ds-btn-sm ds-btn-flat" id="shot-reset-stamps">重置序号方章</button>
+                <h2><span class="head-bar"></span>1. 截图浮层定妆（暖墨取景框 · 3 色 + 默认 1.5px 细线 · 序号文字合并 · 单击选中可删）</h2>
+                <button type="button" class="ds-btn ds-btn-sm ds-btn-flat" id="shot-reset-stamps">重置标注演示</button>
               </div>
               <div class="panel-body">
                 <div class="shot-viewport">
-                  <div class="shot-hint-bar mono">拖动取景 · 单击识窗 · Alt 放大镜 · C 取色 · Shift 正交锁定 · 右键返回</div>
+                  <div class="shot-hint-bar mono">拖动取景 · 单击识窗 · Alt 放大镜 · C 取色 · 单击标注按 Delete 删除</div>
 
                   <!-- 取景选区框 + 8 方钉 + 实时 W×H 标牌 + 序号方章 -->
                   <div class="shot-sel" id="shot-sel">
@@ -3108,45 +3233,44 @@
                     <span class="shot-handle" style="right:-5px;bottom:-5px;"></span>
 
                     <div id="shot-stamps-layer">
-                      <div class="shot-stamp" style="left:92px;top:52px;">01</div>
-                      <div class="shot-stamp" style="left:238px;top:86px;">02</div>
-                      <div class="shot-stamp" style="left:368px;top:58px;">03</div>
+                      <div class="shot-stamp" style="left:76px;top:50px;">01</div>
+                      <div style="position:absolute;left:94px;top:39px;background:rgba(255,255,255,0.92);border:1.5px solid #1A1917;padding:1px 7px;font-size:12px;font-weight:700;color:#C24840;box-shadow:2px 2px 0 #1A1917;">双击序号直接写文字</div>
+                      <div class="shot-stamp" style="left:258px;top:92px;">02</div>
+                      <div style="position:absolute;left:316px;top:44px;width:118px;height:52px;border:1.5px solid #C24840;outline:1px dashed #1A1917;outline-offset:2px;">
+                        <span style="position:absolute;right:4px;bottom:2px;font-size:10px;color:#1A1917;background:rgba(255,255,255,0.85);padding:0 3px;">已选中 · 按 Del 删</span>
+                      </div>
                     </div>
-                    <div style="position:absolute;right:10px;bottom:8px;font-size:11px;color:var(--text-muted);pointer-events:none;">点击框内空白处可盖下一个序号方章</div>
+                    <div style="position:absolute;right:10px;bottom:8px;font-size:11px;color:var(--text-muted);pointer-events:none;">点击框内盖章 · 单击已有图元可单独删除</div>
                   </div>
 
-                  <!-- 0px 实体硬影主工具栏 -->
+                  <!-- 0px 实体硬影主工具栏（已砍掉撤销/重做/路径，合并序号与文字） -->
                   <div class="shot-toolbar" id="shot-toolbar">
-                    <button type="button" class="shot-tool-btn" data-stool>□ 矩形</button>
-                    <button type="button" class="shot-tool-btn" data-stool>↗ 箭头</button>
-                    <button type="button" class="shot-tool-btn" data-stool>✎ 画笔</button>
-                    <button type="button" class="shot-tool-btn" data-stool>▦ 马赛克</button>
-                    <button type="button" class="shot-tool-btn" data-stool>T 文字</button>
-                    <button type="button" class="shot-tool-btn is-active" data-stool># 序号章</button>
+                    <button type="button" class="shot-tool-btn is-active" data-stool title="矩形框 (1 / R)">□</button>
+                    <button type="button" class="shot-tool-btn" data-stool title="箭头 (2 / A)">↗</button>
+                    <button type="button" class="shot-tool-btn" data-stool title="画笔 (3 / P)">✎</button>
+                    <button type="button" class="shot-tool-btn" data-stool title="马赛克 (4 / M)">▦</button>
+                    <button type="button" class="shot-tool-btn" data-stool title="标签与文字 (5 / T · 单击盖序号/双击写字)">1/T</button>
                     <div class="v-sep" style="height:16px;"></div>
-                    <button type="button" class="shot-tool-btn" data-tip="贴图原地钉在桌面 (Ctrl+T)">钉住</button>
                     <button type="button" class="shot-tool-btn" data-tip="离线文字识别 (OCR)">提字</button>
-                    <button type="button" class="shot-tool-btn" data-tip="存临时 PNG 并复制路径，直贴 Codex/终端 (Alt+C)">路径</button>
+                    <button type="button" class="shot-tool-btn" data-tip="原地钉在桌面置顶贴图 (Ctrl+T)">贴图</button>
+                    <button type="button" class="shot-tool-btn" data-tip="保存为 PNG 文件 (Ctrl+S)">保存</button>
                     <div class="v-sep" style="height:16px;"></div>
-                    <button type="button" class="shot-tool-btn is-cancel" data-tip="取消截图 (Esc)"><svg class="svg16"><use href="#g-close"/></svg></button>
+                    <button type="button" class="shot-tool-btn is-cancel" data-tip="取消截图 (Esc)"><svg class="svg16"><use href="#g-close"/></svg>取消</button>
                     <button type="button" class="shot-tool-btn is-copy"><svg class="svg16"><use href="#g-check"/></svg>复制</button>
                   </div>
 
-                  <!-- 二级属性条：固定 18×18 方块防横跳 -->
+                  <!-- 二级属性条：默认选中最细 1.5px + 精简 3 色（红 / 黄 / 蓝） -->
                   <div class="shot-subbar">
                     <div style="display:flex;align-items:center;gap:3px;" id="shot-widths">
-                      <button type="button" class="shot-w-btn" data-sw><span style="width:4px;height:4px;background:var(--ink);"></span></button>
-                      <button type="button" class="shot-w-btn is-active" data-sw><span style="width:7px;height:7px;background:var(--ink);"></span></button>
-                      <button type="button" class="shot-w-btn" data-sw><span style="width:10px;height:10px;background:var(--ink);"></span></button>
+                      <button type="button" class="shot-w-btn is-active" data-sw title="细线 1.5px（默认）"><span style="width:3px;height:3px;background:var(--ink);"></span></button>
+                      <button type="button" class="shot-w-btn" data-sw title="中线 2.5px"><span style="width:6px;height:6px;background:var(--ink);"></span></button>
+                      <button type="button" class="shot-w-btn" data-sw title="粗线 4.5px"><span style="width:9px;height:9px;background:var(--ink);"></span></button>
                     </div>
                     <div class="v-sep" style="height:16px;"></div>
                     <div style="display:flex;align-items:center;gap:4px;" id="shot-colors">
-                      <button type="button" class="shot-sw is-active" data-sc="#C24840"><span style="background:#C24840;"></span></button>
-                      <button type="button" class="shot-sw" data-sc="#1A1917"><span style="background:#1A1917;"></span></button>
-                      <button type="button" class="shot-sw" data-sc="#14A06D"><span style="background:#14A06D;"></span></button>
-                      <button type="button" class="shot-sw" data-sc="#E38D17"><span style="background:#E38D17;"></span></button>
-                      <button type="button" class="shot-sw" data-sc="#2563EB"><span style="background:#2563EB;"></span></button>
-                      <button type="button" class="shot-sw" data-sc="#FFFFFF"><span style="background:#FFFFFF;border:1px solid #D2CFC7;"></span></button>
+                      <button type="button" class="shot-sw is-active" data-sc="#C24840" title="朱砂红（默认）"><span style="background:#C24840;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#E38D17" title="琥珀黄"><span style="background:#E38D17;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#2563EB" title="工程蓝"><span style="background:#2563EB;"></span></button>
                     </div>
                   </div>
                 </div>
@@ -3243,7 +3367,11 @@
   <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
 
   <script>
-    /* ==================== 1. 分页导航 (01~09) ==================== */
+    if (location.search.includes("embed=1")) {
+      document.body.classList.add("is-embed");
+    }
+
+    /* ==================== 1. 分页导航 (01~10) ==================== */
     const pages = ["01","02","03","04","05","06","07","08","09","10"];
     let curPage = "01";
     const stageEl = document.getElementById("stage");
@@ -3252,7 +3380,7 @@
       if (!pages.includes(id)) id = "01";
       curPage = id;
       const idx = pages.indexOf(id);
-      document.querySelectorAll(".toc-btn").forEach(b => b.classList.toggle("is-active", b.dataset.page === id));
+      document.querySelectorAll(".toc-btn, .embed-page-btn").forEach(b => b.classList.toggle("is-active", b.dataset.page === id));
       let active = null;
       document.querySelectorAll(".page-view").forEach(v => {
         const hit = v.dataset.view === id;
@@ -3264,6 +3392,8 @@
         document.getElementById("tb-title").textContent = active.dataset.title;
         document.getElementById("tb-sub").textContent = active.dataset.sub;
       }
+      const curLbl = document.getElementById("copy-cur-label");
+      if (curLbl) curLbl.textContent = "Page " + id;
       document.getElementById("tb-counter").textContent = `${idx + 1} / ${pages.length}`;
       document.getElementById("pager-hint").textContent = `第 ${id} / ${String(pages.length).padStart(2, "0")} 页 · 键盘 ← / → 快速切换`;
       document.getElementById("prev-page").disabled = idx === 0;
@@ -3273,6 +3403,10 @@
 
     document.getElementById("toc-nav").addEventListener("click", e => {
       const b = e.target.closest(".toc-btn");
+      if (b) goPage(b.dataset.page);
+    });
+    document.getElementById("embed-nav")?.addEventListener("click", e => {
+      const b = e.target.closest(".embed-page-btn");
       if (b) goPage(b.dataset.page);
     });
     document.getElementById("prev-page").addEventListener("click", () => {
@@ -3309,18 +3443,18 @@
       showToast(b.dataset.density === "compact" ? "已切换为紧凑密度（AI BASE）" : "已切换为舒展密度（LIFE BASE）");
     });
 
-    /* ==================== 3. 融合 Toast（底部进度条 + 悬停冻结 + Undo） ==================== */
+    /* ==================== 3. 亮色暖纸融合 Toast（底部进度条 + 悬停冻结 + Undo） ==================== */
     const toastStack = document.getElementById("toast-stack");
     function showToast(msg, opts = {}) {
       const ms = opts.ms || 4200;
       while (toastStack.children.length >= 3) toastStack.firstElementChild.remove();
       const el = document.createElement("div");
-      el.className = "toast-item" + (opts.type === "danger" ? " is-danger" : "");
+      el.className = "toast-item" + (opts.type === "danger" ? " is-danger" : (opts.type === "warn" ? " is-warn" : ""));
       el.style.setProperty("--toast-ms", ms + "ms");
-      const dotCls = opts.type === "danger" ? "dot-idle" : (opts.type === "warn" ? "dot-warn" : "dot-ok");
+      const dotCls = opts.type === "danger" ? "dot-danger" : (opts.type === "warn" ? "dot-warn" : "dot-ok");
       el.innerHTML = `
         <div class="toast-left">
-          <span class="dot ${dotCls}" style="${opts.type === "danger" ? "background:#FFF;" : ""}"></span>
+          <span class="dot ${dotCls}"></span>
           <span>${msg}</span>
         </div>
         ${opts.undo ? `<button type="button" class="toast-undo">撤销</button>` : ""}
@@ -3337,10 +3471,14 @@
       toastStack.appendChild(el);
     }
 
-    /* ==================== 4. Page 01: 品牌图标实测（含朱砂红点睛）& 独立 SVG 导出 ==================== */
-    let curAiCore = "core-emerald";
+    /* ==================== 4. Page 01: 品牌图标实测（统一琥珀暖核）& 独立 SVG 导出 ==================== */
+    let curAiCore = "core-amber";
     let curLifeCore = "core-amber";
     const allCores = ["core-emerald","core-amber","core-vermilion","core-ink","core-idle"];
+    document.querySelectorAll("#hero-ai-tile, [data-sync-ai]").forEach(el => {
+      el.classList.remove(...allCores);
+      el.classList.add(curAiCore);
+    });
     const corePalettes = {
       "core-emerald":   { top: "#17B27A", left: "#129163", right: "#0C704B" },
       "core-amber":     { top: "#F09C24", left: "#D4810F", right: "#AD6507" },
@@ -3741,6 +3879,136 @@
       document.getElementById("ocr-demo-text").textContent = ocrMerged
         ? "AI BASE 统一采用 0px 锐利直角，松烟暖墨主黑与 45° 斜向像素网点，打造高效静默的本地工作台。"
         : "AI BASE 统一采用 0px 锐利直角，\n松烟暖墨主黑与 45° 斜向像素网点，\n打造高效静默的本地工作台。";
+    });
+
+    /* ==================== 11. 一键复制独立可运行 HTML 源码（供外部审核） ==================== */
+    function buildDesignSystemExportHtml(mode) {
+      if (mode === "all") {
+        return "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+      }
+      const keepPages = mode === "current"
+        ? [curPage]
+        : (mode === "aibase" ? ["01","02","03","04","05","06","07","10"] : ["01","02","03","04","05","06","08"]);
+      const titleLabel = mode === "current"
+        ? `设计系统 · Page ${curPage} (${document.getElementById("tb-title")?.textContent || ""})`
+        : (mode === "aibase" ? "AI BASE 专属设计系统 (v1.2)" : "LIFE BASE 专属设计系统 (v1.2)");
+
+      const styleText = document.querySelector("head style")?.innerHTML || "";
+      const svgDefs = document.querySelector("body > svg")?.outerHTML || "";
+      const sectionsHtml = keepPages.map((pid, idx) => {
+        const sec = document.querySelector(`.page-view[data-view="${pid}"]`);
+        if (!sec) return "";
+        const clone = sec.cloneNode(true);
+        clone.classList.toggle("is-active", idx === 0);
+        return clone.outerHTML;
+      }).filter(Boolean).join("\n\n");
+
+      const navBtns = keepPages.map((pid, idx) => {
+        const sec = document.querySelector(`.page-view[data-view="${pid}"]`);
+        const t = (sec?.dataset.title || "").split("：")[0].slice(0, 12);
+        return `<button type="button" class="toc-btn${idx === 0 ? " is-active" : ""}" data-page="${pid}"><span>${pid} · ${t}</span></button>`;
+      }).join("\n");
+
+      return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${titleLabel}</title>
+  <style>${styleText}</style>
+</head>
+<body>
+  ${svgDefs}
+  <div class="shell" style="${keepPages.length === 1 ? "grid-template-columns:1fr;" : ""}">
+    ${keepPages.length > 1 ? `<aside class="toc"><nav class="toc-nav" id="toc-nav">${navBtns}</nav></aside>` : ""}
+    <div class="main-col">
+      <div class="canvas-bg-layer" aria-hidden="true"></div>
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="topbar-num" id="tb-num">${keepPages[0]}</span>
+          <span class="topbar-title" id="tb-title">${titleLabel}</span>
+        </div>
+      </header>
+      <main class="stage" id="stage"><div class="stage-inner">${sectionsHtml}</div></main>
+    </div>
+  </div>
+  <script>
+    document.getElementById("toc-nav")?.addEventListener("click", e => {
+      const b = e.target.closest(".toc-btn");
+      if (!b) return;
+      const id = b.dataset.page;
+      document.querySelectorAll(".toc-btn").forEach(x => x.classList.toggle("is-active", x === b));
+      document.querySelectorAll(".page-view").forEach(v => {
+        const hit = v.dataset.view === id;
+        v.classList.toggle("is-active", hit);
+        if (hit) {
+          document.getElementById("tb-num").textContent = id;
+          document.getElementById("tb-title").textContent = v.dataset.title || "";
+        }
+      });
+    });
+  <\/script>
+</body>
+</html>`;
+    }
+
+    async function copyDesignSystemHtml(mode) {
+      const html = buildDesignSystemExportHtml(mode);
+      const labelMap = {
+        current: `当前分页 (Page ${curPage}) 独立 HTML`,
+        aibase: "AI BASE 专属设计系统 HTML",
+        lifebase: "LIFE BASE 专属设计系统 HTML",
+        all: "设计系统全量 10 页 HTML"
+      };
+      const label = labelMap[mode] || "设计系统 HTML";
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "ds-copy-html", html, label }, "*");
+        showToast(`已复制「${label}」（${Math.round(html.length / 1024)} KB）`);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(html);
+        showToast(`已复制「${label}」（${Math.round(html.length / 1024)} KB）`);
+      } catch (_) {
+        const ta = document.createElement("textarea");
+        ta.value = html;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        showToast(`已复制「${label}」（${Math.round(html.length / 1024)} KB）`);
+      }
+    }
+
+    const copyWrap = document.getElementById("copy-code-wrap");
+    const copyTrigger = document.getElementById("copy-code-trigger");
+    const copyMenu = document.getElementById("copy-code-menu");
+    copyTrigger?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = copyWrap.classList.toggle("is-open");
+      copyTrigger.setAttribute("aria-expanded", String(open));
+    });
+    copyMenu?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-copy-mode]");
+      if (!btn) return;
+      copyWrap.classList.remove("is-open");
+      copyTrigger.setAttribute("aria-expanded", "false");
+      copyDesignSystemHtml(btn.dataset.copyMode);
+    });
+    document.addEventListener("click", (e) => {
+      if (copyWrap && !copyWrap.contains(e.target)) {
+        copyWrap.classList.remove("is-open");
+        copyTrigger?.setAttribute("aria-expanded", "false");
+      }
+    });
+    window.addEventListener("message", (ev) => {
+      const msg = ev.data;
+      if (!msg || typeof msg !== "object") return;
+      if (msg.type === "ds-request-copy" && msg.mode) {
+        copyDesignSystemHtml(msg.mode);
+      } else if (msg.type === "ds-go-page" && msg.page) {
+        goPage(msg.page);
+      }
     });
 
     goPage("01");

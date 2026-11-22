@@ -1,6 +1,6 @@
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <AssemblyName>CodexLauncher</AssemblyName>
+    <AssemblyName>AI BASE</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <OutputType>winexe</OutputType>
     <FrameworkRuntimeDir>$(MSBuildToolsPath)</FrameworkRuntimeDir>
@@ -16,7 +16,7 @@
     <WpfAssembly Include="WindowsBase;PresentationCore;PresentationFramework" />
     <WindowsContract Include="Windows.Foundation;Windows.Globalization;Windows.Graphics;Windows.Media;Windows.Storage" />
     <WebViewAssembly Include="Microsoft.Web.WebView2.Core;Microsoft.Web.WebView2.Wpf" />
-    <EmbeddedUi Include="页面代码\index.html;页面代码\界面样式.css;页面代码\工作台交互.js;页面代码\gemini.png;页面代码\ai-studio.png">
+    <EmbeddedUi Include="页面代码\index.html;页面代码\设计系统.html;页面代码\界面样式.css;页面代码\工作台交互.js;页面代码\gemini.png;页面代码\ai-studio.png">
       <LogicalName>AIHub.Ui.%(Filename)%(Extension)</LogicalName>
     </EmbeddedUi>
   </ItemGroup>

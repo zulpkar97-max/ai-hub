@@ -51,8 +51,24 @@ namespace CodexLauncher
 
         private static readonly HashSet<string> ValidProjects = new HashSet<string>(StringComparer.Ordinal)
         {
-            "AI Hub", "Life Hub", "通用"
+            "AI BASE", "LIFE BASE", "AI Hub", "Life Hub", "通用"
         };
+
+        private static string NormalizeProjectName(string project)
+        {
+            string trimmed = (project ?? "").Trim();
+            if (string.Equals(trimmed, "AI Hub", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "AI BASE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "ai-hub", StringComparison.OrdinalIgnoreCase))
+                return "AI BASE";
+            if (string.Equals(trimmed, "Life Hub", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "LIFE BASE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "留学总盘", StringComparison.OrdinalIgnoreCase))
+                return "LIFE BASE";
+            if (string.Equals(trimmed, "通用", StringComparison.Ordinal))
+                return "通用";
+            return "LIFE BASE";
+        }
 
         private static readonly HashSet<string> ValidStatuses = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -78,7 +94,7 @@ namespace CodexLauncher
             if (cleanTitle.Length == 0)
                 throw new InvalidOperationException("需求标题不能为空。");
 
-            string cleanProject = NormalizeValue(project, ValidProjects, "Life Hub");
+            string cleanProject = NormalizeProjectName(project);
             string cleanStatus = NormalizeValue(status, ValidStatuses, "idea");
             string cleanPriority = NormalizeValue(priority, ValidPriorities, "medium");
             string cleanNotes = (notes ?? "").Replace("\r\n", "\n").Trim();
@@ -167,7 +183,7 @@ namespace CodexLauncher
                 if (target == null) throw new InvalidOperationException("未找到对应的需求条目。");
 
                 if (field == "priority" && ValidPriorities.Contains(value)) target.priority = value;
-                else if (field == "project" && ValidProjects.Contains(value)) target.project = value;
+                else if (field == "project" && ValidProjects.Contains(value ?? "")) target.project = NormalizeProjectName(value);
                 else throw new InvalidOperationException("无效的需求属性。");
 
                 target.updated_at = DateTimeOffset.Now.ToString("o");
@@ -232,7 +248,7 @@ namespace CodexLauncher
                         if (it == null || string.IsNullOrWhiteSpace(it.title)) continue;
                         var clean = Clone(it);
                         if (string.IsNullOrWhiteSpace(clean.id)) clean.id = "bl-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-                        clean.project = NormalizeValue(clean.project, ValidProjects, "Life Hub");
+                        clean.project = NormalizeProjectName(clean.project);
                         clean.status = NormalizeValue(clean.status, ValidStatuses, "idea");
                         clean.priority = NormalizeValue(clean.priority, ValidPriorities, "medium");
                         store.items.Add(clean);
@@ -257,6 +273,10 @@ namespace CodexLauncher
                     throw new InvalidDataException("需求池数据结构无效。");
 
                 store.items = store.items.Where(item => item != null && !string.IsNullOrWhiteSpace(item.title)).ToList();
+                foreach (var item in store.items)
+                {
+                    item.project = NormalizeProjectName(item.project);
+                }
                 return store;
             }
             catch (Exception ex)

@@ -60,6 +60,7 @@ namespace CodexLauncher
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
             { "/index.html", "text/html; charset=utf-8" },
+            { "/设计系统.html", "text/html; charset=utf-8" },
             { "/界面样式.css", "text/css; charset=utf-8" },
             { "/工作台交互.js", "text/javascript; charset=utf-8" },
             { "/gemini.png", "image/png" },
@@ -112,6 +113,7 @@ namespace CodexLauncher
 
             SourceInitialized += OnSourceInitialized;
             StateChanged += OnStateChanged;
+            Activated += (s, e) => { if (_webReady) RefreshAsync(false); };
             Loaded += OnLoaded;
             Closing += OnWindowClosing;
             Closed += OnWindowClosed;
@@ -238,8 +240,8 @@ namespace CodexLauncher
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (IsVisible && IsActive && _webReady) SendToastToJs(msg, isErr);
-                        else ShowDesktopNotification("AI BASE 截图", msg, isErr ? "danger" : "ok", isErr ? 4500 : 1800);
+                        if (IsVisible && WindowState != WindowState.Minimized && _webReady) SendToastToJs(msg, isErr);
+                        else ShowDesktopNotification("AI BASE", msg, isErr ? "danger" : "ok", isErr ? 4500 : 1800);
                     }));
                 });
             };
@@ -305,7 +307,7 @@ namespace CodexLauncher
                 SetupUiHotReload(uiDir);
                 SetupPendingUpdateWatcher();
 
-                _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+                _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _pollTimer.Tick += (s3, e3) => RefreshAsync(false);
                 _pollTimer.Start();
 
@@ -604,7 +606,7 @@ namespace CodexLauncher
                     TryAutoApplyPendingUpdate();
                 };
 
-                _updateWatcher = new FileSystemWatcher(CoreService.BaseDir, "CodexLauncher.next.exe")
+                _updateWatcher = new FileSystemWatcher(CoreService.BaseDir, "AI BASE.next.exe")
                 {
                     NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime,
                     IncludeSubdirectories = false,

@@ -9,7 +9,7 @@ namespace CodexLauncher
     internal static class LocalUpdate
     {
         private const string ReadyEventPrefix = "Local\\AIHubUpdateReady-";
-        private static string PendingPath { get { return Path.Combine(CoreService.BaseDir, "CodexLauncher.next.exe"); } }
+        private static string PendingPath { get { return Path.Combine(CoreService.BaseDir, "AI BASE.next.exe"); } }
         private static string UpdaterPath { get { return Path.Combine(CoreService.BaseDir, "应用更新.ps1"); } }
 
         internal static bool IsPending { get { return File.Exists(PendingPath) && File.Exists(UpdaterPath); } }

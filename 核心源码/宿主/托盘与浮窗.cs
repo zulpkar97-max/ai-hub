@@ -173,7 +173,7 @@ namespace CodexLauncher
             outerWrap.Children.Add(outer);
 
             var rootGrid = new Grid();
-            rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3.5) });
+            rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4.0) });
             rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var stripe = new Border { Background = accent };
@@ -189,7 +189,7 @@ namespace CodexLauncher
                 Background = UiHelpers.SubtleBg,
                 BorderBrush = UiHelpers.Hairline,
                 BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(10, 6, 6, 6)
+                Padding = new Thickness(10, 5, 6, 5)
             };
             var headGrid = new Grid();
             headGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -208,13 +208,14 @@ namespace CodexLauncher
                     VerticalAlignment = VerticalAlignment.Center
                 });
             }
+            string headerTitle = string.IsNullOrWhiteSpace(title) ? "AI BASE" : title.Trim();
             brandRow.Children.Add(new TextBlock
             {
-                Text = "AI BASE",
+                Text = headerTitle,
                 FontFamily = UiHelpers.MainFont,
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
-                Foreground = UiHelpers.TextSecondary,
+                Foreground = UiHelpers.TextPrimary,
                 VerticalAlignment = VerticalAlignment.Center
             });
             brandRow.Children.Add(new Rectangle
@@ -236,29 +237,17 @@ namespace CodexLauncher
             contentStack.Children.Add(headBorder);
 
             // Body
-            var body = new StackPanel { Margin = new Thickness(11, 9, 12, 11) };
+            var body = new StackPanel { Margin = new Thickness(11, 8, 12, 10) };
             body.Children.Add(new TextBlock
             {
-                Text = title ?? "AI BASE",
+                Text = !string.IsNullOrWhiteSpace(message) ? message : headerTitle,
                 FontFamily = UiHelpers.MainFont,
-                FontSize = 13,
+                FontSize = 12.5,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = UiHelpers.TextPrimary,
-                TextWrapping = TextWrapping.Wrap
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 18
             });
-            if (!string.IsNullOrWhiteSpace(message))
-            {
-                body.Children.Add(new TextBlock
-                {
-                    Text = message,
-                    FontFamily = UiHelpers.MainFont,
-                    FontSize = 12,
-                    Foreground = UiHelpers.TextSecondary,
-                    TextWrapping = TextWrapping.Wrap,
-                    LineHeight = 18,
-                    Margin = new Thickness(0, 4, 0, 0)
-                });
-            }
             contentStack.Children.Add(body);
             rootGrid.Children.Add(contentStack);
             outer.Child = rootGrid;

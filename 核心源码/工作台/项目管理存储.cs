@@ -301,10 +301,17 @@ namespace CodexLauncher
             string folderName = Path.GetFileName(NormPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
             if (string.IsNullOrEmpty(folderName)) folderName = path;
 
+            bool isSelf = exists && File.Exists(Path.Combine(path, "AIHub.csproj"));
+            string displayName = string.IsNullOrWhiteSpace(rec.name) ? folderName : rec.name.Trim();
+            if (isSelf || string.Equals(displayName, "AI Hub", StringComparison.OrdinalIgnoreCase) || string.Equals(displayName, "ai-hub", StringComparison.OrdinalIgnoreCase))
+                displayName = "AI BASE";
+            else if (string.Equals(displayName, "留学总盘", StringComparison.OrdinalIgnoreCase) || string.Equals(displayName, "Life Hub", StringComparison.OrdinalIgnoreCase))
+                displayName = "LIFE BASE";
+
             var vm = new ProjectViewModel
             {
                 id = string.IsNullOrEmpty(rec.id) ? StablePathId(NormPath(path)) : rec.id,
-                name = string.IsNullOrWhiteSpace(rec.name) ? folderName : rec.name,
+                name = displayName,
                 folder_name = folderName,
                 path = path,
                 source = source,
@@ -320,7 +327,7 @@ namespace CodexLauncher
                 remote_url = "",
                 has_preview = exists && (preview != null || File.Exists(Path.Combine(path, "启动预览.ps1"))),
                 preview_port = preview == null ? 0 : preview.Port,
-                is_self = exists && File.Exists(Path.Combine(path, "AIHub.csproj")),
+                is_self = isSelf,
                 sort_ts = 0
             };
 
