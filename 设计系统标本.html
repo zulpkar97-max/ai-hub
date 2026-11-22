@@ -418,6 +418,7 @@
     .stage {
       flex: 1;
       overflow-y: auto;
+      scrollbar-gutter: stable;
       padding: 18px 24px 26px;
       position: relative;
       z-index: 1;
@@ -657,21 +658,198 @@
     /* ==========================================================================
        PAGE 01: BRAND ICONS (FIXED FULL-SCALE PAPER CARD) & NAMEPLATE
        ========================================================================== */
-    .core-emerald .core-top { fill: #17B27A; stroke: #17B27A; stroke-width: 0.4; }
-    .core-emerald .core-left { fill: #129163; stroke: #129163; stroke-width: 0.4; }
-    .core-emerald .core-right { fill: #0C704B; stroke: #0C704B; stroke-width: 0.4; }
+    /* CSS 变量可穿透 <use> Shadow DOM，彻底解决 SVG 图标核心色动态切换 */
+    .core-emerald   { --core-top: #17B27A; --core-left: #129163; --core-right: #0C704B; }
+    .core-amber     { --core-top: #F09C24; --core-left: #D4810F; --core-right: #AD6507; }
+    .core-vermilion { --core-top: #D9544A; --core-left: #C24840; --core-right: #992A22; }
+    .core-ink       { --core-top: #423F3B; --core-left: #292724; --core-right: #1A1917; }
+    .core-idle      { --core-top: #BDB9B0; --core-left: #9E9A91; --core-right: #7F7C74; }
 
-    .core-amber .core-top { fill: #F09C24; stroke: #F09C24; stroke-width: 0.4; }
-    .core-amber .core-left { fill: #D4810F; stroke: #D4810F; stroke-width: 0.4; }
-    .core-amber .core-right { fill: #AD6507; stroke: #AD6507; stroke-width: 0.4; }
+    /* ==========================================================================
+       PAGE 10: 0px 截图工具栏、放大镜、序号方章与 OCR 窗定妆样式
+       ========================================================================== */
+    .shot-viewport {
+      position: relative;
+      height: 292px;
+      background:
+        linear-gradient(135deg, rgba(26,25,23,0.48), rgba(26,25,23,0.48)),
+        repeating-linear-gradient(90deg, #E8E5DC 0 48px, #F2F0E8 48px 96px);
+      border: 1px solid var(--ink);
+      overflow: hidden;
+      user-select: none;
+    }
+    .shot-hint-bar {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: #FFF;
+      border: 1px solid rgba(255,255,255,0.28);
+      padding: 3px 10px;
+      font-size: 11px;
+      white-space: nowrap;
+      z-index: 4;
+    }
+    .shot-sel {
+      position: absolute;
+      left: 44px;
+      top: 48px;
+      width: 470px;
+      height: 158px;
+      background-color: var(--surface-white);
+      background-image: var(--crosshair-svg);
+      background-size: 24px 24px;
+      border: 2px solid var(--ok-fill);
+      cursor: crosshair;
+      z-index: 3;
+    }
+    /* 8×8 锐利方钉手柄 */
+    .shot-handle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background: #FFF;
+      border: 1.5px solid var(--ink);
+    }
+    .shot-handle:hover { background: var(--ink); }
+    .shot-size-badge {
+      position: absolute;
+      left: -2px;
+      top: -26px;
+      background: var(--ink);
+      color: #FFF;
+      border: 1px solid rgba(255,255,255,0.45);
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    /* [01] [02] [03] 0px 方形序号印章 */
+    .shot-stamp {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      background: var(--danger);
+      color: #FFF;
+      border: 1.5px solid var(--ink);
+      box-shadow: 2px 2px 0 var(--ink);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    /* 0px 实体硬影浮动工具栏（零模糊 DropShadowEffect） */
+    .shot-toolbar {
+      position: absolute;
+      left: 44px;
+      top: 214px;
+      background: #FFF;
+      border: 1.5px solid var(--ink);
+      box-shadow: 3px 3px 0 var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 3px 4px;
+      z-index: 5;
+    }
+    .shot-tool-btn {
+      height: 26px;
+      min-width: 26px;
+      padding: 0 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-body);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .shot-tool-btn:hover { background: var(--surface-hover); border-color: var(--ink); color: var(--ink); }
+    .shot-tool-btn.is-active {
+      border-color: var(--ink);
+      color: var(--ink);
+      background-color: var(--surface-tone);
+      background-image: var(--tone-strong);
+      background-size: 4px 4px;
+    }
+    .shot-tool-btn.is-cancel:hover { background: var(--danger); border-color: var(--danger); color: #FFF; }
+    .shot-tool-btn.is-copy { background: var(--ink); color: #FFF; border-color: var(--ink); padding: 0 9px; }
+    .shot-tool-btn.is-copy:hover { background: var(--ink-hover); }
 
-    .core-danger .core-top { fill: #D4544C; stroke: #D4544C; stroke-width: 0.4; }
-    .core-danger .core-left { fill: #B73A32; stroke: #B73A32; stroke-width: 0.4; }
-    .core-danger .core-right { fill: #912620; stroke: #912620; stroke-width: 0.4; }
+    /* 二级属性条：固定 18×18 防横跳色块 + 方形线宽块 */
+    .shot-subbar {
+      position: absolute;
+      left: 44px;
+      top: 252px;
+      background: #FFF;
+      border: 1.5px solid var(--ink);
+      box-shadow: 2px 2px 0 var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      z-index: 5;
+    }
+    .shot-sw {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--line-struct);
+      padding: 2px;
+      background: #FFF;
+      display: grid;
+      place-items: center;
+    }
+    .shot-sw span { width: 100%; height: 100%; display: block; }
+    .shot-sw.is-active { border: 2px solid var(--ink); padding: 1px; }
+    .shot-w-btn {
+      width: 22px;
+      height: 22px;
+      border: 1px solid transparent;
+      background: transparent;
+      display: grid;
+      place-items: center;
+    }
+    .shot-w-btn.is-active {
+      border-color: var(--ink);
+      background-color: var(--surface-tone);
+      background-image: var(--tone-strong);
+      background-size: 4px 4px;
+    }
 
-    .core-idle .core-top { fill: #BDB9B0; stroke: #BDB9B0; stroke-width: 0.4; }
-    .core-idle .core-left { fill: #9E9A91; stroke: #9E9A91; stroke-width: 0.4; }
-    .core-idle .core-right { fill: #7F7C74; stroke: #7F7C74; stroke-width: 0.4; }
+    /* 0px 放大镜仪表卡 */
+    .loupe-card {
+      width: 152px;
+      background: var(--ink);
+      color: #FFF;
+      border: 1.5px solid var(--ink);
+      box-shadow: 3px 3px 0 rgba(26,25,23,0.35);
+      display: flex;
+      flex-direction: column;
+    }
+    .loupe-grid {
+      height: 92px;
+      display: grid;
+      grid-template-columns: repeat(11, 1fr);
+      grid-template-rows: repeat(7, 1fr);
+      background: #FAF9F6;
+      border-bottom: 1px solid #3A3834;
+      position: relative;
+    }
+    .loupe-grid span { border: 0.5px solid rgba(26,25,23,0.1); }
+    .loupe-cross {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 14px; height: 14px;
+      transform: translate(-50%, -50%);
+      border: 2px solid var(--danger);
+      pointer-events: none;
+    }
 
     /* 修复原版百分比 padding 缩放 Bug：改用固定内边距=0（SVG 内部已预留精准 7%~8% 安全呼吸边） */
     .icon-tile {
@@ -1539,17 +1717,17 @@
 <line x1="17.09" y1="69.0" x2="17.09" y2="59.5" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="25.32" y1="64.25" x2="25.32" y2="73.75" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="25.32" y1="73.75" x2="17.09" y2="69.0" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
-<polygon points="50.0,40.5 58.23,45.25 50.0,50.0 41.77,45.25" class="core-top" />
+<polygon points="50.0,40.5 58.23,45.25 50.0,50.0 41.77,45.25" style="fill:var(--core-top,#17B27A);stroke:var(--core-top,#17B27A);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="50.0" y1="40.5" x2="58.23" y2="45.25" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="58.23" y1="45.25" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="41.77" y2="45.25" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="41.77" y1="45.25" x2="50.0" y2="40.5" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
-<polygon points="58.23,54.75 50.0,59.5 50.0,50.0 58.23,45.25" class="core-right" />
+<polygon points="58.23,54.75 50.0,59.5 50.0,50.0 58.23,45.25" style="fill:var(--core-right,#0C704B);stroke:var(--core-right,#0C704B);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="58.23" y1="54.75" x2="50.0" y2="59.5" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="50.0" y1="59.5" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="58.23" y2="45.25" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="58.23" y1="45.25" x2="58.23" y2="54.75" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
-<polygon points="41.77,54.75 41.77,45.25 50.0,50.0 50.0,59.5" class="core-left" />
+<polygon points="41.77,54.75 41.77,45.25 50.0,50.0 50.0,59.5" style="fill:var(--core-left,#129163);stroke:var(--core-left,#129163);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="41.77" y1="54.75" x2="41.77" y2="45.25" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="41.77" y1="45.25" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="50.0" y2="59.5" stroke="#1A1917" stroke-width="1.85" stroke-linecap="square" />
@@ -1729,17 +1907,17 @@
 <line x1="50.0" y1="36.5" x2="50.0" y2="23.0" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="50.0" y1="23.0" x2="61.69" y2="29.75" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="61.69" y1="43.25" x2="50.0" y2="36.5" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
-<polygon points="50.0,36.5 61.69,43.25 50.0,50.0 38.31,43.25" class="core-top" />
+<polygon points="50.0,36.5 61.69,43.25 50.0,50.0 38.31,43.25" style="fill:var(--core-top,#17B27A);stroke:var(--core-top,#17B27A);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="50.0" y1="36.5" x2="61.69" y2="43.25" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="61.69" y1="43.25" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="38.31" y2="43.25" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="38.31" y1="43.25" x2="50.0" y2="36.5" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
-<polygon points="61.69,56.75 50.0,63.5 50.0,50.0 61.69,43.25" class="core-right" />
+<polygon points="61.69,56.75 50.0,63.5 50.0,50.0 61.69,43.25" style="fill:var(--core-right,#0C704B);stroke:var(--core-right,#0C704B);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="61.69" y1="56.75" x2="50.0" y2="63.5" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="50.0" y1="63.5" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="61.69" y2="43.25" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="61.69" y1="43.25" x2="61.69" y2="56.75" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
-<polygon points="38.31,56.75 38.31,43.25 50.0,50.0 50.0,63.5" class="core-left" />
+<polygon points="38.31,56.75 38.31,43.25 50.0,50.0 50.0,63.5" style="fill:var(--core-left,#129163);stroke:var(--core-left,#129163);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="38.31" y1="56.75" x2="38.31" y2="43.25" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="38.31" y1="43.25" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="50.0" y2="63.5" stroke="#1A1917" stroke-width="2.9" stroke-linecap="square" />
@@ -1874,17 +2052,17 @@
 <line x1="31.81" y1="81.5" x2="22.72" y2="76.25" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <polygon points="77.28,76.25 68.19,81.5 68.19,71.0 77.28,65.75" fill="#D2CFC7" stroke="#D2CFC7" stroke-width="0.4" stroke-linejoin="miter" />
 <line x1="77.28" y1="76.25" x2="68.19" y2="81.5" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
-<polygon points="50.0,18.5 59.09,23.75 50.0,29.0 40.91,23.75" class="core-top" />
+<polygon points="50.0,18.5 59.09,23.75 50.0,29.0 40.91,23.75" style="fill:var(--core-top,#17B27A);stroke:var(--core-top,#17B27A);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="50.0" y1="18.5" x2="59.09" y2="23.75" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="59.09" y1="23.75" x2="50.0" y2="29.0" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="50.0" y1="29.0" x2="40.91" y2="23.75" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="40.91" y1="23.75" x2="50.0" y2="18.5" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
-<polygon points="59.09,34.25 50.0,39.5 50.0,29.0 59.09,23.75" class="core-right" />
+<polygon points="59.09,34.25 50.0,39.5 50.0,29.0 59.09,23.75" style="fill:var(--core-right,#0C704B);stroke:var(--core-right,#0C704B);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="59.09" y1="34.25" x2="50.0" y2="39.5" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="50.0" y1="39.5" x2="50.0" y2="29.0" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="50.0" y1="29.0" x2="59.09" y2="23.75" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="59.09" y1="23.75" x2="59.09" y2="34.25" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
-<polygon points="40.91,34.25 40.91,23.75 50.0,29.0 50.0,39.5" class="core-left" />
+<polygon points="40.91,34.25 40.91,23.75 50.0,29.0 50.0,39.5" style="fill:var(--core-left,#129163);stroke:var(--core-left,#129163);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="40.91" y1="34.25" x2="40.91" y2="23.75" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="40.91" y1="23.75" x2="50.0" y2="29.0" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
 <line x1="50.0" y1="29.0" x2="50.0" y2="39.5" stroke="#1A1917" stroke-width="1.95" stroke-linecap="square" />
@@ -2026,17 +2204,17 @@
 <polygon points="25.17,78.67 25.17,64.33 37.59,71.5 37.59,85.83" fill="#ECEAE4" stroke="#ECEAE4" stroke-width="0.4" stroke-linejoin="miter" />
 <line x1="25.17" y1="64.33" x2="37.59" y2="71.5" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="37.59" y1="85.83" x2="25.17" y2="78.67" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
-<polygon points="50.0,21.33 62.41,28.5 50.0,35.67 37.59,28.5" class="core-top" />
+<polygon points="50.0,21.33 62.41,28.5 50.0,35.67 37.59,28.5" style="fill:var(--core-top,#17B27A);stroke:var(--core-top,#17B27A);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="50.0" y1="21.33" x2="62.41" y2="28.5" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="62.41" y1="28.5" x2="50.0" y2="35.67" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="50.0" y1="35.67" x2="37.59" y2="28.5" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="37.59" y1="28.5" x2="50.0" y2="21.33" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
-<polygon points="62.41,42.83 50.0,50.0 50.0,35.67 62.41,28.5" class="core-right" />
+<polygon points="62.41,42.83 50.0,50.0 50.0,35.67 62.41,28.5" style="fill:var(--core-right,#0C704B);stroke:var(--core-right,#0C704B);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="62.41" y1="42.83" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="50.0" y1="50.0" x2="50.0" y2="35.67" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="50.0" y1="35.67" x2="62.41" y2="28.5" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="62.41" y1="28.5" x2="62.41" y2="42.83" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
-<polygon points="37.59,42.83 37.59,28.5 50.0,35.67 50.0,50.0" class="core-left" />
+<polygon points="37.59,42.83 37.59,28.5 50.0,35.67 50.0,50.0" style="fill:var(--core-left,#129163);stroke:var(--core-left,#129163);stroke-width:0.4;stroke-linejoin:miter" />
 <line x1="37.59" y1="42.83" x2="37.59" y2="28.5" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="37.59" y1="28.5" x2="50.0" y2="35.67" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
 <line x1="50.0" y1="35.67" x2="50.0" y2="50.0" stroke="#1A1917" stroke-width="3.0" stroke-linecap="square" />
@@ -2127,7 +2305,7 @@
       <!-- 定妆三格铭牌实装 -->
       <div class="np-v12">
         <div class="np-v12-icon cell-tone">
-          <div class="icon-tile tile-bare core-emerald" style="width:38px;height:38px;">
+          <div class="icon-tile tile-bare core-emerald" data-sync-ai style="width:38px;height:38px;">
             <svg viewBox="0 0 100 100"><use href="#ico-ai-std" /></svg>
           </div>
         </div>
@@ -2150,7 +2328,8 @@
         <button type="button" class="toc-btn" data-page="06"><span>06 · 融合 Toast 与浮层锁</span></button>
         <button type="button" class="toc-btn" data-page="07"><span>07 · AI BASE 实战样板</span></button>
         <button type="button" class="toc-btn" data-page="08"><span>08 · LIFE BASE 组件库</span></button>
-        <button type="button" class="toc-btn" data-page="09"><span>09 · v1.2 实机改造排期</span></button>
+        <button type="button" class="toc-btn" data-page="09"><span>09 · 实机三战役与通则</span></button>
+        <button type="button" class="toc-btn" data-page="10"><span>10 · 截图与 OCR 0px 定妆</span></button>
       </nav>
 
       <div class="toc-foot">
@@ -2180,7 +2359,7 @@
             <button type="button" class="ds-seg-btn is-active" data-density="compact">紧凑 · AI</button>
             <button type="button" class="ds-seg-btn" data-density="cozy">舒展 · LIFE</button>
           </div>
-          <span class="mono" style="font-size:11px;color:var(--text-muted);" id="tb-counter">1 / 9</span>
+          <span class="mono" style="font-size:11px;color:var(--text-muted);" id="tb-counter">1 / 10</span>
         </div>
       </header>
 
@@ -2198,11 +2377,18 @@
                     <button type="button" class="ds-seg-btn" data-wall="dark">Win11 深任务栏</button>
                     <button type="button" class="ds-seg-btn" data-wall="light">Win11 浅任务栏</button>
                   </div>
-                  <div class="ds-seg" id="core-state-seg">
-                    <button type="button" class="ds-seg-btn is-active" data-core="core-emerald">AI 正常绿</button>
-                    <button type="button" class="ds-seg-btn" data-core="core-amber">临期黄</button>
-                    <button type="button" class="ds-seg-btn" data-core="core-danger">告急/异常红</button>
+                  <div class="ds-seg" id="ai-core-seg" title="切换 AI BASE 核心色（含朱砂红品牌点睛）">
+                    <button type="button" class="ds-seg-btn" data-core="core-vermilion">AI 朱砂红</button>
+                    <button type="button" class="ds-seg-btn is-active" data-core="core-emerald">AI 翡翠绿</button>
+                    <button type="button" class="ds-seg-btn" data-core="core-amber">AI 琥珀</button>
+                    <button type="button" class="ds-seg-btn" data-core="core-ink">AI 墨黑</button>
                     <button type="button" class="ds-seg-btn" data-core="core-idle">待机灰</button>
+                  </div>
+                  <div class="ds-seg" id="life-core-seg" title="切换 LIFE BASE 核心色">
+                    <button type="button" class="ds-seg-btn is-active" data-core="core-amber">LIFE 琥珀暖</button>
+                    <button type="button" class="ds-seg-btn" data-core="core-vermilion">LIFE 朱砂红</button>
+                    <button type="button" class="ds-seg-btn" data-core="core-emerald">LIFE 翡翠绿</button>
+                    <button type="button" class="ds-seg-btn" data-core="core-ink">LIFE 墨黑</button>
                   </div>
                 </div>
               </div>
@@ -2226,7 +2412,7 @@
 
                     <!-- LIFE BASE (OPEN-FRONT STAIRS) -->
                     <div style="display:flex;align-items:center;gap:14px;">
-                      <div class="icon-tile tile-paper core-amber" style="width:84px;height:84px;">
+                      <div class="icon-tile tile-paper core-amber" data-sync-life style="width:84px;height:84px;">
                         <svg viewBox="0 0 100 100"><use href="#ico-life-open" /></svg>
                       </div>
                       <div style="display:flex;flex-direction:column;gap:4px;">
@@ -2248,7 +2434,7 @@
                     <span class="mono">56px AI</span>
                   </div>
                   <div class="size-step">
-                    <div class="icon-tile tile-paper core-amber" style="width:56px;height:56px;"><svg viewBox="0 0 100 100"><use href="#ico-life-open" /></svg></div>
+                    <div class="icon-tile tile-paper core-amber" data-sync-life style="width:56px;height:56px;"><svg viewBox="0 0 100 100"><use href="#ico-life-open" /></svg></div>
                     <span class="mono">56px LIFE</span>
                   </div>
                   <div class="size-step">
@@ -2256,7 +2442,7 @@
                     <span class="mono">32px 任务栏</span>
                   </div>
                   <div class="size-step">
-                    <div class="icon-tile tile-paper core-amber" style="width:32px;height:32px;"><svg viewBox="0 0 100 100"><use href="#ico-life-open" /></svg></div>
+                    <div class="icon-tile tile-paper core-amber" data-sync-life style="width:32px;height:32px;"><svg viewBox="0 0 100 100"><use href="#ico-life-open" /></svg></div>
                     <span class="mono">32px 任务栏</span>
                   </div>
                   <div style="width:1px;height:46px;background:var(--line-struct);"></div>
@@ -2269,7 +2455,7 @@
                     <span class="mono" style="color:var(--ok);">16px AI 托盘</span>
                   </div>
                   <div class="size-step">
-                    <div class="icon-tile tile-paper is-micro core-amber" style="width:16px;height:16px;"><svg viewBox="0 0 100 100"><use href="#ico-life-micro" /></svg></div>
+                    <div class="icon-tile tile-paper is-micro core-amber" data-sync-life style="width:16px;height:16px;"><svg viewBox="0 0 100 100"><use href="#ico-life-micro" /></svg></div>
                     <span class="mono" style="color:var(--ok);">16px LIFE 托盘</span>
                   </div>
                 </div>
@@ -2312,7 +2498,7 @@
                   <div style="border:1px solid var(--line-subtle);background:var(--surface-white);padding:16px;display:flex;justify-content:center;">
                     <div class="np-v12" style="width:230px;">
                       <div class="np-v12-icon cell-tone" data-np-cell>
-                        <div class="icon-tile tile-bare core-amber" style="width:38px;height:38px;">
+                        <div class="icon-tile tile-bare core-amber" data-sync-life style="width:38px;height:38px;">
                           <svg viewBox="0 0 100 100"><use href="#ico-life-open" /></svg>
                         </div>
                       </div>
@@ -2837,45 +3023,187 @@
             </div>
           </section>
 
-          <!-- ==================== 09 · 改造排期 ==================== -->
-          <section class="page-view" data-view="09" data-title="v1.2 实机改造排期与封版核对" data-sub="标本页验收通过后，严格按以下 4 站顺序落入 AI BASE 实机代码">
+          <!-- ==================== 09 · 实机三战役与全站通则 ==================== -->
+          <section class="page-view" data-view="09" data-title="实机三战役路线图 &amp; 全站架构 3 条通则" data-sub="标本封死后按「主界面换肤精修 → 业务页 UX 提效 → 截图与 OCR 重构」三大战役推进">
             <div class="panel">
               <div class="panel-head">
-                <h2><span class="head-bar"></span>AI BASE 实机重构路线图</h2>
-                <span class="ds-tag is-ok"><span class="dot dot-ok"></span>Station 0 标本已就绪</span>
+                <h2><span class="head-bar"></span>1. 全站实机 3 条铁律（从 6 张实机截图提炼的通用规范）</h2>
+                <span class="ds-tag is-ok"><span class="dot dot-ok"></span>双端通用</span>
+              </div>
+              <div class="panel-body">
+                <div class="grid-3">
+                  <div style="border:1px solid var(--line-struct);padding:12px;background:var(--surface-paper);">
+                    <strong style="font-size:13px;">① 顶栏统一范式</strong>
+                    <p style="margin:6px 0 0;font-size:12px;color:var(--text-secondary);">左侧放「页面标题 + 精准状态副标（如 <code>2 应用运行中 · 代理已连</code>）」；右侧承接本页 1–2 个主动作，并以 16px 呼吸竖线隔离窗口 <code>- □ ×</code>。</p>
+                  </div>
+                  <div style="border:1px solid var(--line-struct);padding:12px;background:var(--surface-paper);">
+                    <strong style="font-size:13px;">② 零横跳滚动槽</strong>
+                    <p style="margin:6px 0 0;font-size:12px;color:var(--text-secondary);">全局滚动舞台统一声明 <code>scrollbar-gutter: stable</code>，设置项展开或长列表切换时页面右边界纹丝不动。</p>
+                  </div>
+                  <div style="border:1px solid var(--line-struct);padding:12px;background:var(--surface-paper);">
+                    <strong style="font-size:13px;">③ 异常驱动原则</strong>
+                    <p style="margin:6px 0 0;font-size:12px;color:var(--text-secondary);">默认正常态（<code>main / 干净 / Web 书签</code>）退居轻量无框，绝不乱套黑框或借用进程绿点；绿点专供本机进程，琥珀/朱砂专供未提交与告急。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <h2><span class="head-bar"></span>2. 实机施工三大战役排期</h2>
+                <span class="ds-tag is-ok">标本 01–10 封版即开工</span>
               </div>
               <div class="panel-body">
                 <table class="ds-table">
                   <thead>
-                    <tr><th style="width:90px;">阶段</th><th style="width:200px;">目标模块</th><th>落地内容</th><th style="width:96px;">状态</th></tr>
+                    <tr><th style="width:92px;">战役</th><th style="width:190px;">核心范围</th><th>高价值落地清单</th><th style="width:86px;">状态</th></tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td class="mono">Station 0</td>
-                      <td><strong>设计系统标本 v1.2</strong></td>
-                      <td>品牌暖白卡大占比图标 + 拆前墙步梯 + 渐隐建筑十字 + 工业推子/下拉/融合 Toast/降噪主卡全部定妆</td>
-                      <td><span class="ds-tag is-ok">待验收</span></td>
+                      <td class="mono">战役一</td>
+                      <td><strong>全局换肤 + 品牌 + 工作台</strong></td>
+                      <td>松烟暖墨 Token、渐隐建筑十字、三格 <code>AI BASE</code> 铭牌 + 暖白卡 <code>.ico</code>/16px 动态托盘、16×16 折角 SVG、统一顶栏、对齐 Codex/Antigravity 单行卡头与大白洞消除、去重刷新时间、4 态网络条就地切节点、降噪刻度进度条</td>
+                      <td><span class="ds-tag">待启动</span></td>
                     </tr>
                     <tr>
-                      <td class="mono">Station 1</td>
-                      <td><strong>全局底座、铭牌与网络条</strong></td>
-                      <td><code>界面样式.css</code> 迁移松烟暖墨两层 Token、渐隐建筑十字画布、三格 <code>AI BASE</code> 铭牌、16×16 折角 SVG、网络条第 4 态超时急救 + 打包新 <code>.ico</code> / 16px 动态托盘核</td>
-                      <td><span class="ds-tag">待开始</span></td>
+                      <td class="mono">战役二</td>
+                      <td><strong>项目 / 需求池 / 设置 / 日志</strong></td>
+                      <td>项目卡基线拉齐 + 路径条点击复制 + 异常驱动 Dirty 高亮 + 一键 AI IDE 打开；需求池砍重复状态标签 + 3px 黑脊选中 + Checklist 勾选 + <strong>一键复制 AI Prompt</strong>；设置页修收纳语义 + 居中/备份/自定义热键/开机静默；日志按版本分组</td>
+                      <td><span class="ds-tag">待启动</span></td>
                     </tr>
                     <tr>
-                      <td class="mono">Station 2</td>
-                      <td><strong>工作台主卡视觉降噪</strong></td>
-                      <td>Codex / Antigravity 净纸卡头 + 4px 索引条 + 25/50/75 刻度凹槽 + 单脊线告急 + 危险隔离线 + Chrome 配置 0px 自研下拉检索框</td>
-                      <td><span class="ds-tag">待开始</span></td>
-                    </tr>
-                    <tr>
-                      <td class="mono">Station 3</td>
-                      <td><strong>项目 / 需求池 / 设置对齐</strong></td>
-                      <td>全站接入融合 Toast（进度条+悬停冻结+撤销）、中危 3 秒武装防误触、博朗推子、看板拖拽放置槽与 <code>:has(:focus-visible)</code> 开关焦点</td>
-                      <td><span class="ds-tag">待开始</span></td>
+                      <td class="mono">战役三</td>
+                      <td><strong>截图 &amp; 离线 OCR 引擎</strong></td>
+                      <td>P0 修 7 处硬伤（Clip 失步、拖拽实时宽高+放大镜、消灭 122 次 GetPixel、马赛克缓存、WPF 直出所见即所得、剪贴板重试+后台通知、OCR 关窗杀进程+小图 2×）；P1 全 0px 视觉刷齐；P2 原地贴图+透明度+序号方章+复制临时图路径+合并换行</td>
+                      <td><span class="ds-tag">待启动</span></td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- ==================== 10 · 截图与 OCR 浮层 0px 定妆 ==================== -->
+          <section class="page-view" data-view="10" data-title="截图工具栏、放大镜与 OCR 窗 0px 视觉定妆" data-sub="零圆角、零模糊 DropShadowEffect · 点击取景框内可实测 [01][02][03] 0px 方形序号印章">
+            <div class="panel">
+              <div class="panel-head">
+                <h2><span class="head-bar"></span>1. 截图浮层实景定妆（点击取景框内可连续打 0px 序号方章，色块切换零横跳）</h2>
+                <button type="button" class="ds-btn ds-btn-sm ds-btn-flat" id="shot-reset-stamps">重置序号方章</button>
+              </div>
+              <div class="panel-body">
+                <div class="shot-viewport">
+                  <div class="shot-hint-bar mono">拖动取景 · 单击识窗 · Alt 放大镜 · C 取色 · Shift 正交锁定 · 右键返回</div>
+
+                  <!-- 取景选区框 + 8 方钉 + 实时 W×H 标牌 + 序号方章 -->
+                  <div class="shot-sel" id="shot-sel">
+                    <div class="shot-size-badge mono">840 × 420 px</div>
+                    <!-- 8 个 8x8 0px 方钉锚点 -->
+                    <span class="shot-handle" style="left:-5px;top:-5px;"></span>
+                    <span class="shot-handle" style="left:calc(50% - 4px);top:-5px;"></span>
+                    <span class="shot-handle" style="right:-5px;top:-5px;"></span>
+                    <span class="shot-handle" style="left:-5px;top:calc(50% - 4px);"></span>
+                    <span class="shot-handle" style="right:-5px;top:calc(50% - 4px);"></span>
+                    <span class="shot-handle" style="left:-5px;bottom:-5px;"></span>
+                    <span class="shot-handle" style="left:calc(50% - 4px);bottom:-5px;"></span>
+                    <span class="shot-handle" style="right:-5px;bottom:-5px;"></span>
+
+                    <div id="shot-stamps-layer">
+                      <div class="shot-stamp" style="left:92px;top:52px;">01</div>
+                      <div class="shot-stamp" style="left:238px;top:86px;">02</div>
+                      <div class="shot-stamp" style="left:368px;top:58px;">03</div>
+                    </div>
+                    <div style="position:absolute;right:10px;bottom:8px;font-size:11px;color:var(--text-muted);pointer-events:none;">点击框内空白处可盖下一个序号方章</div>
+                  </div>
+
+                  <!-- 0px 实体硬影主工具栏 -->
+                  <div class="shot-toolbar" id="shot-toolbar">
+                    <button type="button" class="shot-tool-btn" data-stool>□ 矩形</button>
+                    <button type="button" class="shot-tool-btn" data-stool>↗ 箭头</button>
+                    <button type="button" class="shot-tool-btn" data-stool>✎ 画笔</button>
+                    <button type="button" class="shot-tool-btn" data-stool>▦ 马赛克</button>
+                    <button type="button" class="shot-tool-btn" data-stool>T 文字</button>
+                    <button type="button" class="shot-tool-btn is-active" data-stool># 序号章</button>
+                    <div class="v-sep" style="height:16px;"></div>
+                    <button type="button" class="shot-tool-btn" data-tip="贴图原地钉在桌面 (Ctrl+T)">钉住</button>
+                    <button type="button" class="shot-tool-btn" data-tip="离线文字识别 (OCR)">提字</button>
+                    <button type="button" class="shot-tool-btn" data-tip="存临时 PNG 并复制路径，直贴 Codex/终端 (Alt+C)">路径</button>
+                    <div class="v-sep" style="height:16px;"></div>
+                    <button type="button" class="shot-tool-btn is-cancel" data-tip="取消截图 (Esc)"><svg class="svg16"><use href="#g-close"/></svg></button>
+                    <button type="button" class="shot-tool-btn is-copy"><svg class="svg16"><use href="#g-check"/></svg>复制</button>
+                  </div>
+
+                  <!-- 二级属性条：固定 18×18 方块防横跳 -->
+                  <div class="shot-subbar">
+                    <div style="display:flex;align-items:center;gap:3px;" id="shot-widths">
+                      <button type="button" class="shot-w-btn" data-sw><span style="width:4px;height:4px;background:var(--ink);"></span></button>
+                      <button type="button" class="shot-w-btn is-active" data-sw><span style="width:7px;height:7px;background:var(--ink);"></span></button>
+                      <button type="button" class="shot-w-btn" data-sw><span style="width:10px;height:10px;background:var(--ink);"></span></button>
+                    </div>
+                    <div class="v-sep" style="height:16px;"></div>
+                    <div style="display:flex;align-items:center;gap:4px;" id="shot-colors">
+                      <button type="button" class="shot-sw is-active" data-sc="#C24840"><span style="background:#C24840;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#1A1917"><span style="background:#1A1917;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#14A06D"><span style="background:#14A06D;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#E38D17"><span style="background:#E38D17;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#2563EB"><span style="background:#2563EB;"></span></button>
+                      <button type="button" class="shot-sw" data-sc="#FFFFFF"><span style="background:#FFFFFF;border:1px solid #D2CFC7;"></span></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <!-- 0px 放大镜仪表卡 -->
+              <div class="panel">
+                <div class="panel-head">
+                  <h2><span class="head-bar"></span>2. 0px 放大镜仪表卡（最低 11px 字号 · 零柔焦发虚）</h2>
+                  <button type="button" class="ds-btn ds-btn-sm ds-btn-flat" id="loupe-fmt-btn">Shift 切 HEX/RGB</button>
+                </div>
+                <div class="panel-body">
+                  <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                    <div class="loupe-card">
+                      <div class="loupe-grid" id="loupe-grid"><div class="loupe-cross"></div></div>
+                      <div style="padding:7px 9px;display:flex;flex-direction:column;gap:4px;font-size:11px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                          <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:#C24840;border:1px solid #FFF;display:inline-block;"></span><strong class="mono" id="loupe-color-txt">#C24840</strong></span>
+                          <span class="mono" style="opacity:0.75;">(840, 420)</span>
+                        </div>
+                        <div class="mono" style="opacity:0.72;">C 复制色值 · Shift 切格式</div>
+                      </div>
+                    </div>
+                    <div style="flex:1;min-width:180px;font-size:12px;color:var(--text-secondary);line-height:1.7;">
+                      <strong>WPF 实机避坑铁律：</strong><br />
+                      放弃 <code>DropShadowEffect</code>（会强制子树位图缓存导致文字与 1px 图标发糊），改用底层偏移 <code>3px</code> 纯黑矩形背板，ClearType 锐利度 100% 满血！
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 0px OCR 结果窗（修正关闭按钮误用危险红） -->
+              <div class="panel">
+                <div class="panel-head">
+                  <h2><span class="head-bar"></span>3. OCR 结果窗语义纠偏 &amp;「智能合并换行」</h2>
+                  <span class="ds-tag is-ok">PaddleOCR 本地</span>
+                </div>
+                <div class="panel-body">
+                  <div style="border:1.5px solid var(--ink);box-shadow:var(--shadow-l2);background:#FFF;">
+                    <div style="padding:7px 10px;border-bottom:1px solid var(--line-struct);display:flex;align-items:center;justify-content:space-between;" class="tone-light">
+                      <span style="font-size:12px;font-weight:700;">离线文字识别 · 3 行已提取</span>
+                      <button type="button" class="ds-btn ds-btn-sm ds-btn-flat" id="ocr-merge-btn">智能合并换行</button>
+                    </div>
+                    <div id="ocr-demo-text" style="padding:10px;font-size:12px;color:var(--text-body);white-space:pre-line;min-height:66px;background:var(--surface-paper);">AI BASE 统一采用 0px 锐利直角，
+松烟暖墨主黑与 45° 斜向像素网点，
+打造高效静默的本地工作台。</div>
+                    <div style="padding:8px 10px;border-top:1px solid var(--line-subtle);display:flex;justify-content:space-between;align-items:center;">
+                      <span style="font-size:11px;color:var(--text-muted);">「关闭」回归浅纸次按钮，绝不误用危险红</span>
+                      <div style="display:flex;gap:6px;">
+                        <button type="button" class="ds-btn ds-btn-sm ds-btn-paper">关闭</button>
+                        <button type="button" class="ds-btn ds-btn-sm ds-btn-primary">复制全部文字</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -2916,7 +3244,7 @@
 
   <script>
     /* ==================== 1. 分页导航 (01~09) ==================== */
-    const pages = ["01","02","03","04","05","06","07","08","09"];
+    const pages = ["01","02","03","04","05","06","07","08","09","10"];
     let curPage = "01";
     const stageEl = document.getElementById("stage");
 
@@ -2937,7 +3265,7 @@
         document.getElementById("tb-sub").textContent = active.dataset.sub;
       }
       document.getElementById("tb-counter").textContent = `${idx + 1} / ${pages.length}`;
-      document.getElementById("pager-hint").textContent = `第 ${id} / 0${pages.length} 页 · 键盘 ← / → 快速切换`;
+      document.getElementById("pager-hint").textContent = `第 ${id} / ${String(pages.length).padStart(2, "0")} 页 · 键盘 ← / → 快速切换`;
       document.getElementById("prev-page").disabled = idx === 0;
       document.getElementById("next-page").disabled = idx === pages.length - 1;
       stageEl.scrollTop = 0;
@@ -3009,13 +3337,16 @@
       toastStack.appendChild(el);
     }
 
-    /* ==================== 4. Page 01: 品牌图标实测 & 独立 SVG 导出 ==================== */
+    /* ==================== 4. Page 01: 品牌图标实测（含朱砂红点睛）& 独立 SVG 导出 ==================== */
     let curAiCore = "core-emerald";
+    let curLifeCore = "core-amber";
+    const allCores = ["core-emerald","core-amber","core-vermilion","core-ink","core-idle"];
     const corePalettes = {
-      "core-emerald": { top: "#17B27A", left: "#129163", right: "#0C704B" },
-      "core-amber":   { top: "#F09C24", left: "#D4810F", right: "#AD6507" },
-      "core-danger":  { top: "#D4544C", left: "#B73A32", right: "#912620" },
-      "core-idle":    { top: "#BDB9B0", left: "#9E9A91", right: "#7F7C74" }
+      "core-emerald":   { top: "#17B27A", left: "#129163", right: "#0C704B" },
+      "core-amber":     { top: "#F09C24", left: "#D4810F", right: "#AD6507" },
+      "core-vermilion": { top: "#D9544A", left: "#C24840", right: "#992A22" },
+      "core-ink":       { top: "#423F3B", left: "#292724", right: "#1A1917" },
+      "core-idle":      { top: "#BDB9B0", left: "#9E9A91", right: "#7F7C74" }
     };
 
     bindSeg("wall-seg", b => {
@@ -3024,12 +3355,18 @@
       if (b.dataset.wall === "dark") st.classList.add("wall-dark");
       if (b.dataset.wall === "light") st.classList.add("wall-light-tb");
     });
-    bindSeg("core-state-seg", b => {
+    bindSeg("ai-core-seg", b => {
       curAiCore = b.dataset.core;
-      const all = ["core-emerald","core-amber","core-danger","core-idle"];
       document.querySelectorAll("#hero-ai-tile, [data-sync-ai]").forEach(el => {
-        el.classList.remove(...all);
+        el.classList.remove(...allCores);
         el.classList.add(curAiCore);
+      });
+    });
+    bindSeg("life-core-seg", b => {
+      curLifeCore = b.dataset.core;
+      document.querySelectorAll("[data-sync-life]").forEach(el => {
+        el.classList.remove(...allCores);
+        el.classList.add(curLifeCore);
       });
     });
     bindSeg("np-no-seg", b => {
@@ -3047,16 +3384,16 @@
 
     function buildStandaloneSvg(kind) {
       const map = {
-        "ai-std":    { id: "ico-ai-std",    pal: corePalettes[curAiCore], micro: false },
-        "ai-micro":  { id: "ico-ai-micro",  pal: corePalettes[curAiCore], micro: true  },
-        "life-std":  { id: "ico-life-open", pal: corePalettes["core-amber"], micro: false },
-        "life-micro":{ id: "ico-life-micro",pal: corePalettes["core-amber"], micro: true  }
+        "ai-std":    { id: "ico-ai-std",    pal: corePalettes[curAiCore],   micro: false },
+        "ai-micro":  { id: "ico-ai-micro",  pal: corePalettes[curAiCore],   micro: true  },
+        "life-std":  { id: "ico-life-open", pal: corePalettes[curLifeCore], micro: false },
+        "life-micro":{ id: "ico-life-micro",pal: corePalettes[curLifeCore], micro: true  }
       };
       const cfg = map[kind];
       let inner = document.getElementById(cfg.id).innerHTML
-        .replace(/class="core-top"/g,   `fill="${cfg.pal.top}" stroke="${cfg.pal.top}" stroke-width="0.4"`)
-        .replace(/class="core-left"/g,  `fill="${cfg.pal.left}" stroke="${cfg.pal.left}" stroke-width="0.4"`)
-        .replace(/class="core-right"/g, `fill="${cfg.pal.right}" stroke="${cfg.pal.right}" stroke-width="0.4"`);
+        .replace(/var\(--core-top,#17B27A\)/g,   cfg.pal.top)
+        .replace(/var\(--core-left,#129163\)/g,  cfg.pal.left)
+        .replace(/var\(--core-right,#0C704B\)/g, cfg.pal.right);
       const sw = cfg.micro ? 4 : 3;
       const inset = sw / 2;
       const bg = `<rect x="${inset}" y="${inset}" width="${100 - sw}" height="${100 - sw}" fill="#FAF9F6" stroke="#1A1917" stroke-width="${sw}" />`;
@@ -3343,6 +3680,67 @@
         col.classList.remove("is-over");
         if (dragEl) { col.appendChild(dragEl); showToast("任务卡片已移入目标列"); }
       });
+    });
+
+    /* ==================== 10. Page 10: 截图序号方章、不横跳色块、放大镜与 OCR 合并换行 ==================== */
+    let stampNum = 3;
+    let stampColor = "#C24840";
+    const stampLayer = document.getElementById("shot-stamps-layer");
+    document.getElementById("shot-sel").addEventListener("click", e => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const x = Math.round(e.clientX - r.left);
+      const y = Math.round(e.clientY - r.top);
+      stampNum++;
+      const el = document.createElement("div");
+      el.className = "shot-stamp";
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+      el.style.background = stampColor;
+      el.textContent = String(stampNum).padStart(2, "0");
+      stampLayer.appendChild(el);
+    });
+    document.getElementById("shot-reset-stamps").addEventListener("click", () => {
+      stampNum = 3;
+      stampLayer.innerHTML = `<div class="shot-stamp" style="left:92px;top:52px;background:${stampColor};">01</div><div class="shot-stamp" style="left:238px;top:86px;background:${stampColor};">02</div><div class="shot-stamp" style="left:368px;top:58px;background:${stampColor};">03</div>`;
+    });
+    document.getElementById("shot-toolbar").addEventListener("click", e => {
+      const b = e.target.closest("[data-stool]");
+      if (!b) return;
+      document.querySelectorAll("[data-stool]").forEach(x => x.classList.toggle("is-active", x === b));
+    });
+    document.getElementById("shot-widths").addEventListener("click", e => {
+      const b = e.target.closest("[data-sw]");
+      if (!b) return;
+      document.querySelectorAll("[data-sw]").forEach(x => x.classList.toggle("is-active", x === b));
+    });
+    document.getElementById("shot-colors").addEventListener("click", e => {
+      const b = e.target.closest("[data-sc]");
+      if (!b) return;
+      document.querySelectorAll("[data-sc]").forEach(x => x.classList.toggle("is-active", x === b));
+      stampColor = b.dataset.sc;
+    });
+
+    const loupeGrid = document.getElementById("loupe-grid");
+    const loupeCells = [];
+    for (let i = 0; i < 77; i++) {
+      const isCenter = (i === 38);
+      const col = isCenter ? "#C24840" : ((i % 11 >= 4 && i % 11 <= 6 && i >= 22 && i <= 54) ? "#E0B4B0" : ((i % 2 === 0) ? "#FAF9F6" : "#F0EEE8"));
+      loupeCells.push(`<span style="background:${col};"></span>`);
+    }
+    loupeGrid.insertAdjacentHTML("afterbegin", loupeCells.join(""));
+    let loupeHex = true;
+    document.getElementById("loupe-fmt-btn").addEventListener("click", () => {
+      loupeHex = !loupeHex;
+      document.getElementById("loupe-color-txt").textContent = loupeHex ? "#C24840" : "rgb(194,72,64)";
+    });
+
+    let ocrMerged = false;
+    document.getElementById("ocr-merge-btn").addEventListener("click", e => {
+      ocrMerged = !ocrMerged;
+      e.currentTarget.textContent = ocrMerged ? "还原原始断行" : "智能合并换行";
+      document.getElementById("ocr-demo-text").textContent = ocrMerged
+        ? "AI BASE 统一采用 0px 锐利直角，松烟暖墨主黑与 45° 斜向像素网点，打造高效静默的本地工作台。"
+        : "AI BASE 统一采用 0px 锐利直角，\n松烟暖墨主黑与 45° 斜向像素网点，\n打造高效静默的本地工作台。";
     });
 
     goPage("01");
