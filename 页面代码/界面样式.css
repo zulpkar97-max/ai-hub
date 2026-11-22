@@ -763,6 +763,7 @@ kbd {
 
 .tag-ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-border); }
 .tag-warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+.tag-danger { background: var(--danger-bg); color: var(--danger); border-color: #E3A0A0; }
 .tag-pro { background: var(--pro-bg); color: var(--pro); border-color: var(--pro-border); }
 
 /* Work tool cards and quota sections */
@@ -1189,6 +1190,7 @@ kbd {
 input[type="text"],
 input[type="number"],
 input[type="datetime-local"],
+textarea,
 select {
   width: 100%;
   padding: 7.5px 10px;
@@ -1199,6 +1201,12 @@ select {
   color: var(--text);
   background: #ffffff;
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 92px;
+  line-height: 1.5;
 }
 
 select {
@@ -1215,7 +1223,7 @@ select {
 }
 select:hover:not(:disabled) { background-color: #FFFFFF; }
 
-input:focus, select:focus {
+input:focus, textarea:focus, select:focus {
   border-color: var(--ink);
   box-shadow: 2px 2px 0 rgba(20, 25, 32, 0.18);
 }
@@ -1406,6 +1414,235 @@ input:focus, select:focus {
 
 .stash-state.hidden-on {
   color: var(--ok);
+}
+
+/* Backlog Page */
+.backlog-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.backlog-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding: 11px 14px;
+  background: var(--bg-card);
+}
+
+.backlog-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.backlog-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.backlog-pill {
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+}
+
+.backlog-pill:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.backlog-pill.active {
+  background: var(--ink-btn);
+  color: #ffffff;
+  border-color: var(--ink-btn);
+}
+
+.backlog-pill span {
+  opacity: 0.72;
+  margin-left: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.backlog-status-select {
+  width: auto !important;
+  min-width: 106px;
+  padding: 4.5px 26px 4.5px 9px !important;
+  font-size: 12px !important;
+}
+
+.backlog-search {
+  width: 190px !important;
+  min-width: 140px;
+  padding: 5px 10px !important;
+  font-size: 12.5px !important;
+}
+
+.backlog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.backlog-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.backlog-item {
+  border-top: 1px solid var(--hairline);
+}
+
+.backlog-item:first-child {
+  border-top: none;
+}
+
+.backlog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #ffffff;
+  transition: background-color var(--motion-fast) var(--ease);
+}
+
+.backlog-row:hover {
+  background: #FAFAFB;
+}
+
+.backlog-item.is-done .backlog-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.backlog-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.backlog-expand-ic {
+  color: var(--ink-faint);
+  transition: transform var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+  flex-shrink: 0;
+}
+
+.backlog-item.is-expanded .backlog-expand-ic {
+  transform: rotate(180deg);
+  color: var(--ink);
+}
+
+.backlog-title {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.backlog-preview {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.backlog-row-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.backlog-inline-status {
+  width: auto !important;
+  min-width: 92px;
+  padding: 3.5px 24px 3.5px 8px !important;
+  font-size: 11.5px !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+
+.backlog-inline-status.st-doing {
+  background-color: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--ok-border);
+}
+
+.backlog-inline-status.st-planned {
+  background-color: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn-border);
+}
+
+.backlog-inline-status.st-done {
+  background-color: var(--pro-bg);
+  color: var(--pro);
+  border-color: var(--pro-border);
+}
+
+.backlog-detail {
+  padding: 10px 14px 12px 37px;
+  border-top: 1px dashed var(--hairline);
+  background: #FAFBFD;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.backlog-notes {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.backlog-detail-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.backlog-empty {
+  padding: 34px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.field-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

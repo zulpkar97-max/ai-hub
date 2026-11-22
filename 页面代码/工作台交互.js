@@ -9,7 +9,12 @@
   let sidebarToolsKey;
   let settingsRenderKey;
   let workspaceRenderKey;
+  let backlogRenderKey;
+  let backlogProject = "all";
+  let backlogStatus = "all";
+  let backlogQuery = "";
   const expandedSettings = new Set();
+  const expandedBacklog = new Set();
   let cmdkItems = [];
   let cmdkSelected = 0;
   let networkBusy = "";
@@ -38,6 +43,7 @@
     ledger: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3"/></svg>',
     changelog: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h5"/></svg>',
     chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+    copy: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
   };
 
@@ -164,6 +170,7 @@
     });
 
     if (activeTab === "workspace") renderUnifiedWorkspace();
+    else if (activeTab === "backlog") renderBacklog();
     else renderManage();
   }
 
@@ -658,6 +665,230 @@
     view.querySelector("#stash-count").textContent = `已隐藏 ${hiddenCount}/${shortcuts.length}`;
     view.querySelector('[data-act="hideAllAiShortcuts"]').disabled = !shortcuts.some((shortcut) => shortcut.category === "ai" && !shortcut.hidden);
     view.querySelector('[data-act="restoreAllShortcuts"]').disabled = hiddenCount === 0;
+  }
+
+  const BACKLOG_PROJECTS = ["AI Hub", "Life Hub", "通用"];
+  const BACKLOG_STATUSES = [
+    { id: "idea", label: "构思中" },
+    { id: "planned", label: "已排期" },
+    { id: "doing", label: "进行中" },
+    { id: "done", label: "已完成" },
+    { id: "paused", label: "搁置" },
+  ];
+  const BACKLOG_PRIORITIES = {
+    high: { label: "高", cls: "tag-danger", rank: 0 },
+    medium: { label: "中", cls: "tag-warn", rank: 1 },
+    low: { label: "低", cls: "", rank: 2 },
+  };
+  const BACKLOG_STATUS_RANK = { doing: 0, planned: 1, idea: 2, paused: 3, done: 4 };
+
+  function filterBacklogItems(items) {
+    const q = backlogQuery.trim().toLowerCase();
+    return [...items]
+      .filter((it) => {
+        if (backlogProject !== "all" && it.project !== backlogProject) return false;
+        if (backlogStatus !== "all" && it.status !== backlogStatus) return false;
+        if (q && !`${it.title || ""} ${it.notes || ""} ${it.project || ""}`.toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const sr = (BACKLOG_STATUS_RANK[a.status] ?? 9) - (BACKLOG_STATUS_RANK[b.status] ?? 9);
+        if (sr !== 0) return sr;
+        const pr = (BACKLOG_PRIORITIES[a.priority]?.rank ?? 9) - (BACKLOG_PRIORITIES[b.priority]?.rank ?? 9);
+        if (pr !== 0) return pr;
+        return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+      });
+  }
+
+  function renderBacklogListHtml(filtered) {
+    if (filtered.length === 0) {
+      return '<div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div>';
+    }
+    return `<div class="backlog-list">${filtered.map((item) => {
+      const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
+      const expanded = expandedBacklog.has(item.id);
+      const preview = String(item.notes || "").replace(/\s+/g, " ").trim();
+      const projCls = item.project === "AI Hub" ? "tag-pro" : item.project === "Life Hub" ? "tag-ok" : "";
+      const statusOpts = BACKLOG_STATUSES.map((st) =>
+        `<option value="${st.id}"${item.status === st.id ? " selected" : ""}>${st.label}</option>`
+      ).join("");
+      return `<article class="backlog-item${item.status === "done" ? " is-done" : ""}${expanded ? " is-expanded" : ""}" data-backlog-id="${esc(item.id)}">
+        <div class="backlog-row">
+          <div class="backlog-row-main" data-act="toggleBacklogDetail" data-id="${esc(item.id)}">
+            <span class="backlog-expand-ic">${ICONS.chevronDown}</span>
+            <span class="tag ${prio.cls}">${prio.label}</span>
+            <span class="tag ${projCls}">${esc(item.project || "通用")}</span>
+            <span class="backlog-title" title="${esc(item.title)}">${esc(item.title)}</span>
+            ${preview ? `<span class="backlog-preview">${esc(preview)}</span>` : ""}
+          </div>
+          <div class="backlog-row-side">
+            <select class="backlog-inline-status st-${esc(item.status || "idea")}" data-backlog-status="${esc(item.id)}" aria-label="修改状态">${statusOpts}</select>
+            ${iconButton("btn-paper", "复制需求 Prompt 给 AI", ICONS.copy, { attrs: `data-act="copyBacklogPrompt" data-id="${esc(item.id)}"` })}
+            ${iconButton("btn-paper", "编辑需求", ICONS.edit, { attrs: `data-act="editBacklogItem" data-id="${esc(item.id)}"` })}
+            ${iconButton("btn-danger-outline", "删除需求", ICONS.trash, { attrs: `data-act="confirmDeleteBacklog" data-id="${esc(item.id)}"` })}
+          </div>
+        </div>
+        ${expanded ? `<div class="backlog-detail">
+          <p class="backlog-notes">${esc(item.notes || "暂无详细说明，点击右侧编辑补充讨论要点。")}</p>
+          <div class="backlog-detail-foot">
+            <span>创建 ${esc(fmtDate(item.created_at))} · 更新 ${esc(fmtDate(item.updated_at))}</span>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-paper btn-sm" data-act="copyBacklogPrompt" data-id="${esc(item.id)}">复制给 AI</button>
+              <button class="btn btn-soft btn-sm" data-act="editBacklogItem" data-id="${esc(item.id)}">编辑内容</button>
+            </div>
+          </div>
+        </div>` : ""}
+      </article>`;
+    }).join("")}</div>`;
+  }
+
+  function renderBacklog(forceListOnly = false) {
+    const items = appState.backlog_items || [];
+    const openCount = items.filter((it) => it.status !== "done" && it.status !== "paused").length;
+    $("#view-title").textContent = "需求池";
+    $("#view-sub").textContent = items.length ? `共 ${items.length} 条 · ${openCount} 条待推进` : "记录灵感与待办开发事项";
+
+    const view = $("#view-content");
+    const filtered = filterBacklogItems(items);
+    const key = JSON.stringify([items, backlogProject, backlogStatus, backlogQuery, [...expandedBacklog]]);
+
+    if (forceListOnly && view.dataset.page === "backlog") {
+      const listCard = $("#backlog-list-card");
+      if (listCard) listCard.innerHTML = renderBacklogListHtml(filtered);
+      backlogRenderKey = key;
+      return;
+    }
+
+    if (key === backlogRenderKey && view.dataset.page === "backlog") return;
+    backlogRenderKey = key;
+    view.dataset.page = "backlog";
+
+    const counts = { all: items.length };
+    for (const p of BACKLOG_PROJECTS) counts[p] = items.filter((it) => it.project === p).length;
+
+    const pillTabs = ["all", ...BACKLOG_PROJECTS].map((p) => {
+      const label = p === "all" ? "全部" : p;
+      return `<button type="button" class="backlog-pill${backlogProject === p ? " active" : ""}" data-act="filterBacklogProject" data-project="${esc(p)}">${esc(label)}<span>${counts[p] || 0}</span></button>`;
+    }).join("");
+
+    const statusFilterOpts = [
+      `<option value="all"${backlogStatus === "all" ? " selected" : ""}>全部状态</option>`,
+      ...BACKLOG_STATUSES.map((st) => `<option value="${st.id}"${backlogStatus === st.id ? " selected" : ""}>${st.label}</option>`)
+    ].join("");
+
+    view.innerHTML = `<div class="backlog-page">
+      <section class="surface-card backlog-toolbar">
+        <div class="backlog-filters">
+          <div class="backlog-pills">${pillTabs}</div>
+          <select id="backlog-filter-status" class="backlog-status-select" aria-label="按状态筛选">${statusFilterOpts}</select>
+          <input id="backlog-search" class="backlog-search" type="text" placeholder="搜索需求或备注..." value="${esc(backlogQuery)}" />
+        </div>
+        <div class="backlog-actions">
+          <button class="btn btn-paper btn-sm" data-act="exportBacklogMd"${filtered.length ? "" : " disabled"}>导出 Markdown</button>
+          <button class="btn btn-primary btn-sm" data-act="openAddBacklog">${ICONS.plus}<span>新建需求</span></button>
+        </div>
+      </section>
+      <section id="backlog-list-card" class="surface-card">${renderBacklogListHtml(filtered)}</section>
+    </div>`;
+  }
+
+  function openBacklogModal(editItem) {
+    const isEdit = !!editItem;
+    const projectOpts = BACKLOG_PROJECTS.map((p) =>
+      `<option value="${esc(p)}"${(editItem?.project || (backlogProject !== "all" ? backlogProject : "Life Hub")) === p ? " selected" : ""}>${esc(p)}</option>`
+    ).join("");
+    const statusOpts = BACKLOG_STATUSES.map((st) =>
+      `<option value="${st.id}"${(editItem?.status || "idea") === st.id ? " selected" : ""}>${st.label}</option>`
+    ).join("");
+    const priorityOpts = Object.entries(BACKLOG_PRIORITIES).map(([k, v]) =>
+      `<option value="${k}"${(editItem?.priority || "medium") === k ? " selected" : ""}>${v.label}优先级</option>`
+    ).join("");
+
+    openModal(`
+      <div class="modal-header">
+        <h3>${isEdit ? "编辑需求" : "新建需求"}</h3>
+        <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
+      </div>
+      <form id="f-backlog" class="modal-body">
+        <div class="field">
+          <label>需求标题</label>
+          <input id="bl-title" type="text" required placeholder="一句话描述想做的模块或改进..." value="${esc(editItem?.title || "")}" />
+        </div>
+        <div class="field-grid-3">
+          <div class="field"><label>归属项目</label><select id="bl-project">${projectOpts}</select></div>
+          <div class="field"><label>当前状态</label><select id="bl-status">${statusOpts}</select></div>
+          <div class="field"><label>优先级</label><select id="bl-priority">${priorityOpts}</select></div>
+        </div>
+        <div class="field">
+          <label>详细说明与讨论要点（可选）</label>
+          <textarea id="bl-notes" rows="6" placeholder="记录核心功能点、UI 设想、数据来源或避坑备注...">${esc(editItem?.notes || "")}</textarea>
+        </div>
+      </form>
+      <div class="modal-footer">
+        <button class="btn btn-soft" data-close-modal>取消</button>
+        <button id="bl-submit" type="submit" form="f-backlog" class="btn btn-primary">${isEdit ? "保存修改" : "添加到需求池"}</button>
+      </div>
+    `);
+
+    $("#bl-title")?.focus();
+    $("#f-backlog").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("#bl-submit");
+      btn.disabled = true;
+      try {
+        await callHost("saveBacklogItem", {
+          id: editItem?.id || "",
+          title: $("#bl-title").value.trim(),
+          project: $("#bl-project").value,
+          status: $("#bl-status").value,
+          priority: $("#bl-priority").value,
+          notes: $("#bl-notes").value,
+        });
+        closeModal();
+      } catch (err) {
+        btn.disabled = false;
+        showToast(err.message, true);
+      }
+    });
+  }
+
+  async function copyBacklogPrompt(item) {
+    if (!item) return;
+    const statusLabel = BACKLOG_STATUSES.find((s) => s.id === item.status)?.label || item.status;
+    const prioLabel = BACKLOG_PRIORITIES[item.priority]?.label || "中";
+    const promptText = [
+      `请帮我推进以下需求：`,
+      `- 项目归属：${item.project || "通用"}`,
+      `- 需求标题：${item.title}`,
+      `- 当前状态：${statusLabel}（优先级：${prioLabel}）`,
+      item.notes ? `- 详细说明：\n${item.notes}` : "",
+    ].filter(Boolean).join("\n");
+    try {
+      await callHost("copyText", { text: promptText });
+      showToast("已复制需求描述，可直接粘贴给 AI");
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+
+  async function exportBacklogMarkdown() {
+    const filtered = filterBacklogItems(appState.backlog_items || []);
+    if (!filtered.length) return;
+    const lines = ["# AI Hub 需求池导出", ""];
+    for (const item of filtered) {
+      const st = BACKLOG_STATUSES.find((s) => s.id === item.status)?.label || item.status;
+      const pr = BACKLOG_PRIORITIES[item.priority]?.label || "中";
+      lines.push(`- [${item.status === "done" ? "x" : " "}] **[${item.project}] ${item.title}**（${st} · ${pr}优）`);
+      if (item.notes) {
+        for (const noteLine of String(item.notes).split("\n")) lines.push(`  ${noteLine}`);
+      }
+    }
+    try {
+      await callHost("copyText", { text: lines.join("\n") });
+      showToast(`已复制 ${filtered.length} 条需求为 Markdown`);
+    } catch (err) {
+      showToast(err.message, true);
+    }
   }
 
   function renderManage() {
@@ -1434,6 +1665,8 @@
     items.push({ title: "重启代理（Clash Verge）", sub: "网络异常时快速重启通道", tag: "操作", run: () => postAction("proxyRestart") });
     items.push({ title: "刷新额度（所有 Codex 账号）", sub: "查询实时 5h / 每周 / 每月额度", tag: "操作", run: () => postAction("refreshAllUsage") });
     items.push({ title: "一键全部退出", sub: "批量关闭运行中的外部应用与代理", tag: "操作", run: openBatchExitModal });
+    items.push({ title: "打开需求池", sub: "查看与管理 AI Hub / Life Hub 需求条目", tag: "导航", run: () => switchTab("backlog") });
+    items.push({ title: "新建需求（需求池）", sub: "记录新想法与讨论要点", tag: "操作", run: () => { switchTab("backlog"); openBacklogModal(null); } });
     items.push({ title: "查看更新日志", sub: "更新日志.md", tag: "信息", run: openChangelogModal });
     return items;
   }
@@ -1602,6 +1835,33 @@
     } else if (act === "openMoreMenu") {
       const acc = (appState.accounts || []).find((a) => a.id === id);
       if (acc) openAccountMoreMenu(actBtn, acc);
+    } else if (act === "filterBacklogProject") {
+      backlogProject = actBtn.dataset.project || "all";
+      renderBacklog();
+    } else if (act === "openAddBacklog") {
+      openBacklogModal(null);
+    } else if (act === "exportBacklogMd") {
+      exportBacklogMarkdown();
+    } else if (act === "toggleBacklogDetail") {
+      if (expandedBacklog.has(id)) expandedBacklog.delete(id);
+      else expandedBacklog.add(id);
+      renderBacklog(true);
+    } else if (act === "copyBacklogPrompt") {
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      copyBacklogPrompt(item);
+    } else if (act === "editBacklogItem") {
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      if (item) openBacklogModal(item);
+    } else if (act === "confirmDeleteBacklog") {
+      const item = (appState.backlog_items || []).find((it) => it.id === id);
+      if (!item) return;
+      openConfirmModal(
+        "确认删除需求",
+        `确定要从需求池删除「${item.title}」吗？`,
+        "确认删除",
+        true,
+        () => postAction("deleteBacklogItem", { id })
+      );
     } else if (act === "confirmUninstall") {
       const targetApp = (appState.installed_apps || []).find((it) => it.id === id);
       if (!targetApp) return;
@@ -1615,7 +1875,24 @@
     }
   });
 
+  document.addEventListener("input", (e) => {
+    if (e.target && e.target.id === "backlog-search") {
+      backlogQuery = e.target.value;
+      renderBacklog(true);
+    }
+  });
+
   document.addEventListener("change", (e) => {
+    if (e.target && e.target.id === "backlog-filter-status") {
+      backlogStatus = e.target.value || "all";
+      renderBacklog(true);
+      return;
+    }
+    const blStatus = e.target.closest("[data-backlog-status]");
+    if (blStatus) {
+      postAction("setBacklogStatus", { id: blStatus.dataset.backlogStatus, status: blStatus.value });
+      return;
+    }
     const stashInp = e.target.closest("[data-stash-id]");
     if (stashInp) {
       postAction("toggleDesktopShortcut", { id: stashInp.dataset.stashId, hide: stashInp.checked });

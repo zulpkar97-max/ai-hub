@@ -35,6 +35,7 @@ namespace CodexLauncher
         private bool _refreshInFlight = false;
         private DispatcherTimer _pollTimer;
         private List<DesktopShortcutInfo> _desktopShortcuts = new List<DesktopShortcutInfo>();
+        private List<BacklogItem> _backlogItems = new List<BacklogItem>();
 
         private void RefreshAsync(bool includeChrome)
         {
@@ -50,6 +51,7 @@ namespace CodexLauncher
                 ProxyStatusInfo proxy = null;
                 List<ChromeProfileInfo> chromes = null;
                 List<DesktopShortcutInfo> shortcuts = null;
+                List<BacklogItem> backlogItems = null;
                 string refreshError = null;
                 try
                 {
@@ -59,6 +61,7 @@ namespace CodexLauncher
                     if (refreshChrome)
                         chromes = CoreService.DiscoverChromeProfiles();
                     shortcuts = DesktopStashService.ScanShortcuts();
+                    backlogItems = BacklogStorage.LoadItems();
                 }
                 catch (Exception ex) { refreshError = ex.Message; }
 
@@ -76,6 +79,7 @@ namespace CodexLauncher
                     if (proxy != null) _proxy = proxy;
                     if (chromes != null) _chromeProfiles = chromes;
                     if (shortcuts != null) _desktopShortcuts = shortcuts;
+                    if (backlogItems != null) _backlogItems = backlogItems;
 
                     PushFullState();
                     if (IsVisible) PollNetwork();
@@ -302,6 +306,7 @@ namespace CodexLauncher
                     }
                 },
                 { "desktop_shortcuts", shortcutList },
+                { "backlog_items", _backlogItems },
                 { "installed_apps", _installedApps.Select(item => new
                     {
                         item.id,

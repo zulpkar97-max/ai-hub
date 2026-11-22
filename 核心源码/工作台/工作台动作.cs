@@ -598,6 +598,42 @@ namespace CodexLauncher
                         ReplyJs(reqId, true, CoreService.ReadChangelogText(), null);
                         break;
 
+                    case "saveBacklogItem":
+                        _backlogItems = BacklogStorage.SaveItem(
+                            AuthParser.GetStr(data, "id"),
+                            AuthParser.GetStr(data, "title"),
+                            AuthParser.GetStr(data, "project"),
+                            AuthParser.GetStr(data, "status"),
+                            AuthParser.GetStr(data, "priority"),
+                            AuthParser.GetStr(data, "notes"));
+                        PushFullState();
+                        ReplyJs(reqId, true, null, null);
+                        SendToastToJs(string.IsNullOrEmpty(AuthParser.GetStr(data, "id")) ? "已添加到需求池" : "需求已更新", false);
+                        break;
+
+                    case "setBacklogStatus":
+                        _backlogItems = BacklogStorage.SetStatus(
+                            AuthParser.GetStr(data, "id"),
+                            AuthParser.GetStr(data, "status"));
+                        PushFullState();
+                        ReplyJs(reqId, true, null, null);
+                        break;
+
+                    case "deleteBacklogItem":
+                        _backlogItems = BacklogStorage.DeleteItem(AuthParser.GetStr(data, "id"));
+                        PushFullState();
+                        ReplyJs(reqId, true, null, null);
+                        SendToastToJs("已删除需求", false);
+                        break;
+
+                    case "copyText":
+                        {
+                            string text = AuthParser.GetStr(data, "text") ?? "";
+                            if (text.Length > 0) Clipboard.SetText(text);
+                            ReplyJs(reqId, true, null, null);
+                            break;
+                        }
+
                     default:
                         ReplyJs(reqId, false, null, "不支持的操作。");
                         break;
