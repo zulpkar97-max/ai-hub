@@ -26,12 +26,14 @@ namespace CodexLauncher
         public int version { get; set; }
         public List<string> scan_roots { get; set; }
         public List<ProjectRecord> items { get; set; }
+        public List<string> order { get; set; }
 
         public ProjectConfigStore()
         {
             version = 1;
             scan_roots = new List<string>();
             items = new List<ProjectRecord>();
+            order = new List<string>();
         }
     }
 
@@ -53,6 +55,7 @@ namespace CodexLauncher
         public string last_commit_msg { get; set; }
         public string remote_url { get; set; }
         public bool has_preview { get; set; }
+        public int preview_port { get; set; }
         public long sort_ts { get; set; }
     }
 
@@ -137,12 +140,36 @@ namespace CodexLauncher
                 results[idx] = InspectProject(candidates[idx].Item1, candidates[idx].Item2);
             });
 
-            return results
-                .OrderByDescending(p => p.pinned)
+            return SortProjects(results, store.order);
+        }
+
+        internal static List<ProjectViewModel> ApplySavedOrder(IEnumerable<ProjectViewModel> projects)
+        {
+            lock (SyncLock) return SortProjects(projects, ReadStore().order);
+        }
+
+        private static List<ProjectViewModel> SortProjects(IEnumerable<ProjectViewModel> projects, List<string> order)
+        {
+            var rank = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var id in order)
+                if (!string.IsNullOrEmpty(id) && !rank.ContainsKey(id)) rank.Add(id, rank.Count);
+            return projects
+                .OrderBy(p => !string.IsNullOrEmpty(p.id) && rank.ContainsKey(p.id) ? rank[p.id] : int.MaxValue)
+                .ThenByDescending(p => p.pinned)
                 .ThenBy(p => p.hidden)
                 .ThenByDescending(p => p.sort_ts)
                 .ThenBy(p => p.name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
+        }
+
+        internal static void SaveOrder(List<string> visibleOrder)
+        {
+            lock (SyncLock)
+            {
+                var store = ReadStore();
+                store.order = visibleOrder.Concat(store.order.Except(visibleOrder, StringComparer.Ordinal)).ToList();
+                WriteStore(store);
+            }
         }
 
         internal static void SaveItem(string id, string path, string name, string notes, bool pinned, bool hidden)
@@ -207,7 +234,15 @@ namespace CodexLauncher
                 }
 
                 if (flagName == "hidden") target.hidden = value;
-                else if (flagName == "pinned") target.pinned = value;
+                else if (flagName == "pinned")
+                {
+                    target.pinned = value;
+                    if (value && store.order.Count > 0)
+                    {
+                        store.order.Remove(target.id);
+                        store.order.Insert(0, target.id);
+                    }
+                }
                 target.updated_at = now;
                 WriteStore(store);
             }
@@ -262,12 +297,13 @@ namespace CodexLauncher
         {
             string path = rec.path ?? "";
             bool exists = Directory.Exists(path);
+            var preview = exists ? ProjectPreview.For(path) : null;
             string folderName = Path.GetFileName(NormPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
             if (string.IsNullOrEmpty(folderName)) folderName = path;
 
             var vm = new ProjectViewModel
             {
-                id = rec.id,
+                id = string.IsNullOrEmpty(rec.id) ? StablePathId(NormPath(path)) : rec.id,
                 name = string.IsNullOrWhiteSpace(rec.name) ? folderName : rec.name,
                 folder_name = folderName,
                 path = path,
@@ -282,7 +318,8 @@ namespace CodexLauncher
                 last_commit_time = "",
                 last_commit_msg = "",
                 remote_url = "",
-                has_preview = exists && File.Exists(Path.Combine(path, "启动预览.ps1")),
+                has_preview = exists && (preview != null || File.Exists(Path.Combine(path, "启动预览.ps1"))),
+                preview_port = preview == null ? 0 : preview.Port,
                 sort_ts = 0
             };
 
@@ -410,6 +447,7 @@ namespace CodexLauncher
                 if (store == null) throw new InvalidDataException("项目配置格式无效。");
                 if (store.scan_roots == null) store.scan_roots = new List<string>();
                 if (store.items == null) store.items = new List<ProjectRecord>();
+                if (store.order == null) store.order = new List<string>();
                 return store;
             }
             catch (Exception ex)

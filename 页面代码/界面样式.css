@@ -1653,6 +1653,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .projects-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
   gap: 16px;
@@ -1688,6 +1689,49 @@ input:focus, textarea:focus, select:focus {
   background-image: radial-gradient(rgba(20, 25, 32, 0.08) 1px, transparent 1px);
   background-size: 9px 9px;
   border-bottom: 2px solid #141920;
+}
+
+.project-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.project-grip {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.project-grip:hover { background: var(--surface-hover); color: var(--ink); }
+.project-grip:focus-visible { outline: 2px solid var(--ink-muted); }
+.project-grip:active, .projects-grid.is-reordering .project-grip { cursor: grabbing; }
+.projects-grid.is-reordering { user-select: none; }
+.project-drag-source > * { visibility: hidden; }
+.project-card.project-drag-source {
+  background: var(--surface-hover);
+  border-style: dashed;
+  border-color: var(--border);
+  box-shadow: none;
+}
+.project-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 140;
+  margin: 0;
+  pointer-events: none;
+  opacity: .96;
+  box-shadow: 7px 7px 0 rgba(20,25,32,.22);
+  will-change: transform;
+  transition: none;
 }
 
 .project-card-lead {
@@ -1868,7 +1912,7 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1885,7 +1929,10 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
+  margin-inline-start: auto;
 }
+
+.project-stop-preview { padding-inline: 6px; }
 
 .project-foot-right .icon-tool {
   border: 1.2px solid #D3DAE3;

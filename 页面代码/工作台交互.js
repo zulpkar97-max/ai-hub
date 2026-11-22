@@ -10,6 +10,10 @@
   let settingsRenderKey;
   let workspaceRenderKey;
   let projectsRenderKey;
+  let projectDrag = null;
+  let projectDrop = false;
+  let savingProjectOrder = false;
+  const projectMoves = new WeakMap();
   let backlogRenderKey;
   let backlogProject = "all";
   let backlogStatus = "all";
@@ -192,6 +196,7 @@
   function switchTab(tab) {
     closePopover();
     if (activeTab === tab) return;
+    if (projectDrag) finishProjectDrag(false);
     activeTab = tab;
     expandedSettings.clear();
     renderAll();
@@ -764,14 +769,21 @@
         : "";
       const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
 
+      const previewState = appState.project_previews?.[item.id];
+      const previewBusy = previewState === "busy";
+      const previewRunning = previewState === "running";
+      const previewTip = item.preview_port ? "本地预览 · 端口 " + item.preview_port : "运行项目的启动预览脚本";
       const previewBtn = item.has_preview
-        ? `<button class="btn btn-live btn-sm" data-act="launchProjectPreview" data-path="${esc(item.path)}" title="运行项目根目录下的 启动预览.ps1">${ICONS.play}<span>预览</span></button>`
+        ? `<button class="btn btn-live btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" title="${esc(previewTip)}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : ICONS.play}<span>${previewBusy ? "处理中" : previewRunning ? "打开" : "预览"}</span></button>`
+        : "";
+      const stopPreviewBtn = previewRunning
+        ? `<button class="btn btn-danger-outline btn-sm project-stop-preview" data-act="stopProjectPreview" data-id="${esc(item.id)}" title="停止预览" aria-label="停止 ${esc(item.name)} 预览"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>`
         : "";
       const remoteBtn = item.remote_url
         ? iconButton("openProjectRemote", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-url="${esc(item.remote_url)}"` })
         : "";
 
-      return `<article class="project-card">
+      return `<article class="project-card" data-project-id="${esc(item.id)}">
         <header class="project-card-head">
           <div class="project-card-lead">
             <div class="project-emblem ${theme.tint}">${theme.svg}</div>
@@ -783,7 +795,10 @@
               <div class="project-sub-tags">${branchTag}${folderTag}</div>
             </div>
           </div>
-          <span class="project-stamp ${stampClass}">${esc(stampText)}</span>
+          <div class="project-head-actions">
+            <span class="project-stamp ${stampClass}">${esc(stampText)}</span>
+            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(item.name)} 的顺序" title="按住拖动，或聚焦后用方向键排序"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg></button>
+          </div>
         </header>
 
         <div class="project-card-body">
@@ -798,6 +813,7 @@
           <div class="project-foot-left">
             <button class="btn btn-paper btn-sm" data-act="copyProjectPath" data-path="${esc(item.path)}" title="复制本地路径，方便贴给 AI 助手">${ICONS.copy}<span>复制路径</span></button>
             ${previewBtn}
+            ${stopPreviewBtn}
           </div>
           <div class="project-foot-right">
             ${iconButton("openProjectFolder", "打开文件夹", ICONS.folder, { attrs: `data-path="${esc(item.path)}"` })}
@@ -815,13 +831,178 @@
     $("#view-sub").textContent = items.length ? `共 ${items.length} 个项目` : "暂无登记项目";
 
     const view = $("#view-content");
-    const key = JSON.stringify([items, !!appState.projects_refreshing]);
-    if (key === projectsRenderKey && view.dataset.page === "projects") return;
+    if ((projectDrag || projectDrop || savingProjectOrder) && view.dataset.page === "projects") return;
+    const key = JSON.stringify([[...items].sort((a, b) => a.id.localeCompare(b.id)), appState.project_previews]);
+    if (key === projectsRenderKey && view.dataset.page === "projects") {
+      const grid = view.querySelector(".projects-grid");
+      if (grid && items.some((item, i) => grid.children[i]?.dataset.projectId !== item.id)) {
+        const cards = new Map([...grid.children].map(card => [card.dataset.projectId, card]));
+        rearrangeProjectCards(grid, () => grid.append(...items.map(item => cards.get(item.id))));
+      }
+      return;
+    }
     projectsRenderKey = key;
     view.dataset.page = "projects";
 
     view.innerHTML = `<div class="projects-page">${renderProjectCardsHtml(items)}</div>`;
   }
+
+  function projectCardIds(grid) {
+    return [...grid.children].map(card => card.dataset.projectId);
+  }
+
+  function rearrangeProjectCards(grid, change) {
+    const before = new Map([...grid.children].map(card => [card, card.getBoundingClientRect()]));
+    for (const card of grid.children) projectMoves.get(card)?.cancel();
+    change();
+    if (reducedMotion.matches) return;
+    for (const card of grid.children) {
+      if (card.classList.contains("project-drag-source")) continue;
+      const after = card.getBoundingClientRect(), first = before.get(card);
+      const dx = first.left - after.left, dy = first.top - after.top;
+      if (Math.abs(dx) + Math.abs(dy) < 1) continue;
+      projectMoves.set(card, card.animate(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }],
+        { duration: 180, easing: "cubic-bezier(.2,.75,.25,1)" }
+      ));
+    }
+  }
+
+  async function persistProjectOrder(ids, focusId) {
+    savingProjectOrder = true;
+    try {
+      await callHost("reorderProjects", { ids });
+    } catch {
+      projectsRenderKey = undefined; // restore canonical order if saving failed
+    } finally {
+      savingProjectOrder = false;
+      if (activeTab === "projects") {
+        renderProjects();
+        if (focusId) [...$$(".project-card")].find(card => card.dataset.projectId === focusId)
+          ?.querySelector("[data-project-grip]")?.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  function moveDraggedProject() {
+    const drag = projectDrag;
+    if (!drag) return;
+    drag.frame = 0;
+    if (!drag.ghost) {
+      if (Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < 5) return;
+      const bounds = drag.card.getBoundingClientRect();
+      drag.left = bounds.left;
+      drag.top = bounds.top;
+      drag.ghost = drag.card.cloneNode(true);
+      drag.ghost.classList.add("project-drag-ghost");
+      drag.ghost.setAttribute("aria-hidden", "true");
+      drag.ghost.inert = true;
+      drag.ghost.style.width = bounds.width + "px";
+      drag.ghost.style.height = bounds.height + "px";
+      document.body.append(drag.ghost);
+      drag.card.classList.add("project-drag-source");
+      drag.grid.classList.add("is-reordering");
+    }
+    const x = drag.left + drag.x - drag.startX;
+    const y = drag.top + drag.y - drag.startY;
+    drag.ghost.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    const view = $("#view-content");
+    const viewport = view.getBoundingClientRect();
+    const overView = drag.x >= viewport.left && drag.x <= viewport.right;
+    const scroll = !overView ? 0 : drag.y < viewport.top + 54 ? -9 : drag.y > viewport.bottom - 54 ? 9 : 0;
+    const beforeScroll = view.scrollTop;
+    if (scroll) view.scrollTop += scroll;
+    const gridBox = drag.grid.getBoundingClientRect();
+    // Hit-test the grid cells without their in-flight visual transforms.
+    const cards = [...drag.grid.children];
+    const target = cards.find(card => {
+      const left = gridBox.left + card.offsetLeft, top = gridBox.top + card.offsetTop;
+      return drag.x >= left + 3 && drag.x <= left + card.offsetWidth - 3 &&
+        drag.y >= top + 3 && drag.y <= top + card.offsetHeight - 3;
+    });
+    if (target && target !== drag.card && overView && drag.y >= viewport.top && drag.y <= viewport.bottom) {
+      const after = cards.indexOf(target) > cards.indexOf(drag.card);
+      rearrangeProjectCards(drag.grid, () => drag.grid.insertBefore(drag.card, after ? target.nextSibling : target));
+    }
+    if (view.scrollTop !== beforeScroll) drag.frame = requestAnimationFrame(moveDraggedProject);
+  }
+
+  function finishProjectDrag(save) {
+    const drag = projectDrag;
+    if (!drag) return;
+    projectDrag = null;
+    cancelAnimationFrame(drag.frame);
+    if (drag.grid.hasPointerCapture(drag.pointer)) drag.grid.releasePointerCapture(drag.pointer);
+    if (!drag.ghost) { if (activeTab === "projects") renderProjects(); return; }
+    if (!save) rearrangeProjectCards(drag.grid, () => drag.grid.append(...drag.before));
+    const ids = projectCardIds(drag.grid);
+    const changed = ids.some((id, index) => id !== drag.before[index].dataset.projectId);
+    const target = drag.card.getBoundingClientRect();
+    projectDrop = true;
+    if (save && changed) persistProjectOrder(ids);
+    const finish = () => {
+      drag.ghost.remove();
+      drag.card.classList.remove("project-drag-source");
+      drag.grid.classList.remove("is-reordering");
+      projectDrop = false;
+      if (activeTab === "projects") renderProjects();
+    };
+    if (!reducedMotion.matches) {
+      drag.ghost.animate([
+        { transform: drag.ghost.style.transform, opacity: .96 },
+        { transform: `translate3d(${target.left}px, ${target.top}px, 0)`, opacity: 1 },
+      ], { duration: 135, easing: "cubic-bezier(.2,.75,.25,1)", fill: "forwards" }).finished.then(finish, finish);
+    } else finish();
+  }
+
+  document.addEventListener("pointerdown", event => {
+    const grip = event.target.closest("[data-project-grip]");
+    if (!grip || event.button !== 0 || !event.isPrimary || projectDrag || projectDrop || savingProjectOrder) return;
+    const card = grip.closest(".project-card"), grid = card.parentElement;
+    if (grid.childElementCount < 2) return;
+    grip.focus({ preventScroll: true });
+    grid.setPointerCapture(event.pointerId);
+    projectDrag = { card, grid, before: [...grid.children], pointer: event.pointerId, frame: 0,
+      startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY };
+    event.preventDefault();
+  });
+
+  document.addEventListener("pointermove", event => {
+    if (!projectDrag || event.pointerId !== projectDrag.pointer) return;
+    projectDrag.x = event.clientX;
+    projectDrag.y = event.clientY;
+    if (!projectDrag.frame) projectDrag.frame = requestAnimationFrame(moveDraggedProject);
+  });
+
+  document.addEventListener("pointerup", event => {
+    if (projectDrag?.pointer !== event.pointerId) return;
+    cancelAnimationFrame(projectDrag.frame);
+    projectDrag.x = event.clientX;
+    projectDrag.y = event.clientY;
+    moveDraggedProject();
+    finishProjectDrag(true);
+  });
+  document.addEventListener("pointercancel", event => {
+    if (projectDrag?.pointer === event.pointerId) finishProjectDrag(false);
+  });
+  document.addEventListener("lostpointercapture", event => {
+    if (projectDrag?.pointer === event.pointerId) finishProjectDrag(false);
+  });
+  window.addEventListener("blur", () => { if (projectDrag) finishProjectDrag(false); });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && projectDrag) { finishProjectDrag(false); return; }
+    const grip = event.target.closest("[data-project-grip]");
+    if (!grip || projectDrag || projectDrop || savingProjectOrder || !event.key.startsWith("Arrow")) return;
+    const card = grip.closest(".project-card"), grid = card.parentElement;
+    const cards = [...grid.children], index = cards.indexOf(card);
+    const columns = cards.filter(peer => peer.offsetTop === cards[0].offsetTop).length;
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns }[event.key];
+    const target = cards[index + step];
+    if (!target) return;
+    event.preventDefault();
+    rearrangeProjectCards(grid, () => grid.insertBefore(card, step > 0 ? target.nextSibling : target));
+    persistProjectOrder(projectCardIds(grid), card.dataset.projectId);
+  });
 
   function openProjectModal(editItem) {
     const isEdit = !!editItem;
@@ -2083,8 +2264,8 @@
       callHost("copyText", { text: p }).then(() => showToast("已复制项目路径")).catch((err) => showToast(err.message, true));
     } else if (act === "openProjectFolder") {
       postAction("openProjectFolder", { path: actBtn.dataset.path || "" });
-    } else if (act === "launchProjectPreview") {
-      postAction("launchProjectPreview", { path: actBtn.dataset.path || "" });
+    } else if (act === "launchProjectPreview" || act === "stopProjectPreview") {
+      postAction(act, { id });
     } else if (act === "openProjectRemote") {
       postAction("openProjectRemote", { url: actBtn.dataset.url || "" });
     } else if (act === "editProjectItem") {

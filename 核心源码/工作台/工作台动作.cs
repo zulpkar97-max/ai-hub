@@ -638,6 +638,20 @@ namespace CodexLauncher
                         RefreshProjectsAsync(reqId, AuthParser.GetStr(data, "toast") == "1");
                         break;
 
+                    case "reorderProjects":
+                        {
+                            var ids = ToStringList(data, "ids");
+                            var visible = _projects.Where(item => !item.hidden).Select(item => item.id).ToList();
+                            if (ids.Count != visible.Count || ids.Distinct(StringComparer.Ordinal).Count() != ids.Count ||
+                                ids.Except(visible, StringComparer.Ordinal).Any())
+                                throw new InvalidOperationException("项目列表已经变化，请刷新后重新排序。");
+                            ProjectStorage.SaveOrder(ids);
+                            _projects = ProjectStorage.ApplySavedOrder(_projects);
+                            PushFullState();
+                            ReplyJs(reqId, true, null, null);
+                            break;
+                        }
+
                     case "saveProjectItem":
                         ProjectStorage.SaveItem(
                             AuthParser.GetStr(data, "id"),
@@ -704,8 +718,21 @@ namespace CodexLauncher
                         }
 
                     case "launchProjectPreview":
+                    case "stopProjectPreview":
                         {
-                            string path = AuthParser.GetStr(data, "path") ?? "";
+                            string id = AuthParser.GetStr(data, "id");
+                            var project = _projects.FirstOrDefault(item => item.id == id && !item.hidden);
+                            if (project == null) throw new InvalidOperationException("未找到该项目，请刷新项目列表。");
+                            string path = project.path;
+                            var preview = ProjectPreview.For(path);
+                            if (preview != null)
+                            {
+                                if (action == "stopProjectPreview")
+                                    await _projectPreviews.StopAsync(preview, PushFullState);
+                                else await _projectPreviews.OpenAsync(preview, PushFullState);
+                                break;
+                            }
+                            if (action == "stopProjectPreview") break;
                             string script = Path.Combine(path, "启动预览.ps1");
                             if (!File.Exists(script))
                                 throw new InvalidOperationException("未找到启动预览脚本：" + script);

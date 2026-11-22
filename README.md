@@ -22,6 +22,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\编译程序.ps1 -PrepareU
 
 修改 `页面代码/` 下的界面结构、样式或交互逻辑时，运行中的窗口通过内置文件监听自动热重载刷新，无需重新编译。
 
+## 项目预览与排序
+
+项目卡上的「预览」在后台启动已接入的本机服务，确认就绪后打开默认浏览器。运行期间可以打开现有预览，或用卡片上的停止按钮结束 AI Hub 启动的服务。端口被占用时会提示，项目不会换到其他端口。
+
+AF-unknown-Astra、留学总盘、AF Runtime 和 Portfolio V2 的卡片分别固定使用 `1000`、`3000`、`4000` 和 `5000`。AI Hub 是桌面应用，`2000` 预留。AF Runtime 单独运行原有启动脚本时仍使用它的 `5001` 正式入口。
+
+拖动卡片右上角的把手即可调整顺序。聚焦把手后也可用方向键移动。顺序保存在本机项目配置中。
+
 ## 配置快速记账
 
 在 `%USERPROFILE%\.codex-launcher\quick-ledger.json` 中保存一个 UTF-8 JSON 对象，键为入口名称，值为飞书 HTTPS 地址。支持租户域名下的 `/wiki/`、`/base/`、`/sheets/` 和 `/docx/` 链接，可带表和视图参数。例如：

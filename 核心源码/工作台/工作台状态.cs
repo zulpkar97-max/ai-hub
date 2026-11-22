@@ -37,6 +37,7 @@ namespace CodexLauncher
         private List<DesktopShortcutInfo> _desktopShortcuts = new List<DesktopShortcutInfo>();
         private List<BacklogItem> _backlogItems = new List<BacklogItem>();
         private List<ProjectViewModel> _projects = new List<ProjectViewModel>();
+        private readonly ProjectPreviewManager _projectPreviews = new ProjectPreviewManager();
         private List<string> _projectRoots = new List<string>();
         private bool _projectsLoaded;
         private bool _projectsRefreshing;
@@ -95,8 +96,12 @@ namespace CodexLauncher
                     if (projectRoots != null) _projectRoots = projectRoots;
                     if (projects != null)
                     {
-                        _projects = projects;
-                        _projectsLoaded = true;
+                        try
+                        {
+                            _projects = ProjectStorage.ApplySavedOrder(projects);
+                            _projectsLoaded = true;
+                        }
+                        catch (InvalidDataException ex) { refreshError = ex.Message; }
                     }
 
                     PushFullState();
@@ -126,7 +131,7 @@ namespace CodexLauncher
                 if (!_wakeStop)
                 {
                     _projectRoots = roots;
-                    _projects = list;
+                    _projects = ProjectStorage.ApplySavedOrder(list);
                     _projectsLoaded = true;
                     PushFullState();
                     if (toast) SendToastToJs("项目状态已刷新", false);
@@ -359,6 +364,8 @@ namespace CodexLauncher
                 { "desktop_shortcuts", shortcutList },
                 { "backlog_items", _backlogItems },
                 { "projects", _projects },
+                { "project_previews", _projects.Where(item => item.preview_port > 0)
+                    .ToDictionary(item => item.id, item => _projectPreviews.State(item.preview_port)) },
                 { "project_scan_roots", _projectRoots },
                 { "projects_refreshing", _projectsRefreshing },
                 { "installed_apps", _installedApps.Select(item => new

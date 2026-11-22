@@ -54,7 +54,7 @@ namespace CodexLauncher
         private IntPtr _hwnd = IntPtr.Zero;
         private bool _hotkeyRegistered = false;
         private string _hotkeyError = "";
-        private const string UiProtocol = "3";
+        private const string UiProtocol = "4";
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
             { "/index.html", "text/html; charset=utf-8" },
@@ -474,6 +474,7 @@ namespace CodexLauncher
         private void OnWindowClosed(object sender, EventArgs e)
         {
             _wakeStop = true;
+            _projectPreviews.Dispose();
             if (_pollTimer != null) _pollTimer.Stop();
             if (_quotaTimer != null) _quotaTimer.Stop();
             if (_quotaBalloonTimer != null) _quotaBalloonTimer.Stop();
