@@ -629,8 +629,106 @@ namespace CodexLauncher
                     case "copyText":
                         {
                             string text = AuthParser.GetStr(data, "text") ?? "";
-                            if (text.Length > 0) Clipboard.SetText(text);
+                            if (text.Length > 0) Clipboard.SetDataObject(text, true);
                             ReplyJs(reqId, true, null, null);
+                            break;
+                        }
+
+                    case "refreshProjects":
+                        RefreshProjectsAsync(reqId, AuthParser.GetStr(data, "toast") == "1");
+                        break;
+
+                    case "saveProjectItem":
+                        ProjectStorage.SaveItem(
+                            AuthParser.GetStr(data, "id"),
+                            AuthParser.GetStr(data, "path"),
+                            AuthParser.GetStr(data, "name"),
+                            AuthParser.GetStr(data, "notes"),
+                            ReadBool(data, "pinned"),
+                            ReadBool(data, "hidden"));
+                        RefreshProjectsAsync(reqId, false);
+                        SendToastToJs(string.IsNullOrEmpty(AuthParser.GetStr(data, "id")) ? "已添加项目" : "项目信息已更新", false);
+                        break;
+
+                    case "toggleProjectHidden":
+                        {
+                            bool hide = ReadBool(data, "hidden");
+                            ProjectStorage.SetFlag(AuthParser.GetStr(data, "id"), AuthParser.GetStr(data, "path"), "hidden", hide);
+                            RefreshProjectsAsync(reqId, false);
+                            SendToastToJs(hide ? "已隐藏项目" : "已恢复显示项目", false);
+                            break;
+                        }
+
+                    case "toggleProjectPinned":
+                        {
+                            bool pin = ReadBool(data, "pinned");
+                            ProjectStorage.SetFlag(AuthParser.GetStr(data, "id"), AuthParser.GetStr(data, "path"), "pinned", pin);
+                            RefreshProjectsAsync(reqId, false);
+                            break;
+                        }
+
+                    case "removeProjectItem":
+                        ProjectStorage.RemoveManualItem(AuthParser.GetStr(data, "id"), AuthParser.GetStr(data, "path"));
+                        RefreshProjectsAsync(reqId, false);
+                        SendToastToJs("已移除手动登记的项目", false);
+                        break;
+
+                    case "saveScanRoots":
+                        ProjectStorage.SaveScanRoots(ToStringList(data, "roots"));
+                        RefreshProjectsAsync(reqId, false);
+                        SendToastToJs("扫描目录已更新", false);
+                        break;
+
+                    case "browseFolder":
+                        {
+                            using (var dlg = new System.Windows.Forms.FolderBrowserDialog())
+                            {
+                                dlg.Description = AuthParser.GetStr(data, "title") ?? "选择项目文件夹";
+                                dlg.ShowNewFolderButton = false;
+                                string initial = AuthParser.GetStr(data, "initial");
+                                if (!string.IsNullOrWhiteSpace(initial) && Directory.Exists(initial))
+                                    dlg.SelectedPath = initial;
+                                var result = dlg.ShowDialog(new WindowInteropWin32Owner(new WindowInteropHelper(this).Handle));
+                                ReplyJs(reqId, true, result == System.Windows.Forms.DialogResult.OK ? dlg.SelectedPath : "", null);
+                            }
+                            break;
+                        }
+
+                    case "openProjectFolder":
+                        {
+                            string path = AuthParser.GetStr(data, "path") ?? "";
+                            if (!Directory.Exists(path))
+                                throw new InvalidOperationException("本地目录不存在：" + path);
+                            System.Diagnostics.Process.Start("explorer.exe", "\"" + path + "\"");
+                            break;
+                        }
+
+                    case "launchProjectPreview":
+                        {
+                            string path = AuthParser.GetStr(data, "path") ?? "";
+                            string script = Path.Combine(path, "启动预览.ps1");
+                            if (!File.Exists(script))
+                                throw new InvalidOperationException("未找到启动预览脚本：" + script);
+                            string powershell = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = powershell,
+                                Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"",
+                                WorkingDirectory = path,
+                                UseShellExecute = true
+                            });
+                            SendToastToJs("正在启动项目本地预览...", false);
+                            break;
+                        }
+
+                    case "openProjectRemote":
+                        {
+                            string url = AuthParser.GetStr(data, "url") ?? "";
+                            Uri parsed;
+                            if (!Uri.TryCreate(url, UriKind.Absolute, out parsed)
+                                || (parsed.Scheme != Uri.UriSchemeHttps && parsed.Scheme != Uri.UriSchemeHttp))
+                                throw new InvalidOperationException("仓库地址无效。");
+                            CoreService.LaunchToolItem(new ToolItem { kind = "url", target = parsed.AbsoluteUri });
                             break;
                         }
 
@@ -676,6 +774,20 @@ namespace CodexLauncher
                 foreach (var x in list) if (x != null) res.Add(x.ToString());
             }
             return res;
+        }
+
+        private static bool ReadBool(Dictionary<string, object> data, string key)
+        {
+            object val;
+            if (data == null || !data.TryGetValue(key, out val) || val == null) return false;
+            try { return Convert.ToBoolean(val); }
+            catch { return false; }
+        }
+
+        private class WindowInteropWin32Owner : System.Windows.Forms.IWin32Window
+        {
+            public IntPtr Handle { get; private set; }
+            public WindowInteropWin32Owner(IntPtr handle) { Handle = handle; }
         }
 
         private void ScheduleDelayedRefresh(int ms)

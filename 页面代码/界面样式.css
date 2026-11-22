@@ -1645,6 +1645,148 @@ input:focus, textarea:focus, select:focus {
   gap: 10px;
 }
 
+/* Projects Page */
+.projects-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.projects-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.project-card {
+  min-width: 0;
+}
+
+.project-card.is-hidden {
+  opacity: 0.78;
+}
+
+.project-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 11px 14px;
+  background: var(--bg-card-head);
+}
+
+.project-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.project-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.project-card-body {
+  padding: 9px 14px 11px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.project-path-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.project-path {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  user-select: text;
+}
+
+.project-commit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.project-commit-time {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-commit-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-notes {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.path-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.path-input-row input {
+  flex: 1;
+}
+
+.scan-root-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scan-root-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.scan-root-path {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+  user-select: text;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .btn:is(.btn-primary, .btn-live, .btn-paper, .btn-danger, .btn-danger-outline) { transform: none !important; }

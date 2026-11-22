@@ -36,6 +36,10 @@ namespace CodexLauncher
         private DispatcherTimer _pollTimer;
         private List<DesktopShortcutInfo> _desktopShortcuts = new List<DesktopShortcutInfo>();
         private List<BacklogItem> _backlogItems = new List<BacklogItem>();
+        private List<ProjectViewModel> _projects = new List<ProjectViewModel>();
+        private List<string> _projectRoots = new List<string>();
+        private bool _projectsLoaded;
+        private bool _projectsRefreshing;
 
         private void RefreshAsync(bool includeChrome)
         {
@@ -52,6 +56,9 @@ namespace CodexLauncher
                 List<ChromeProfileInfo> chromes = null;
                 List<DesktopShortcutInfo> shortcuts = null;
                 List<BacklogItem> backlogItems = null;
+                List<ProjectViewModel> projects = null;
+                List<string> projectRoots = null;
+                bool loadProjects = !_projectsLoaded;
                 string refreshError = null;
                 try
                 {
@@ -62,6 +69,11 @@ namespace CodexLauncher
                         chromes = CoreService.DiscoverChromeProfiles();
                     shortcuts = DesktopStashService.ScanShortcuts();
                     backlogItems = BacklogStorage.LoadItems();
+                    if (loadProjects)
+                    {
+                        projectRoots = ProjectStorage.LoadScanRoots();
+                        projects = ProjectStorage.BuildViewModels();
+                    }
                 }
                 catch (Exception ex) { refreshError = ex.Message; }
 
@@ -80,6 +92,12 @@ namespace CodexLauncher
                     if (chromes != null) _chromeProfiles = chromes;
                     if (shortcuts != null) _desktopShortcuts = shortcuts;
                     if (backlogItems != null) _backlogItems = backlogItems;
+                    if (projectRoots != null) _projectRoots = projectRoots;
+                    if (projects != null)
+                    {
+                        _projects = projects;
+                        _projectsLoaded = true;
+                    }
 
                     PushFullState();
                     if (IsVisible) PollNetwork();
@@ -91,6 +109,39 @@ namespace CodexLauncher
                     _lastRefreshError = refreshError;
                 }));
             });
+        }
+
+        private async void RefreshProjectsAsync(string reqId = null, bool toast = false)
+        {
+            if (_projectsRefreshing)
+            {
+                if (!string.IsNullOrEmpty(reqId)) ReplyJs(reqId, true, null, null);
+                return;
+            }
+            _projectsRefreshing = true;
+            try
+            {
+                var roots = await Task.Run(() => ProjectStorage.LoadScanRoots());
+                var list = await Task.Run(() => ProjectStorage.BuildViewModels());
+                if (!_wakeStop)
+                {
+                    _projectRoots = roots;
+                    _projects = list;
+                    _projectsLoaded = true;
+                    PushFullState();
+                    if (toast) SendToastToJs("项目状态已刷新", false);
+                }
+                if (!string.IsNullOrEmpty(reqId)) ReplyJs(reqId, true, null, null);
+            }
+            catch (Exception ex)
+            {
+                if (!string.IsNullOrEmpty(reqId)) ReplyJs(reqId, false, null, ex.Message);
+                else SendToastToJs(ex.Message, true);
+            }
+            finally
+            {
+                _projectsRefreshing = false;
+            }
         }
 
         private async void RefreshInstalledApps()
@@ -307,6 +358,9 @@ namespace CodexLauncher
                 },
                 { "desktop_shortcuts", shortcutList },
                 { "backlog_items", _backlogItems },
+                { "projects", _projects },
+                { "project_scan_roots", _projectRoots },
+                { "projects_refreshing", _projectsRefreshing },
                 { "installed_apps", _installedApps.Select(item => new
                     {
                         item.id,
