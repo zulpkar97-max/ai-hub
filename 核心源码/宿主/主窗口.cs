@@ -222,8 +222,7 @@ namespace CodexLauncher
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         if (IsVisible && _webReady) SendToastToJs(msg, isErr);
-                        else if (isErr && _trayIcon != null && _trayIcon.Visible)
-                            _trayIcon.ShowBalloonTip(4000, "AI Hub 截图", msg, WinForms.ToolTipIcon.Warning);
+                        else if (isErr) ShowDesktopNotification("AI Hub 截图", msg, "warn", 4500);
                     }));
                 });
             };
@@ -319,6 +318,14 @@ namespace CodexLauncher
                 _trayIcon.Visible = true;
             }
             catch { }
+        }
+
+        private void ShowDesktopNotification(string title, string message, string tone = "ok", int durationMs = 5000)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                DesktopToastWindow.ShowToast(title, message, tone, durationMs, RestoreFromTray);
+            }));
         }
 
         private void ShowModernTrayMenu()
@@ -483,6 +490,7 @@ namespace CodexLauncher
         private void OnWindowClosed(object sender, EventArgs e)
         {
             _wakeStop = true;
+            DesktopToastWindow.CloseAll();
             _projectPreviews.Dispose();
             if (_pollTimer != null) _pollTimer.Stop();
             if (_quotaTimer != null) _quotaTimer.Stop();

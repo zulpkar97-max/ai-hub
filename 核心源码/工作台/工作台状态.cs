@@ -207,7 +207,7 @@ namespace CodexLauncher
                     try
                     {
                         if (!_trayIcon.Visible) _trayIcon.Visible = true;
-                        _trayIcon.ShowBalloonTip(5000, "账号回收提醒", tip, WinForms.ToolTipIcon.Warning);
+                        ShowDesktopNotification("账号回收提醒", tip, "warn", 5500);
                     }
                     catch { }
                     break;

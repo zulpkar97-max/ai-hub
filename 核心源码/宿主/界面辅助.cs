@@ -106,27 +106,30 @@ namespace CodexLauncher
             return b;
         }
 
-        // Refined Light-Mode Palette (Scheme D: Precision Neo-Brutalist Lego)
+        // Refined Light-Mode Palette (Unified 0px Lineart & Muted Vermilion)
         public static readonly SolidColorBrush SidebarBg = BrushFromHex("#FFFFFF");
         public static readonly SolidColorBrush MainBg = BrushFromHex("#FFFFFF");
-        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#FAF9F6");
-        public static readonly SolidColorBrush HoverBg = BrushFromHex("#F7EFD2");
+        public static readonly SolidColorBrush SubtleBg = BrushFromHex("#FAF9F7");
+        public static readonly SolidColorBrush HoverBg = BrushFromHex("#F6F7F6");
 
-        public static readonly SolidColorBrush Hairline = BrushFromHex("#DCDAD2");
+        public static readonly SolidColorBrush Hairline = BrushFromHex("#E4E7E6");
         public static readonly SolidColorBrush BorderStrong = BrushFromHex("#17191E");
 
         public static readonly SolidColorBrush TextPrimary = BrushFromHex("#17191E");
         public static readonly SolidColorBrush TextSecondary = BrushFromHex("#505662");
+        public static readonly SolidColorBrush TextMuted = BrushFromHex("#636A75");
 
         public static readonly SolidColorBrush PrimaryBg = BrushFromHex("#17191E");
         public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#2B2F39");
 
+        public static readonly SolidColorBrush OkAccent = BrushFromHex("#14A06D");
         public static readonly SolidColorBrush WarnText = BrushFromHex("#B56208");
-        public static readonly SolidColorBrush WarnBg = BrushFromHex("#F7EFD2");
+        public static readonly SolidColorBrush WarnBg = BrushFromHex("#E38D17");
 
-        public static readonly SolidColorBrush DangerText = BrushFromHex("#C52B25");
-        public static readonly SolidColorBrush DangerBg = BrushFromHex("#FBDCD8");
-        public static readonly SolidColorBrush DangerBorder = BrushFromHex("#C52B25");
+        public static readonly SolidColorBrush DangerText = BrushFromHex("#B92620");
+        public static readonly SolidColorBrush DangerBg = BrushFromHex("#C9524A");
+        public static readonly SolidColorBrush DangerHover = BrushFromHex("#B92620");
+        public static readonly SolidColorBrush DangerBorder = BrushFromHex("#C9524A");
 
         public static void ApplySeamlessLightTitlebar(Window win)
         {
@@ -204,15 +207,14 @@ namespace CodexLauncher
 
         public static Button MakeMenuRowButton(string label, Brush dotColor, string tone, bool isBold)
         {
-            Brush textBrush = TextPrimary;
-            Brush hoverBrush = HoverBg;
-            if (tone == "danger") { textBrush = DangerText; hoverBrush = DangerBg; }
-            else if (tone == "warn") { textBrush = WarnText; hoverBrush = WarnBg; }
+            Brush textBrush = tone == "danger" ? TextSecondary : TextPrimary;
+            Brush hoverBg = tone == "danger" ? DangerBg : HoverBg;
+            Brush hoverText = tone == "danger" ? Brushes.White : TextPrimary;
 
             var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             if (dotColor != null)
             {
-                row.Children.Add(new Ellipse
+                row.Children.Add(new Rectangle
                 {
                     Width = 6,
                     Height = 6,
@@ -221,23 +223,25 @@ namespace CodexLauncher
                     VerticalAlignment = VerticalAlignment.Center
                 });
             }
-            row.Children.Add(new TextBlock
+            var tb = new TextBlock
             {
                 Text = label,
                 FontFamily = MainFont,
                 FontSize = 12.5,
                 FontWeight = isBold ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = textBrush,
                 VerticalAlignment = VerticalAlignment.Center
-            });
+            };
+            row.Children.Add(tb);
 
             var btn = new Button
             {
                 Content = row,
+                Foreground = textBrush,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(10, 7, 10, 7),
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(9, 7, 9, 7),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FocusVisualStyle = null
             };
@@ -246,6 +250,8 @@ namespace CodexLauncher
             var bd = new FrameworkElementFactory(typeof(Border));
             bd.Name = "mbd";
             bd.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+            bd.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+            bd.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
             bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(0));
             bd.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Control.PaddingProperty));
             var cp = new FrameworkElementFactory(typeof(ContentPresenter));
@@ -255,7 +261,9 @@ namespace CodexLauncher
             tpl.VisualTree = bd;
 
             var hov = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-            hov.Setters.Add(new Setter(Border.BackgroundProperty, hoverBrush, "mbd"));
+            hov.Setters.Add(new Setter(Border.BackgroundProperty, hoverBg, "mbd"));
+            hov.Setters.Add(new Setter(Border.BorderBrushProperty, BorderStrong, "mbd"));
+            hov.Setters.Add(new Setter(Control.ForegroundProperty, hoverText));
             tpl.Triggers.Add(hov);
             btn.Template = tpl;
             return btn;

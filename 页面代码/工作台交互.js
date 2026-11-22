@@ -512,7 +512,7 @@
         <div class="net-cells">
           ${policy ? `<span class="net-cell"><span class="net-k">策略</span><strong>${esc(policy)}</strong></span>` : ""}
           <span class="net-cell net-node" title="${esc(node)}"><span class="net-k">节点</span><strong class="mono">${esc(node)}</strong></span>
-          <span class="net-cell" title="当前节点延迟${esc(lastDelay)}"><span class="stamp ${delayTone === "is-ok" ? "mint" : delayTone === "is-warning" ? "sand" : delayTone === "is-danger" ? "coral" : "stone"} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}</span>
+          <span class="net-cell" title="当前节点延迟${esc(lastDelay)}"><span class="net-latency ${delayTone} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}</span>
           <span class="net-cell mono" title="${esc(trafficDetails)}">${esc(traffic)}</span>
         </div>
         <div class="net-actions" role="group" aria-label="网络工具栏">
@@ -1636,11 +1636,12 @@
     pop.style.top = `${top}px`;
   }
 
-  function openModal(html, wide = false) {
+  function openModal(html, size = false) {
     closePopover();
     closeModal();
     const dlg = $("#modal-dialog");
-    dlg.className = "modal-dialog" + (wide ? " modal-wide" : "");
+    const extra = size === "changelog" ? " modal-changelog" : size ? " modal-wide" : "";
+    dlg.className = "modal-dialog" + extra;
     dlg.innerHTML = html;
     showLayer($("#modal-backdrop"));
   }
@@ -2075,25 +2076,28 @@
     const total = codexRunning.length + toolRunning.length + (proxyRunning ? 1 : 0);
 
     const rows = [
-      ...codexRunning.map((a) => `<label class="check-row"><input type="checkbox" class="be-codex" value="${esc(a.id)}" checked /> Codex · ${esc(a.name)}</label>`),
-      ...toolRunning.map((t) => `<label class="check-row"><input type="checkbox" class="be-tool" value="${esc(t.id)}" checked /> AI 应用 · ${esc(t.name)}</label>`),
-      ...(proxyRunning ? [`<label class="check-row"><input type="checkbox" id="be-proxy" checked /> 网络代理 · Clash Verge</label>`] : []),
+      ...codexRunning.map((a) => `<label class="exit-check-item"><span class="exit-check-main"><input type="checkbox" class="be-codex" value="${esc(a.id)}" checked /><span>${esc(a.name)}</span></span><span class="exit-check-cat">Codex</span></label>`),
+      ...toolRunning.map((t) => `<label class="exit-check-item"><span class="exit-check-main"><input type="checkbox" class="be-tool" value="${esc(t.id)}" checked /><span>${esc(t.name)}</span></span><span class="exit-check-cat">AI 应用</span></label>`),
+      ...(proxyRunning ? [`<label class="exit-check-item"><span class="exit-check-main"><input type="checkbox" id="be-proxy" checked /><span>Clash Verge</span></span><span class="exit-check-cat">网络代理</span></label>`] : []),
     ];
 
     openModal(`
       <div class="modal-header">
         <h3>一键全部退出</h3>
-        <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
+        <button type="button" class="btn btn-ghost btn-icon-only" data-close-modal title="关闭" aria-label="关闭">${ICONS.close}</button>
       </div>
       <div class="modal-body">
-        <div id="batch-exit-options" class="sub-box">
-          ${rows.length ? rows.join("") : `<span style="font-size:12.5px;color:var(--text-muted);">当前没有正在运行的受管应用或代理。</span>`}
-          <label class="check-row batch-exit-hub"><input type="checkbox" id="be-hub" /> 同时退出 AI Hub</label>
+        ${rows.length ? `<p class="exit-lead">勾选要关闭的运行中项目，确认后将安全退出：</p>` : ""}
+        <div id="batch-exit-options" class="exit-checklist">
+          ${rows.length ? rows.join("") : `<div class="exit-empty">当前没有正在运行的受管应用或代理。</div>`}
+          <div class="exit-hub-divider">
+            <label class="exit-check-item exit-hub-item"><span class="exit-check-main"><input type="checkbox" id="be-hub" /><span>同时退出 AI Hub</span></span><span class="exit-check-cat">主程序</span></label>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-soft" data-close-modal>取消</button>
-        <button id="be-ok" class="btn btn-danger" ${total === 0 ? "disabled" : ""}>确认全部退出</button>
+        <button type="button" class="btn btn-soft" data-close-modal>取消</button>
+        <button type="button" id="be-ok" class="btn btn-danger" ${total === 0 ? "disabled" : ""}>确认全部退出</button>
       </div>
     `);
 
@@ -2153,41 +2157,69 @@
     try { dates = changelogDates(await callHost("getChangelog")); } catch (_) { dates = []; }
     const categories = { 新增: "added", 改进: "improved", 修复: "fixed", 调整: "changed" };
     const summaries = {
-      "2026-11-22": "升级至 v5.9.0 全站直角精工积木风（0px 直角、雪白微点阵、2px 墨线硬影与建筑色块），工作台改版为双列一屏，需求池新增清单详情与四列看板双视图。",
+      "2026-11-22": "建立统一 0px 线稿精工体系：重设计左侧栏、顶栏、网络状态条、全站弹窗与桌面通知浮窗。",
       "2026-11-21": "工作台、网络、Codex 和截图完成集中升级，新增 Antigravity 实时额度。",
       "2026-11-20": "AI Hub 初版到工作台合并，加入截图、提字与桌面图标收纳。"
     };
     const currentVer = appState?.version || (dates[0]?.versions?.[0]) || "";
+    const formatDay = (iso) => {
+      const [y, m, d] = iso.split("-");
+      return `${y} 年 ${Number(m)} 月 ${Number(d)} 日`;
+    };
+    const renderDayPane = (day) => {
+      if (!day) return quotaMessage("暂时无法读取更新日志", "quota-error");
+      return `
+        <div class="changelog-pane-head">
+          <span class="changelog-pane-date">${formatDay(day.date)}</span>
+          <span class="changelog-pane-count mono">${day.updates.length} 项记录</span>
+        </div>
+        ${summaries[day.date] ? `<p class="changelog-summary">${esc(summaries[day.date])}</p>` : ""}
+        <div class="changelog-entries">${day.updates.map((update) => `<div class="changelog-entry">
+          <span class="changelog-type ${categories[update.type]}">${update.type}</span>
+          <span class="changelog-entry-body">${esc(update.body)}</span>
+          <small>${esc(update.version)}</small>
+        </div>`).join("")}</div>`;
+    };
+
     openModal(`
-      <div class="modal-header changelog-modal-head">
+      <div class="modal-header">
         <div class="changelog-head-title">
           <h3>更新日志</h3>
           ${currentVer ? `<span class="changelog-version">${esc(currentVer)}</span>` : ""}
         </div>
         ${iconButton("", "关闭更新日志", ICONS.close, { attrs: "data-close-modal" })}
       </div>
-      <div class="modal-body changelog-timeline">
-        ${dates.length ? dates.map((day, index) => {
-          const [year, month, date] = day.date.split("-");
-          const newest = day.versions[0], oldest = day.versions.at(-1);
-          const sectionId = `changelog-day-${index}`;
-          return `<section class="changelog-day">
-            <button type="button" class="changelog-day-toggle" data-act="toggleChangelogDay"
-              aria-expanded="${index === 0}" aria-controls="${sectionId}">
-              ${ICONS.chevronDown}
-              <span class="changelog-date">${year} 年 ${Number(month)} 月 ${Number(date)} 日</span>
-              <span class="changelog-version">${oldest === newest ? esc(newest) : `${esc(oldest)} → ${esc(newest)}`}</span>
-            </button>
-            ${disclosurePanel(sectionId, index === 0, `
-            ${summaries[day.date] ? `<p class="changelog-summary">${esc(summaries[day.date])}</p>` : ""}
-            <div class="changelog-entries">${day.updates.map((update) => `<div class="changelog-entry">
-              <span class="changelog-type ${categories[update.type]}">${update.type}</span>
-              <span>${esc(update.body)}</span><small>${esc(update.version)}</small>
-            </div>`).join("")}</div>
-            `)}
-          </section>`;
-        }).join("") : quotaMessage("暂时无法读取更新日志", "quota-error")}
-      </div>`, true);
+      ${dates.length ? `<div class="changelog-split">
+        <nav id="changelog-nav" class="changelog-nav" aria-label="日志日期">
+          ${dates.map((day, index) => {
+            const newest = day.versions[0], oldest = day.versions.at(-1);
+            const range = oldest === newest ? newest : `${oldest} → ${newest}`;
+            return `<button type="button" class="changelog-date-btn${index === 0 ? " is-active" : ""}" data-changelog-idx="${index}">
+              <span class="changelog-date-meta">
+                <span class="changelog-date-label">${formatDay(day.date)}</span>
+                <span class="changelog-date-range">${esc(range)}</span>
+              </span>
+              <span class="changelog-date-dot" aria-hidden="true"></span>
+            </button>`;
+          }).join("")}
+        </nav>
+        <div id="changelog-pane" class="changelog-pane">${renderDayPane(dates[0])}</div>
+      </div>` : `<div class="modal-body">${quotaMessage("暂时无法读取更新日志", "quota-error")}</div>`}`, "changelog");
+
+    const nav = $("#changelog-nav");
+    const pane = $("#changelog-pane");
+    if (nav && pane) {
+      nav.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-changelog-idx]");
+        if (!btn) return;
+        const idx = Number(btn.dataset.changelogIdx);
+        const day = dates[idx];
+        if (!day) return;
+        nav.querySelectorAll(".changelog-date-btn").forEach((el, i) => el.classList.toggle("is-active", i === idx));
+        pane.innerHTML = renderDayPane(day);
+        pane.scrollTop = 0;
+      });
+    }
   }
 
   // ==================== EVENTS & WIRING ====================
