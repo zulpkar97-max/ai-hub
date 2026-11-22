@@ -1655,9 +1655,15 @@ input:focus, textarea:focus, select:focus {
 .projects-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
+}
+
+@media (min-width: 1040px) {
+  .projects-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .project-card {
@@ -1669,7 +1675,6 @@ input:focus, textarea:focus, select:focus {
   border-radius: 9px;
   box-shadow: 4px 4px 0 #141920;
   overflow: hidden;
-  transition: transform var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
 }
 
 .project-card.is-hidden {
@@ -1681,20 +1686,28 @@ input:focus, textarea:focus, select:focus {
 .project-card-head {
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 13px 14px 12px;
+  min-height: 70px;
+  padding: 12px 14px;
   background-color: #ffffff;
   background-image: radial-gradient(rgba(20, 25, 32, 0.08) 1px, transparent 1px);
   background-size: 9px 9px;
   border-bottom: 2px solid #141920;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.projects-grid.is-reordering .project-card-head {
+  cursor: grabbing;
 }
 
 .project-head-actions {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -1702,23 +1715,22 @@ input:focus, textarea:focus, select:focus {
   display: grid;
   place-items: center;
   width: 22px;
-  height: 28px;
+  height: 26px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--ink-faint);
   cursor: grab;
   touch-action: none;
 }
-.project-grip:hover { background: var(--surface-hover); color: var(--ink); }
+.project-card-head:hover .project-grip { color: var(--ink); }
 .project-grip:focus-visible { outline: 2px solid var(--ink-muted); }
 .project-grip:active, .projects-grid.is-reordering .project-grip { cursor: grabbing; }
 .projects-grid.is-reordering { user-select: none; }
 .project-drag-source > * { visibility: hidden; }
 .project-card.project-drag-source {
-  background: var(--surface-hover);
-  border-style: dashed;
-  border-color: var(--border);
+  background: #F4F5F7;
+  border: 2px dashed #7A8696;
   box-shadow: none;
 }
 .project-drag-ghost {
@@ -1728,10 +1740,10 @@ input:focus, textarea:focus, select:focus {
   z-index: 140;
   margin: 0;
   pointer-events: none;
-  opacity: .96;
-  box-shadow: 7px 7px 0 rgba(20,25,32,.22);
+  opacity: 0.98;
+  box-shadow: 8px 8px 0 rgba(20, 25, 32, 0.28);
   will-change: transform;
-  transition: none;
+  transition: none !important;
 }
 
 .project-card-lead {
@@ -1912,7 +1924,8 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-height: 49px;
   gap: 8px;
 }
 

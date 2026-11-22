@@ -155,7 +155,6 @@ namespace CodexLauncher
                 if (!string.IsNullOrEmpty(id) && !rank.ContainsKey(id)) rank.Add(id, rank.Count);
             return projects
                 .OrderBy(p => !string.IsNullOrEmpty(p.id) && rank.ContainsKey(p.id) ? rank[p.id] : int.MaxValue)
-                .ThenByDescending(p => p.pinned)
                 .ThenBy(p => p.hidden)
                 .ThenByDescending(p => p.sort_ts)
                 .ThenBy(p => p.name, StringComparer.CurrentCultureIgnoreCase)

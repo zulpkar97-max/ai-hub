@@ -763,10 +763,9 @@
         }
       }
 
-      const branchTag = item.is_git ? `<span class="tag tag-pro">${esc(item.branch || "HEAD")}</span>` : "";
-      const folderTag = item.folder_name && item.name !== item.folder_name
-        ? `<span class="tag">${esc(item.folder_name)}</span>`
-        : "";
+      const branchTag = item.is_git
+        ? `<span class="tag tag-pro">${esc(item.branch || "HEAD")}</span>`
+        : '<span class="tag">本地目录</span>';
       const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
 
       const previewState = appState.project_previews?.[item.id];
@@ -784,15 +783,14 @@
         : "";
 
       return `<article class="project-card" data-project-id="${esc(item.id)}">
-        <header class="project-card-head">
+        <header class="project-card-head" title="按住卡头可拖动排序">
           <div class="project-card-lead">
             <div class="project-emblem ${theme.tint}">${theme.svg}</div>
             <div class="project-head-meta">
               <div class="project-name-row">
-                ${item.pinned ? '<span class="project-pin-dot" title="已置顶"></span>' : ""}
                 <span class="project-name" title="${esc(item.name)}">${esc(item.name)}</span>
               </div>
-              <div class="project-sub-tags">${branchTag}${folderTag}</div>
+              <div class="project-sub-tags">${branchTag}</div>
             </div>
           </div>
           <div class="project-head-actions">
@@ -863,7 +861,7 @@
       if (Math.abs(dx) + Math.abs(dy) < 1) continue;
       projectMoves.set(card, card.animate(
         [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }],
-        { duration: 180, easing: "cubic-bezier(.2,.75,.25,1)" }
+        { duration: 200, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
       ));
     }
   }
@@ -905,7 +903,7 @@
     }
     const x = drag.left + drag.x - drag.startX;
     const y = drag.top + drag.y - drag.startY;
-    drag.ghost.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    drag.ghost.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1.02) rotate(-0.5deg)`;
     const view = $("#view-content");
     const viewport = view.getBoundingClientRect();
     const overView = drag.x >= viewport.left && drag.x <= viewport.right;
@@ -913,12 +911,12 @@
     const beforeScroll = view.scrollTop;
     if (scroll) view.scrollTop += scroll;
     const gridBox = drag.grid.getBoundingClientRect();
-    // Hit-test the grid cells without their in-flight visual transforms.
+    // Hit-test the grid cells (including half-gap padding) without in-flight FLIP transforms.
     const cards = [...drag.grid.children];
     const target = cards.find(card => {
       const left = gridBox.left + card.offsetLeft, top = gridBox.top + card.offsetTop;
-      return drag.x >= left + 3 && drag.x <= left + card.offsetWidth - 3 &&
-        drag.y >= top + 3 && drag.y <= top + card.offsetHeight - 3;
+      return drag.x >= left - 7 && drag.x <= left + card.offsetWidth + 7 &&
+        drag.y >= top - 7 && drag.y <= top + card.offsetHeight + 7;
     });
     if (target && target !== drag.card && overView && drag.y >= viewport.top && drag.y <= viewport.bottom) {
       const after = cards.indexOf(target) > cards.indexOf(drag.card);
@@ -949,18 +947,20 @@
     };
     if (!reducedMotion.matches) {
       drag.ghost.animate([
-        { transform: drag.ghost.style.transform, opacity: .96 },
-        { transform: `translate3d(${target.left}px, ${target.top}px, 0)`, opacity: 1 },
-      ], { duration: 135, easing: "cubic-bezier(.2,.75,.25,1)", fill: "forwards" }).finished.then(finish, finish);
+        { transform: drag.ghost.style.transform, opacity: 0.98 },
+        { transform: `translate3d(${target.left}px, ${target.top}px, 0) scale(1) rotate(0deg)`, opacity: 1 },
+      ], { duration: 170, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" }).finished.then(finish, finish);
     } else finish();
   }
 
   document.addEventListener("pointerdown", event => {
-    const grip = event.target.closest("[data-project-grip]");
-    if (!grip || event.button !== 0 || !event.isPrimary || projectDrag || projectDrop || savingProjectOrder) return;
-    const card = grip.closest(".project-card"), grid = card.parentElement;
-    if (grid.childElementCount < 2) return;
-    grip.focus({ preventScroll: true });
+    const head = event.target.closest("[data-project-grip], .project-card-head");
+    if (!head || event.button !== 0 || !event.isPrimary || projectDrag || projectDrop || savingProjectOrder) return;
+    if (event.target.closest("button:not([data-project-grip]), a, input, select")) return;
+    const card = head.closest(".project-card"), grid = card?.parentElement;
+    if (!card || !grid || grid.childElementCount < 2) return;
+    const grip = card.querySelector("[data-project-grip]");
+    if (grip && event.target.closest("[data-project-grip]")) grip.focus({ preventScroll: true });
     grid.setPointerCapture(event.pointerId);
     projectDrag = { card, grid, before: [...grid.children], pointer: event.pointerId, frame: 0,
       startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY };
@@ -1028,7 +1028,6 @@
           <label>项目介绍</label>
           <textarea id="prj-notes" rows="4" placeholder="介绍这个项目是干嘛的、有什么主要功能...">${esc(editItem?.notes || "")}</textarea>
         </div>
-        <label class="check-row"><input id="prj-pinned" type="checkbox" ${editItem?.pinned ? "checked" : ""} /> 置顶排在最前</label>
       </form>
       <div class="modal-footer">
         ${isEdit && !isScanned ? '<button type="button" id="prj-remove" class="btn btn-danger-outline" style="margin-right:auto;">移除</button>' : ""}
@@ -1067,7 +1066,7 @@
           path: $("#prj-path").value.trim(),
           name: $("#prj-name").value.trim(),
           notes: $("#prj-notes").value,
-          pinned: $("#prj-pinned").checked,
+          pinned: false,
           hidden: false,
         });
         closeModal();
