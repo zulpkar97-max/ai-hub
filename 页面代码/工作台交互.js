@@ -10,8 +10,6 @@
   let settingsRenderKey;
   let workspaceRenderKey;
   let projectsRenderKey;
-  let projectViewMode = "active";
-  let projectQuery = "";
   let backlogRenderKey;
   let backlogProject = "all";
   let backlogStatus = "all";
@@ -164,10 +162,19 @@
     renderSidebarTools();
 
     const pending = !!appState.pending_update;
+    const refreshingProjects = activeTab === "projects" && !!appState.projects_refreshing;
     const headerActions = $("#header-actions");
-    if (pending !== (headerActions.dataset.pending === "true")) {
-      headerActions.innerHTML = pending ? '<button class="btn btn-soft btn-sm" data-act="applyLocalUpdate">重启应用更新</button>' : "";
-      headerActions.dataset.pending = String(!!pending);
+    const headerKey = `${pending}|${activeTab === "projects"}|${refreshingProjects}`;
+    if (headerKey !== headerActions.dataset.key) {
+      const parts = [];
+      if (activeTab === "projects") {
+        parts.push(iconButton("refreshProjects", "刷新项目 Git 状态", ICONS.refresh, { disabled: refreshingProjects, spinning: refreshingProjects }));
+      }
+      if (pending) {
+        parts.push('<button class="btn btn-soft btn-sm" data-act="applyLocalUpdate">重启应用更新</button>');
+      }
+      headerActions.innerHTML = parts.join("");
+      headerActions.dataset.key = headerKey;
     }
     $$(".nav-item").forEach((el) => {
       const selected = el.dataset.tab === activeTab;
@@ -678,15 +685,6 @@
 
   // ==================== PROJECTS PAGE ====================
 
-  function filterProjectItems(items) {
-    const q = projectQuery.trim().toLowerCase();
-    return items.filter((item) => {
-      if (projectViewMode === "active" && item.hidden) return false;
-      if (q && !`${item.name || ""} ${item.folder_name || ""} ${item.path || ""} ${item.notes || ""}`.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }
-
   function projectVisualTheme(item) {
     const key = `${item.name || ""} ${item.folder_name || ""}`.toLowerCase();
     if (key.includes("ai hub") || key.includes("ai-hub")) {
@@ -738,11 +736,11 @@
     return `${parts[0]}\\...\\${parts.slice(-2).join("\\")}`;
   }
 
-  function renderProjectCardsHtml(filtered) {
-    if (filtered.length === 0) {
-      return '<section class="surface-card"><div class="backlog-empty">当前筛选下没有项目，点击右上角「+ 添加项目」或配置「扫描目录」。</div></section>';
+  function renderProjectCardsHtml(items) {
+    if (items.length === 0) {
+      return '<section class="surface-card"><div class="backlog-empty">暂无登记项目，可让 AI 助手添加到本地项目列表。</div></section>';
     }
-    return `<div class="projects-grid">${filtered.map((item) => {
+    return `<div class="projects-grid">${items.map((item) => {
       const theme = projectVisualTheme(item);
 
       let stampClass = "st-plain";
@@ -764,17 +762,16 @@
       const folderTag = item.folder_name && item.name !== item.folder_name
         ? `<span class="tag">${esc(item.folder_name)}</span>`
         : "";
-      const hiddenTag = item.hidden ? '<span class="tag">已隐藏</span>' : "";
       const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
 
       const previewBtn = item.has_preview
         ? `<button class="btn btn-live btn-sm" data-act="launchProjectPreview" data-path="${esc(item.path)}" title="运行项目根目录下的 启动预览.ps1">${ICONS.play}<span>预览</span></button>`
         : "";
       const remoteBtn = item.remote_url
-        ? iconButton("btn-paper", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-act="openProjectRemote" data-url="${esc(item.remote_url)}"` })
+        ? iconButton("openProjectRemote", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-url="${esc(item.remote_url)}"` })
         : "";
 
-      return `<article class="project-card${item.hidden ? " is-hidden" : ""}">
+      return `<article class="project-card">
         <header class="project-card-head">
           <div class="project-card-lead">
             <div class="project-emblem ${theme.tint}">${theme.svg}</div>
@@ -783,7 +780,7 @@
                 ${item.pinned ? '<span class="project-pin-dot" title="已置顶"></span>' : ""}
                 <span class="project-name" title="${esc(item.name)}">${esc(item.name)}</span>
               </div>
-              <div class="project-sub-tags">${branchTag}${folderTag}${hiddenTag}</div>
+              <div class="project-sub-tags">${branchTag}${folderTag}</div>
             </div>
           </div>
           <span class="project-stamp ${stampClass}">${esc(stampText)}</span>
@@ -791,18 +788,6 @@
 
         <div class="project-card-body">
           <p class="project-desc" title="${esc(descText)}">${esc(descText)}</p>
-          ${item.is_git && (item.last_commit_time || item.last_commit_msg) ? `
-            <div class="project-commit-box">
-              <div class="project-commit-top">
-                <span>最近提交</span>
-                <span>${esc(item.last_commit_time)}</span>
-              </div>
-              <div class="project-commit-msg" title="${esc(item.last_commit_msg)}">${esc(item.last_commit_msg)}</div>
-            </div>` : `
-            <div class="project-commit-box">
-              <div class="project-commit-top"><span>目录类型</span><span>非 Git</span></div>
-              <div class="project-commit-msg">本地独立文件夹</div>
-            </div>`}
           <div class="project-path-pill" data-act="copyProjectPath" data-path="${esc(item.path)}" title="点击复制完整路径：${esc(item.path)}">
             ${ICONS.folder}
             <span class="project-path">${esc(compactPathLabel(item.path))}</span>
@@ -815,62 +800,27 @@
             ${previewBtn}
           </div>
           <div class="project-foot-right">
-            ${iconButton("btn-paper", "打开文件夹", ICONS.folder, { attrs: `data-act="openProjectFolder" data-path="${esc(item.path)}"` })}
+            ${iconButton("openProjectFolder", "打开文件夹", ICONS.folder, { attrs: `data-path="${esc(item.path)}"` })}
             ${remoteBtn}
-            ${iconButton(item.pinned ? "btn-soft" : "btn-paper", item.pinned ? "取消置顶" : "置顶项目", ICONS.pin, { attrs: `data-act="toggleProjectPinned" data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-pinned="${!item.pinned}"` })}
-            ${iconButton("btn-paper", "编辑项目名称与备注", ICONS.edit, { attrs: `data-act="editProjectItem" data-id="${esc(item.id)}" data-path="${esc(item.path)}"` })}
-            ${iconButton("btn-paper", item.hidden ? "恢复显示" : "隐藏项目", item.hidden ? ICONS.eye : ICONS.eyeOff, { attrs: `data-act="toggleProjectHidden" data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-hidden="${!item.hidden}"` })}
+            ${iconButton("editProjectItem", "编辑项目名称与介绍", ICONS.edit, { attrs: `data-id="${esc(item.id)}" data-path="${esc(item.path)}"` })}
           </div>
         </footer>
       </article>`;
     }).join("")}</div>`;
   }
 
-  function renderProjects(forceListOnly = false) {
-    const items = appState.projects || [];
-    const activeCount = items.filter((it) => !it.hidden).length;
-    const hiddenCount = items.length - activeCount;
+  function renderProjects() {
+    const items = (appState.projects || []).filter((it) => !it.hidden);
     $("#view-title").textContent = "项目";
-    $("#view-sub").textContent = items.length
-      ? `${activeCount} 个活跃项目${hiddenCount > 0 ? ` · ${hiddenCount} 个已隐藏` : ""}`
-      : "暂无登记项目";
+    $("#view-sub").textContent = items.length ? `共 ${items.length} 个项目` : "暂无登记项目";
 
     const view = $("#view-content");
-    const filtered = filterProjectItems(items);
-    const key = JSON.stringify([items, projectViewMode, projectQuery, !!appState.projects_refreshing]);
-
-    if (forceListOnly && view.dataset.page === "projects") {
-      const listHost = $("#projects-list-host");
-      if (listHost) listHost.innerHTML = renderProjectCardsHtml(filtered);
-      projectsRenderKey = key;
-      return;
-    }
-
+    const key = JSON.stringify([items, !!appState.projects_refreshing]);
     if (key === projectsRenderKey && view.dataset.page === "projects") return;
     projectsRenderKey = key;
     view.dataset.page = "projects";
 
-    const modePills = [
-      { id: "active", label: "活跃项目", count: activeCount },
-      { id: "all", label: "全部（含隐藏）", count: items.length },
-    ].map((tab) =>
-      `<button type="button" class="backlog-pill${projectViewMode === tab.id ? " active" : ""}" data-act="setProjectViewMode" data-mode="${tab.id}">${tab.label}<span>${tab.count}</span></button>`
-    ).join("");
-
-    view.innerHTML = `<div class="projects-page">
-      <section class="surface-card backlog-toolbar">
-        <div class="backlog-filters">
-          <div class="backlog-pills">${modePills}</div>
-          <input id="project-search" class="backlog-search" type="text" placeholder="搜索项目名、路径或备注..." value="${esc(projectQuery)}" />
-        </div>
-        <div class="backlog-actions">
-          <button class="btn btn-paper btn-sm${appState.projects_refreshing ? " is-loading" : ""}" data-act="refreshProjects"${appState.projects_refreshing ? " disabled" : ""}>${ICONS.refresh}<span>刷新状态</span></button>
-          <button class="btn btn-paper btn-sm" data-act="openScanRootsModal">${ICONS.folder}<span>扫描目录</span></button>
-          <button class="btn btn-primary btn-sm" data-act="openAddProject">${ICONS.plus}<span>添加项目</span></button>
-        </div>
-      </section>
-      <div id="projects-list-host">${renderProjectCardsHtml(filtered)}</div>
-    </div>`;
+    view.innerHTML = `<div class="projects-page">${renderProjectCardsHtml(items)}</div>`;
   }
 
   function openProjectModal(editItem) {
@@ -883,6 +833,10 @@
       </div>
       <form id="f-project" class="modal-body">
         <div class="field">
+          <label>项目名称</label>
+          <input id="prj-name" type="text" required placeholder="例如：AI Hub" value="${esc(editItem?.name || "")}" />
+        </div>
+        <div class="field">
           <label>本地项目路径</label>
           <div class="path-input-row">
             <input id="prj-path" type="text" required placeholder="例如：D:\\Projects\\life-hub" value="${esc(editItem?.path || "")}" ${isScanned ? "readonly" : ""} />
@@ -890,20 +844,13 @@
           </div>
         </div>
         <div class="field">
-          <label>显示名称 / 中文别名（可选）</label>
-          <input id="prj-name" type="text" placeholder="留空则默认使用文件夹名称" value="${esc(editItem?.name || "")}" />
+          <label>项目介绍</label>
+          <textarea id="prj-notes" rows="4" placeholder="介绍这个项目是干嘛的、有什么主要功能...">${esc(editItem?.notes || "")}</textarea>
         </div>
-        <div class="field">
-          <label>备注（可选）</label>
-          <textarea id="prj-notes" rows="4" placeholder="记录该项目用途、当前进度或提醒事项...">${esc(editItem?.notes || "")}</textarea>
-        </div>
-        <div style="display:flex;gap:18px;font-size:12.5px;">
-          <label class="check-row"><input id="prj-pinned" type="checkbox" ${editItem?.pinned ? "checked" : ""} /> 置顶到最前</label>
-          <label class="check-row"><input id="prj-hidden" type="checkbox" ${editItem?.hidden ? "checked" : ""} /> 暂时隐藏</label>
-        </div>
+        <label class="check-row"><input id="prj-pinned" type="checkbox" ${editItem?.pinned ? "checked" : ""} /> 置顶排在最前</label>
       </form>
       <div class="modal-footer">
-        ${isEdit && !isScanned ? '<button type="button" id="prj-remove" class="btn btn-danger-outline" style="margin-right:auto;">移除登记</button>' : ""}
+        ${isEdit && !isScanned ? '<button type="button" id="prj-remove" class="btn btn-danger-outline" style="margin-right:auto;">移除</button>' : ""}
         <button class="btn btn-soft" data-close-modal>取消</button>
         <button id="prj-submit" type="submit" form="f-project" class="btn btn-primary">${isEdit ? "保存修改" : "添加项目"}</button>
       </div>
@@ -940,81 +887,8 @@
           name: $("#prj-name").value.trim(),
           notes: $("#prj-notes").value,
           pinned: $("#prj-pinned").checked,
-          hidden: $("#prj-hidden").checked,
+          hidden: false,
         });
-        closeModal();
-      } catch (err) {
-        btn.disabled = false;
-        showToast(err.message, true);
-      }
-    });
-  }
-
-  function openScanRootsModal() {
-    let roots = [...(appState.project_scan_roots || [])];
-    openModal(`
-      <div class="modal-header">
-        <h3>配置自动扫描目录</h3>
-        <button class="btn btn-ghost btn-icon-only" data-close-modal>${ICONS.close}</button>
-      </div>
-      <div class="modal-body">
-        <div style="font-size:12.5px;color:var(--text-secondary);">AI Hub 会自动扫描以下目录的一级子文件夹并读取 Git 与预览状态（例如将来迁到 D:\\Projects 后，只需把新目录加到这里）。</div>
-        <div id="scan-roots-host" class="scan-root-list"></div>
-        <div class="path-input-row">
-          <input id="scan-root-input" type="text" placeholder="输入目录路径或点击浏览添加..." />
-          <button type="button" id="scan-root-browse" class="btn btn-paper btn-sm">浏览...</button>
-          <button type="button" id="scan-root-add" class="btn btn-soft btn-sm">加入</button>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-soft" data-close-modal>取消</button>
-        <button id="scan-roots-save" class="btn btn-primary">保存并重新扫描</button>
-      </div>
-    `);
-
-    const renderRoots = () => {
-      const host = $("#scan-roots-host");
-      host.innerHTML = roots.length === 0
-        ? '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">暂未配置扫描目录</div>'
-        : roots.map((r, idx) => `
-            <div class="scan-root-row">
-              <span class="scan-root-path">${esc(r)}</span>
-              <button type="button" class="btn btn-danger-outline btn-sm" data-del-root="${idx}">移除</button>
-            </div>`).join("");
-    };
-
-    renderRoots();
-
-    $("#scan-roots-host").addEventListener("click", (e) => {
-      const delBtn = e.target.closest("[data-del-root]");
-      if (!delBtn) return;
-      roots.splice(Number(delBtn.dataset.delRoot), 1);
-      renderRoots();
-    });
-
-    $("#scan-root-browse").addEventListener("click", async () => {
-      try {
-        const picked = await callHost("browseFolder", { title: "选择要扫描的工作区根目录" });
-        if (picked && !roots.some((r) => r.toLowerCase() === picked.toLowerCase())) {
-          roots.push(picked);
-          renderRoots();
-        }
-      } catch (err) { showToast(err.message, true); }
-    });
-
-    $("#scan-root-add").addEventListener("click", () => {
-      const val = $("#scan-root-input").value.trim().replace(/^"|"$/g, "");
-      if (!val) return;
-      if (!roots.some((r) => r.toLowerCase() === val.toLowerCase())) roots.push(val);
-      $("#scan-root-input").value = "";
-      renderRoots();
-    });
-
-    $("#scan-roots-save").addEventListener("click", async () => {
-      const btn = $("#scan-roots-save");
-      btn.disabled = true;
-      try {
-        await callHost("saveScanRoots", { roots });
         closeModal();
       } catch (err) {
         btn.disabled = false;
@@ -1081,9 +955,9 @@
           </div>
           <div class="backlog-row-side">
             <select class="backlog-inline-status st-${esc(item.status || "idea")}" data-backlog-status="${esc(item.id)}" aria-label="修改状态">${statusOpts}</select>
-            ${iconButton("btn-paper", "复制需求 Prompt 给 AI", ICONS.copy, { attrs: `data-act="copyBacklogPrompt" data-id="${esc(item.id)}"` })}
-            ${iconButton("btn-paper", "编辑需求", ICONS.edit, { attrs: `data-act="editBacklogItem" data-id="${esc(item.id)}"` })}
-            ${iconButton("btn-danger-outline", "删除需求", ICONS.trash, { attrs: `data-act="confirmDeleteBacklog" data-id="${esc(item.id)}"` })}
+            ${iconButton("copyBacklogPrompt", "复制需求 Prompt 给 AI", ICONS.copy, { attrs: `data-id="${esc(item.id)}"` })}
+            ${iconButton("editBacklogItem", "编辑需求", ICONS.edit, { attrs: `data-id="${esc(item.id)}"` })}
+            ${iconButton("confirmDeleteBacklog", "删除需求", ICONS.trash, { danger: true, attrs: `data-id="${esc(item.id)}"` })}
           </div>
         </div>
         ${expanded ? `<div class="backlog-detail">
@@ -2023,8 +1897,7 @@
     items.push({ title: "重启代理（Clash Verge）", sub: "网络异常时快速重启通道", tag: "操作", run: () => postAction("proxyRestart") });
     items.push({ title: "刷新额度（所有 Codex 账号）", sub: "查询实时 5h / 每周 / 每月额度", tag: "操作", run: () => postAction("refreshAllUsage") });
     items.push({ title: "一键全部退出", sub: "批量关闭运行中的外部应用与代理", tag: "操作", run: openBatchExitModal });
-    items.push({ title: "打开项目管理", sub: "集中查看本地仓库、复制路径与启动预览", tag: "导航", run: () => switchTab("projects") });
-    items.push({ title: "添加项目目录", sub: "登记本地项目路径到项目管理页", tag: "操作", run: () => { switchTab("projects"); openProjectModal(null); } });
+    items.push({ title: "打开项目管理", sub: "集中查看项目介绍、复制路径与启动预览", tag: "导航", run: () => switchTab("projects") });
     for (const prj of (appState.projects || []).filter((p) => !p.hidden)) {
       items.push({
         title: `复制项目路径 · ${prj.name}`,
@@ -2203,15 +2076,8 @@
     } else if (act === "openMoreMenu") {
       const acc = (appState.accounts || []).find((a) => a.id === id);
       if (acc) openAccountMoreMenu(actBtn, acc);
-    } else if (act === "setProjectViewMode") {
-      projectViewMode = actBtn.dataset.mode || "active";
-      renderProjects();
     } else if (act === "refreshProjects") {
       postAction("refreshProjects", { toast: "1" });
-    } else if (act === "openScanRootsModal") {
-      openScanRootsModal();
-    } else if (act === "openAddProject") {
-      openProjectModal(null);
     } else if (act === "copyProjectPath") {
       const p = actBtn.dataset.path || "";
       callHost("copyText", { text: p }).then(() => showToast("已复制项目路径")).catch((err) => showToast(err.message, true));
@@ -2221,10 +2087,6 @@
       postAction("launchProjectPreview", { path: actBtn.dataset.path || "" });
     } else if (act === "openProjectRemote") {
       postAction("openProjectRemote", { url: actBtn.dataset.url || "" });
-    } else if (act === "toggleProjectPinned") {
-      postAction("toggleProjectPinned", { id, path: actBtn.dataset.path || "", pinned: actBtn.dataset.pinned === "true" });
-    } else if (act === "toggleProjectHidden") {
-      postAction("toggleProjectHidden", { id, path: actBtn.dataset.path || "", hidden: actBtn.dataset.hidden === "true" });
     } else if (act === "editProjectItem") {
       const path = actBtn.dataset.path || "";
       const item = (appState.projects || []).find((it) => it.id === id || it.path === path);
@@ -2270,11 +2132,6 @@
   });
 
   document.addEventListener("input", (e) => {
-    if (e.target && e.target.id === "project-search") {
-      projectQuery = e.target.value;
-      renderProjects(true);
-      return;
-    }
     if (e.target && e.target.id === "backlog-search") {
       backlogQuery = e.target.value;
       renderBacklog(true);
