@@ -774,7 +774,9 @@
       const previewTip = item.preview_port ? "本地预览 · 端口 " + item.preview_port : "运行项目的启动预览脚本";
       const previewBtn = item.has_preview
         ? `<button class="btn btn-live btn-sm${previewBusy ? " is-spinning" : ""}" data-act="launchProjectPreview" data-id="${esc(item.id)}" title="${esc(previewTip)}" ${previewBusy ? 'disabled aria-busy="true"' : ""}>${previewBusy ? ICONS.refresh : ICONS.play}<span>${previewBusy ? "处理中" : previewRunning ? "打开" : "预览"}</span></button>`
-        : "";
+        : ((item.is_self || item.id === "prj-ai-hub" || String(item.folder_name || "").toLowerCase() === "ai-hub")
+          ? '<span class="project-self-pill" title="当前正在运行的桌面软件本体"><span class="project-self-dot" aria-hidden="true"></span><span>本体运行中</span></span>'
+          : "");
       const stopPreviewBtn = previewRunning
         ? `<button class="btn btn-danger-outline btn-sm project-stop-preview" data-act="stopProjectPreview" data-id="${esc(item.id)}" title="停止预览" aria-label="停止 ${esc(item.name)} 预览"><svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>`
         : "";

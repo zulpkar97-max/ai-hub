@@ -56,6 +56,7 @@ namespace CodexLauncher
         public string remote_url { get; set; }
         public bool has_preview { get; set; }
         public int preview_port { get; set; }
+        public bool is_self { get; set; }
         public long sort_ts { get; set; }
     }
 
@@ -319,6 +320,7 @@ namespace CodexLauncher
                 remote_url = "",
                 has_preview = exists && (preview != null || File.Exists(Path.Combine(path, "启动预览.ps1"))),
                 preview_port = preview == null ? 0 : preview.Port,
+                is_self = exists && File.Exists(Path.Combine(path, "AIHub.csproj")),
                 sort_ts = 0
             };
 
