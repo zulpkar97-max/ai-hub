@@ -687,67 +687,141 @@
     });
   }
 
+  function projectVisualTheme(item) {
+    const key = `${item.name || ""} ${item.folder_name || ""}`.toLowerCase();
+    if (key.includes("ai hub") || key.includes("ai-hub")) {
+      return {
+        tint: "tint-slate",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></svg>',
+      };
+    }
+    if (key.includes("astra") || key.includes("unknown")) {
+      return {
+        tint: "tint-amber",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><circle cx="6.5" cy="7" r="2.8"/><circle cx="17.5" cy="6.5" r="2.5"/><circle cx="12" cy="17.5" r="3"/><path d="M9 8.2 15 6.8M8 9.4l2.7 5.5M16.2 8.8l-2.6 6"/></svg>',
+      };
+    }
+    if (key.includes("留学") || key.includes("study")) {
+      return {
+        tint: "tint-mint",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M6 10.5V16c0 1.8 2.7 3.5 6 3.5s6-1.7 6-3.5v-5.5"/><path d="M21 9v6"/></svg>',
+      };
+    }
+    if (key.includes("runtime")) {
+      return {
+        tint: "tint-sky",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m8 9 3 3-3 3M13 15h3"/></svg>',
+      };
+    }
+    if (key.includes("portfolio")) {
+      return {
+        tint: "tint-violet",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>',
+      };
+    }
+    if (key.includes("ledger") || key.includes("life")) {
+      return {
+        tint: "tint-amber",
+        svg: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M12 8h4M12 12h4M12 16h2.5"/></svg>',
+      };
+    }
+    return {
+      tint: "tint-slate",
+      svg: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+    };
+  }
+
+  function compactPathLabel(fullPath) {
+    if (!fullPath) return "";
+    const parts = String(fullPath).split(/[\\/]+/).filter(Boolean);
+    if (parts.length <= 3) return fullPath;
+    return `${parts[0]}\\...\\${parts.slice(-2).join("\\")}`;
+  }
+
   function renderProjectCardsHtml(filtered) {
     if (filtered.length === 0) {
       return '<section class="surface-card"><div class="backlog-empty">当前筛选下没有项目，点击右上角「+ 添加项目」或配置「扫描目录」。</div></section>';
     }
-    return `<div class="projects-stack">${filtered.map((item) => {
-      let gitTags = "";
+    return `<div class="projects-grid">${filtered.map((item) => {
+      const theme = projectVisualTheme(item);
+
+      let stampClass = "st-plain";
+      let stampText = "普通目录";
       if (!item.exists) {
-        gitTags = '<span class="tag tag-danger">路径不存在</span>';
+        stampClass = "st-danger";
+        stampText = "路径缺失";
       } else if (item.is_git) {
-        const dirtyTag = item.dirty_count > 0
-          ? `<span class="tag tag-warn">${item.dirty_count} 处未提交</span>`
-          : '<span class="tag tag-ok">干净</span>';
-        gitTags = `<span class="tag tag-pro">${esc(item.branch || "HEAD")}</span>${dirtyTag}`;
-      } else {
-        gitTags = '<span class="tag">普通目录</span>';
+        if (item.dirty_count > 0) {
+          stampClass = "st-warn";
+          stampText = `${item.dirty_count} 处改动`;
+        } else {
+          stampClass = "st-ok";
+          stampText = "干净";
+        }
       }
 
-      const aliasTag = item.folder_name && item.name !== item.folder_name
+      const branchTag = item.is_git ? `<span class="tag tag-pro">${esc(item.branch || "HEAD")}</span>` : "";
+      const folderTag = item.folder_name && item.name !== item.folder_name
         ? `<span class="tag">${esc(item.folder_name)}</span>`
         : "";
-      const pinnedTag = item.pinned ? '<span class="tag tag-pro">置顶</span>' : "";
       const hiddenTag = item.hidden ? '<span class="tag">已隐藏</span>' : "";
+      const descText = item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。");
 
       const previewBtn = item.has_preview
-        ? `<button class="btn btn-live btn-sm" data-act="launchProjectPreview" data-path="${esc(item.path)}" title="运行项目根目录下的 启动预览.ps1">${ICONS.play}<span>启动预览</span></button>`
+        ? `<button class="btn btn-live btn-sm" data-act="launchProjectPreview" data-path="${esc(item.path)}" title="运行项目根目录下的 启动预览.ps1">${ICONS.play}<span>预览</span></button>`
         : "";
-
       const remoteBtn = item.remote_url
         ? iconButton("btn-paper", "打开 GitHub 仓库", ICONS.ext, { attrs: `data-act="openProjectRemote" data-url="${esc(item.remote_url)}"` })
         : "";
 
-      const pinTitle = item.pinned ? "取消置顶" : "置顶项目";
-      const hideTitle = item.hidden ? "恢复显示" : "隐藏项目";
-
-      return `<article class="surface-card project-card${item.hidden ? " is-hidden" : ""}">
+      return `<article class="project-card${item.hidden ? " is-hidden" : ""}">
         <header class="project-card-head">
-          <div class="project-card-title-row">
-            <span class="project-name">${esc(item.name)}</span>
-            ${pinnedTag}${aliasTag}${gitTags}${hiddenTag}
+          <div class="project-card-lead">
+            <div class="project-emblem ${theme.tint}">${theme.svg}</div>
+            <div class="project-head-meta">
+              <div class="project-name-row">
+                ${item.pinned ? '<span class="project-pin-dot" title="已置顶"></span>' : ""}
+                <span class="project-name" title="${esc(item.name)}">${esc(item.name)}</span>
+              </div>
+              <div class="project-sub-tags">${branchTag}${folderTag}${hiddenTag}</div>
+            </div>
           </div>
-          <div class="project-card-actions">
-            <button class="btn btn-paper btn-sm" data-act="copyProjectPath" data-path="${esc(item.path)}" title="复制本地路径，方便直接贴给 AI 助手">${ICONS.copy}<span>复制路径</span></button>
-            ${previewBtn}
-            ${iconButton("btn-paper", "在资源管理器中打开目录", ICONS.folder, { attrs: `data-act="openProjectFolder" data-path="${esc(item.path)}"` })}
-            ${remoteBtn}
-            ${iconButton(item.pinned ? "btn-soft" : "btn-paper", pinTitle, ICONS.pin, { attrs: `data-act="toggleProjectPinned" data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-pinned="${!item.pinned}"` })}
-            ${iconButton("btn-paper", "编辑项目别名与备注", ICONS.edit, { attrs: `data-act="editProjectItem" data-id="${esc(item.id)}" data-path="${esc(item.path)}"` })}
-            ${iconButton("btn-paper", hideTitle, item.hidden ? ICONS.eye : ICONS.eyeOff, { attrs: `data-act="toggleProjectHidden" data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-hidden="${!item.hidden}"` })}
-          </div>
+          <span class="project-stamp ${stampClass}">${esc(stampText)}</span>
         </header>
+
         <div class="project-card-body">
-          <div class="project-path-row">
-            <span class="project-path">${esc(item.path)}</span>
-          </div>
+          <p class="project-desc" title="${esc(descText)}">${esc(descText)}</p>
           ${item.is_git && (item.last_commit_time || item.last_commit_msg) ? `
-            <div class="project-commit-row">
-              <span class="project-commit-time">${esc(item.last_commit_time)}</span>
-              <span class="project-commit-msg" title="${esc(item.last_commit_msg)}">${esc(item.last_commit_msg)}</span>
-            </div>` : ""}
-          ${item.notes ? `<div class="project-notes">${esc(item.notes)}</div>` : ""}
+            <div class="project-commit-box">
+              <div class="project-commit-top">
+                <span>最近提交</span>
+                <span>${esc(item.last_commit_time)}</span>
+              </div>
+              <div class="project-commit-msg" title="${esc(item.last_commit_msg)}">${esc(item.last_commit_msg)}</div>
+            </div>` : `
+            <div class="project-commit-box">
+              <div class="project-commit-top"><span>目录类型</span><span>非 Git</span></div>
+              <div class="project-commit-msg">本地独立文件夹</div>
+            </div>`}
+          <div class="project-path-pill" data-act="copyProjectPath" data-path="${esc(item.path)}" title="点击复制完整路径：${esc(item.path)}">
+            ${ICONS.folder}
+            <span class="project-path">${esc(compactPathLabel(item.path))}</span>
+          </div>
         </div>
+
+        <footer class="project-card-foot">
+          <div class="project-foot-left">
+            <button class="btn btn-paper btn-sm" data-act="copyProjectPath" data-path="${esc(item.path)}" title="复制本地路径，方便贴给 AI 助手">${ICONS.copy}<span>复制路径</span></button>
+            ${previewBtn}
+          </div>
+          <div class="project-foot-right">
+            ${iconButton("btn-paper", "打开文件夹", ICONS.folder, { attrs: `data-act="openProjectFolder" data-path="${esc(item.path)}"` })}
+            ${remoteBtn}
+            ${iconButton(item.pinned ? "btn-soft" : "btn-paper", item.pinned ? "取消置顶" : "置顶项目", ICONS.pin, { attrs: `data-act="toggleProjectPinned" data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-pinned="${!item.pinned}"` })}
+            ${iconButton("btn-paper", "编辑项目名称与备注", ICONS.edit, { attrs: `data-act="editProjectItem" data-id="${esc(item.id)}" data-path="${esc(item.path)}"` })}
+            ${iconButton("btn-paper", item.hidden ? "恢复显示" : "隐藏项目", item.hidden ? ICONS.eye : ICONS.eyeOff, { attrs: `data-act="toggleProjectHidden" data-id="${esc(item.id)}" data-path="${esc(item.path)}" data-hidden="${!item.hidden}"` })}
+          </div>
+        </footer>
       </article>`;
     }).join("")}</div>`;
   }

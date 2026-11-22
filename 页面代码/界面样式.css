@@ -1645,111 +1645,253 @@ input:focus, textarea:focus, select:focus {
   gap: 10px;
 }
 
-/* Projects Page */
+/* Projects Page — Comic Rectangular Card Grid */
 .projects-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
-.projects-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .project-card {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 2px solid #141920;
+  border-radius: 9px;
+  box-shadow: 4px 4px 0 #141920;
+  overflow: hidden;
+  transition: transform var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
 }
 
 .project-card.is-hidden {
-  opacity: 0.78;
+  opacity: 0.72;
+  border-style: dashed;
+  box-shadow: 3px 3px 0 rgba(20, 25, 32, 0.28);
 }
 
 .project-card-head {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  padding: 11px 14px;
-  background: var(--bg-card-head);
+  gap: 10px;
+  padding: 13px 14px 12px;
+  background-color: #ffffff;
+  background-image: radial-gradient(rgba(20, 25, 32, 0.08) 1px, transparent 1px);
+  background-size: 9px 9px;
+  border-bottom: 2px solid #141920;
 }
 
-.project-card-title-row {
+.project-card-lead {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
+  gap: 11px;
   min-width: 0;
   flex: 1;
 }
 
-.project-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.project-card-actions {
+.project-emblem {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 2px solid #141920;
+  box-shadow: 2.5px 2.5px 0 #141920;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  justify-content: center;
   flex-shrink: 0;
+  background: #EDF1F4;
+  color: #141920;
 }
 
-.project-card-body {
-  padding: 9px 14px 11px;
-  border-top: 1px solid var(--hairline);
+.project-emblem .ic {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+.project-emblem.tint-mint { background: #E6F7EF; color: #0A6E49; }
+.project-emblem.tint-amber { background: #FFF4E2; color: #9A4E06; }
+.project-emblem.tint-sky { background: #EAF2FA; color: #1F4E79; }
+.project-emblem.tint-violet { background: #F3EEF9; color: #4A3575; }
+.project-emblem.tint-slate { background: #EDF1F4; color: #1D242E; }
+
+.project-head-meta {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
 }
 
-.project-path-row {
+.project-name-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.project-path {
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  word-break: break-all;
-  user-select: text;
-}
-
-.project-commit-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: 6px;
   min-width: 0;
 }
 
-.project-commit-time {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.project-commit-msg {
+.project-name {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #141920;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.project-notes {
+.project-sub-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.project-stamp {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2.5px 7px;
+  border-radius: 5px;
+  border: 1.6px solid #141920;
+  box-shadow: 1.5px 1.5px 0 rgba(20, 25, 32, 0.22);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.3;
+  background: #ffffff;
+  color: #141920;
+}
+
+.project-stamp.st-ok { background: #E6F7EF; color: #0A7B52; border-color: #0F8B5F; }
+.project-stamp.st-warn { background: #FFF5E7; color: #A65205; border-color: #C97719; }
+.project-stamp.st-danger { background: #FDF1F1; color: #B82222; border-color: #C52828; }
+.project-stamp.st-plain { background: #F3F5F7; color: #445060; border-color: #7A8696; }
+
+.project-card-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+  background: #ffffff;
+}
+
+.project-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 37px;
+}
+
+.project-commit-box {
+  padding: 7px 9px;
+  border: 1.4px solid #D3DAE3;
+  border-radius: 6px;
+  background: #FAFBFD;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-commit-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-commit-msg {
   font-size: 12px;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-path-pill {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1.3px dashed #B9C3D0;
+  border-radius: 5px;
+  background: #F8F9FA;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
+}
+
+.project-path-pill:hover {
+  background: #F0F2F5;
+  border-color: #232B35;
+}
+
+.project-path-pill .ic {
+  width: 13px;
+  height: 13px;
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.project-path {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+
+.project-card-foot {
+  padding: 9px 12px;
+  border-top: 1.5px solid #232B35;
+  background: #F9FAFB;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-foot-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.project-foot-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.project-pin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #141920;
+  transform: rotate(45deg);
+  flex-shrink: 0;
 }
 
 .path-input-row {
