@@ -923,7 +923,7 @@ kbd {
 
 .changelog-timeline {
   gap: 11px;
-  padding-top: 14px;
+  padding: 14px 18px 18px;
 }
 
 .changelog-modal-head {
@@ -940,6 +940,7 @@ kbd {
 }
 
 .changelog-day {
+  flex-shrink: 0;
   border: 1.8px solid #141920;
   border-radius: 8px;
   background: #ffffff;

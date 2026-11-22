@@ -105,6 +105,7 @@ namespace CodexLauncher
                     }
 
                     PushFullState();
+                    TryAutoApplyPendingUpdate();
                     if (IsVisible) PollNetwork();
                     CheckExpiryBalloon();
                     if (_quotaRefreshOnResume) CheckQuotaRefresh();
@@ -341,6 +342,7 @@ namespace CodexLauncher
                 { "version", CoreService.AppVersion },
                 { "safe_profile_actions", true },
                 { "pending_update", LocalUpdate.IsPending },
+                { "just_updated", _justUpdated },
                 { "brand_icon", CoreService.BrandIconUrl },
                 { "voice_recorder_hotkey", VoiceRecorderShortcut.Display },
                 { "quick_ledger_forms", CoreService.ReadQuickLedgerForms().Keys.ToArray() },

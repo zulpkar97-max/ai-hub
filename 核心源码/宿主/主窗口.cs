@@ -65,11 +65,16 @@ namespace CodexLauncher
         };
         private Dictionary<string, byte[]> _uiAssets;
         private readonly string _updateToken;
+        private readonly bool _justUpdated;
         private bool _startingUpdate;
+        private FileSystemWatcher _updateWatcher;
+        private DispatcherTimer _updateDebounce;
+        private bool _waitingPreviewStopForUpdate;
 
         public MainWindow(string updateToken)
         {
             _updateToken = updateToken;
+            _justUpdated = !string.IsNullOrEmpty(updateToken);
             _store = CoreService.LoadStore();
             _quotaAutoRefreshEnabled = _store.settings.quota_auto_refresh;
 
@@ -117,6 +122,7 @@ namespace CodexLauncher
             {
                 _hwnd = new WindowInteropHelper(this).Handle;
                 PositionStartupWindow();
+                WindowState = WindowState.Maximized;
                 var src = HwndSource.FromHwnd(_hwnd);
                 if (src != null)
                 {
@@ -273,6 +279,7 @@ namespace CodexLauncher
 
                 core.Navigate(WebViewBridge.DocumentUri);
                 SetupUiHotReload(uiDir);
+                SetupPendingUpdateWatcher();
 
                 _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
                 _pollTimer.Tick += (s3, e3) => RefreshAsync(false);
@@ -482,6 +489,7 @@ namespace CodexLauncher
             _bridge = null;
             if (_hwnd != IntPtr.Zero) HotkeyHelper.Unregister(_hwnd, HotkeyHelper.SCREENSHOT_HOTKEY_ID);
             try { if (_uiWatcher != null) _uiWatcher.Dispose(); } catch { }
+            try { if (_updateWatcher != null) _updateWatcher.Dispose(); } catch { }
             try { if (_wakeEvent != null) _wakeEvent.Set(); } catch { }
             try { if (_wakeEvent != null) _wakeEvent.Dispose(); } catch { }
             if (_trayIcon != null)
@@ -524,6 +532,75 @@ namespace CodexLauncher
         {
             if (!IsVisible) return;
             SendEventToJs("toast", new Dictionary<string, object> { { "text", text }, { "isError", isError } });
+        }
+
+        private void SetupPendingUpdateWatcher()
+        {
+            try
+            {
+                _updateDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                _updateDebounce.Tick += (s, e) =>
+                {
+                    _updateDebounce.Stop();
+                    TryAutoApplyPendingUpdate();
+                };
+
+                _updateWatcher = new FileSystemWatcher(CoreService.BaseDir, "CodexLauncher.next.exe")
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents = true
+                };
+                FileSystemEventHandler onNextExe = (s, e) =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _waitingPreviewStopForUpdate = false;
+                        _updateDebounce.Stop();
+                        _updateDebounce.Start();
+                    }));
+                };
+                _updateWatcher.Created += onNextExe;
+                _updateWatcher.Changed += onNextExe;
+                _updateWatcher.Renamed += (s, e) => onNextExe(s, e);
+
+                if (LocalUpdate.IsPending)
+                {
+                    _updateDebounce.Stop();
+                    _updateDebounce.Start();
+                }
+            }
+            catch { }
+        }
+
+        private void TryAutoApplyPendingUpdate()
+        {
+            if (_wakeStop || _startingUpdate) return;
+            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            if (!LocalUpdate.IsPendingReadyForAutoApply(exePath)) return;
+
+            if (ScreenshotSession.IsActive || _projectPreviews.HasActiveSessions)
+            {
+                if (!_waitingPreviewStopForUpdate)
+                {
+                    _waitingPreviewStopForUpdate = true;
+                    PushFullState();
+                    if (_projectPreviews.HasActiveSessions)
+                        SendToastToJs("检测到新版本，停止项目预览后将自动重启更新", false);
+                }
+                return;
+            }
+
+            try
+            {
+                LocalUpdate.Start();
+                _startingUpdate = true;
+                ForceQuit();
+            }
+            catch
+            {
+                PushFullState();
+            }
         }
 
         private void PushWindowState()

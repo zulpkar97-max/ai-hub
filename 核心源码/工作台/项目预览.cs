@@ -156,6 +156,11 @@ namespace CodexLauncher
         private readonly HashSet<int> _busy = new HashSet<int>();
         private bool _disposed;
 
+        internal bool HasActiveSessions
+        {
+            get { return _sessions.Count > 0 || _busy.Count > 0; }
+        }
+
         internal string State(int port)
         {
             if (_busy.Contains(port)) return "busy";

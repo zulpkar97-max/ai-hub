@@ -14,6 +14,31 @@ namespace CodexLauncher
 
         internal static bool IsPending { get { return File.Exists(PendingPath) && File.Exists(UpdaterPath); } }
 
+        internal static bool IsPendingReadyForAutoApply(string currentExePath)
+        {
+            if (!IsPending) return false;
+            try
+            {
+                string pendingHash = ReadSha256(PendingPath);
+                if (string.IsNullOrEmpty(pendingHash)) return false;
+                if (!string.IsNullOrEmpty(currentExePath) && File.Exists(currentExePath))
+                {
+                    string currentHash = ReadSha256(currentExePath);
+                    if (string.Equals(pendingHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private static string ReadSha256(string path)
+        {
+            using (var sha = SHA256.Create())
+            using (var input = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "");
+        }
+
         internal static void Start()
         {
             if (!IsPending) throw new InvalidOperationException("目前没有待安装的本地更新。");

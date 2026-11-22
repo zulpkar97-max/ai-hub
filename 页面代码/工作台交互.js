@@ -5,6 +5,7 @@
 
   let appState = null;
   let uiReadySent = false;
+  let tabRestored = false;
   let activeTab = "workspace";
   let sidebarToolsKey;
   let settingsRenderKey;
@@ -198,6 +199,7 @@
     if (activeTab === tab) return;
     if (projectDrag) finishProjectDrag(false);
     activeTab = tab;
+    try { localStorage.setItem("aihub_last_tab", tab); } catch (_) { }
     expandedSettings.clear();
     renderAll();
     const view = $("#view-content");
@@ -2397,6 +2399,19 @@
 
       if (msg.type === "state") {
         appState = msg.payload;
+        if (!tabRestored) {
+          tabRestored = true;
+          if (appState?.just_updated) {
+            try {
+              const saved = localStorage.getItem("aihub_last_tab");
+              if (["workspace", "projects", "backlog", "manage"].includes(saved) && saved !== activeTab) {
+                activeTab = saved;
+                if (saved === "manage") postAction("refreshInstalledApps");
+                else if (saved === "projects") postAction("refreshProjects");
+              }
+            } catch (_) { }
+          }
+        }
         renderAll();
         if (!uiReadySent) {
           uiReadySent = true;
