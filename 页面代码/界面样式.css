@@ -409,33 +409,52 @@ kbd {
 }
 
 .main-header {
-  height: 50px;
+  height: 52px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 0 22px;
-  background: var(--white);
-  border-bottom: var(--border-block);
+  padding: 0 10px 0 22px;
+  background: transparent;
+  border-bottom: none;
 }
 
 .header-left {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 11px;
 }
 
 .header-left h1 {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 16.5px;
   font-weight: 800;
   letter-spacing: 0.03em;
   color: var(--ink);
+  line-height: 1;
 }
 
 .header-sub {
-  font-size: 12px;
-  color: var(--faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #6E7580;
+  line-height: 1.1;
+  padding-left: 11px;
+  border-left: 1px solid #D4D7D5;
+}
+
+.header-sub:empty {
+  display: none;
+}
+
+.header-sub-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--ok-fill);
+  flex-shrink: 0;
 }
 
 .header-right {
@@ -453,43 +472,55 @@ kbd {
 .win-controls {
   display: flex;
   align-items: center;
-  height: 48px;
+  gap: 2px;
   margin-left: 4px;
 }
 
 .win-btn {
-  width: 40px;
-  height: 36px;
-  border: 1.5px solid transparent;
+  width: 34px;
+  height: 30px;
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--muted);
+  color: #6E7580;
   display: grid;
   place-items: center;
-  transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+  transition: background-color 85ms ease, color 85ms ease, border-color 85ms ease;
 }
 
 .win-btn svg {
-  width: 11px;
-  height: 11px;
+  width: 10.5px;
+  height: 10.5px;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1.35;
   fill: none;
 }
 
 .win-btn:hover {
-  background: var(--surface-hover);
+  background: var(--white);
+  border-color: #1A1D22;
   color: var(--ink);
 }
 
+.win-btn:active {
+  background: #ECEBE5;
+}
+
 .win-btn-close:hover {
-  background: var(--danger);
+  background: #C9524A;
+  border-color: var(--ink);
+  color: var(--white);
+}
+
+.win-btn-close:active {
+  background: #B92620;
+  border-color: var(--ink);
   color: var(--white);
 }
 
 .view-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 22px 24px;
+  padding: 6px 22px 24px;
 }
 
 .view-content::-webkit-scrollbar,
@@ -1693,7 +1724,7 @@ kbd {
   color: var(--faint);
 }
 
-/* ==================== POPOVER, MODALS, CMDK, CHANGELOG, TOAST ==================== */
+/* ==================== POPOVER, MODALS, CHANGELOG, TOAST ==================== */
 
 .popover-menu {
   position: fixed;
@@ -2008,62 +2039,6 @@ kbd {
 .changelog-type.improved { background: var(--sky); }
 .changelog-type.fixed { background: var(--coral); color: var(--danger); }
 .changelog-type.changed { background: var(--sand); }
-
-/* Ctrl+K Spotlight Command Palette */
-.cmdk-dialog {
-  width: 100%;
-  max-width: 560px;
-  background: var(--white);
-  border: var(--border-block);
-  box-shadow: 6px 6px 0 var(--ink);
-  display: flex;
-  flex-direction: column;
-  animation: popIn 140ms var(--ease);
-}
-.cmdk-input-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  border-bottom: var(--border-block);
-  background: var(--sand);
-}
-.cmdk-input-row input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: 13.5px;
-  color: var(--ink);
-}
-.cmdk-list {
-  max-height: 360px;
-  overflow-y: auto;
-}
-.cmdk-item {
-  width: 100%;
-  border: none;
-  border-bottom: 1px solid var(--hairline);
-  border-left: 4px solid transparent;
-  background: var(--white);
-  padding: 9px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  text-align: left;
-}
-.cmdk-item:hover, .cmdk-item.selected {
-  background: var(--bg-subtle);
-  border-left-color: var(--ink);
-}
-.cmdk-item-title {
-  font-size: 13px;
-  font-weight: 700;
-}
-.cmdk-item-sub {
-  font-size: 11px;
-  color: var(--faint);
-}
 
 /* Toast */
 .toast-host {

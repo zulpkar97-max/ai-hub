@@ -30,8 +30,6 @@
   let selectedBacklogId = "";
   const expandedSettings = new Set();
   const expandedBacklog = new Set();
-  let cmdkItems = [];
-  let cmdkSelected = 0;
   let networkBusy = "";
   let onNetworkPickerClose = null;
 
@@ -604,7 +602,9 @@
     const design = findOpenDesign();
     const running = Number(accounts.some((acc) => acc.running)) + Number(!!appState.antigravity?.running) + Number(!!design?.running);
     $("#view-title").textContent = "工作台";
-    $("#view-sub").textContent = running ? `${running} 个工具运行中 · 全部额度实时监控` : "全部核心工具就绪";
+    $("#view-sub").innerHTML = running
+      ? `<span class="header-sub-dot" aria-hidden="true"></span><span>${running} 运行中</span>`
+      : "全部就绪";
 
     const view = $("#view-content");
     if (view.querySelector("[data-web-identity]:focus")) return;
@@ -859,7 +859,7 @@
   function renderProjects() {
     const items = (appState.projects || []).filter((it) => !it.hidden);
     $("#view-title").textContent = "项目";
-    $("#view-sub").textContent = items.length ? `共 ${items.length} 个项目` : "暂无登记项目";
+    $("#view-sub").textContent = items.length ? `${items.length} 个项目` : "暂无项目";
 
     const view = $("#view-content");
     if ((projectDrag || projectDrop || savingProjectOrder) && view.dataset.page === "projects") return;
@@ -1287,7 +1287,7 @@
     const items = appState.backlog_items || [];
     const openCount = items.filter((it) => it.status !== "done" && it.status !== "paused").length;
     $("#view-title").textContent = "需求池";
-    $("#view-sub").textContent = items.length ? `共 ${items.length} 条 · ${openCount} 条待推进` : "记录灵感与待办开发事项";
+    $("#view-sub").textContent = items.length ? `${items.length} 条 · ${openCount} 待推进` : "暂无需求";
 
     const view = $("#view-content");
     const filtered = filterBacklogItems(items);
@@ -2190,98 +2190,6 @@
       </div>`, true);
   }
 
-  // ==================== CTRL+K COMMAND PALETTE ====================
-
-  function buildCmdkCatalog() {
-    if (!appState) return [];
-    const items = [];
-    for (const acc of appState.accounts || []) {
-      items.push({
-        title: `启动 Codex · ${acc.name}`,
-        sub: acc.auth?.email || "Codex 账号",
-        tag: acc.running ? "运行中" : "账号",
-        run: () => postAction("launchAccount", { id: acc.id }),
-      });
-    }
-    for (const sec of appState.tool_sections || []) {
-      for (const it of sec.items || []) {
-        if (it.uninstall_hint === "OpenAI.Codex" || it.id === "tool-gemini") continue;
-        items.push({
-          title: `${it.kind === "url" ? "打开" : "启动"} ${it.name}`,
-          sub: it.subtitle || sec.title,
-          tag: it.running ? "运行中" : "应用",
-          run: () => postAction("launchTool", { id: it.id }),
-        });
-      }
-    }
-    for (const tool of webTools) {
-      for (const cp of appState.chrome_profiles || []) {
-        items.push({
-          title: `打开 ${tool.name} · ${cp.name}`,
-          sub: cp.email || "Google 身份",
-          tag: "AI 工作工具",
-          run: () => postAction("launchChromeUrl", { tool: tool.id, dir: cp.dir }),
-        });
-      }
-    }
-    items.push({ title: "AI 录音笔", tag: "全局工具", sub: appState.voice_recorder_hotkey || "", run: () => postAction("startVoiceRecorder") });
-    if (appState.antigravity?.cli_installed)
-      items.push({ title: "刷新 Antigravity 额度", tag: "AI 工作工具", sub: "模型额度", run: () => postAction("refreshAntigravity") });
-    items.push({ title: `快捷截图与提字（${appState.screenshot?.hotkey || "Ctrl+Shift+A"}）`, sub: "框选 · 标注 · OCR 提取文字 · 钉在桌面", tag: "工具", run: () => postAction("startScreenshot") });
-    const ledger = appState.quick_ledger_forms?.[0];
-    if (ledger) items.push({ title: "记账", sub: "打开飞书账本", tag: "工具", run: () => postAction("openLedgerForm", { id: ledger }) });
-    items.push({ title: "一键隐藏已收纳的 AI 桌面图标", sub: "移入本地收纳夹，随时可一键恢复", tag: "桌面", run: () => postAction("hideAllDesktopShortcuts", { category: "ai" }) });
-    items.push({ title: "恢复全部隐藏的桌面图标", sub: "将收纳夹里的快捷方式放回桌面", tag: "桌面", run: () => postAction("restoreAllDesktopShortcuts") });
-    items.push({ title: appState.proxy?.running ? "Clash Verge · 打开面板" : "Clash Verge · 启动代理", sub: appState.proxy?.running ? "当前运行中" : "当前未启动", tag: "网络", run: () => postAction("proxyOpen") });
-    items.push({ title: "重启代理（Clash Verge）", sub: "网络异常时快速重启通道", tag: "操作", run: () => postAction("proxyRestart") });
-    items.push({ title: "刷新额度（所有 Codex 账号）", sub: "查询实时 5h / 每周 / 每月额度", tag: "操作", run: () => postAction("refreshAllUsage") });
-    items.push({ title: "一键全部退出", sub: "批量关闭运行中的外部应用与代理", tag: "操作", run: openBatchExitModal });
-    items.push({ title: "打开项目管理", sub: "集中查看项目介绍、复制路径与启动预览", tag: "导航", run: () => switchTab("projects") });
-    for (const prj of (appState.projects || []).filter((p) => !p.hidden)) {
-      items.push({
-        title: `复制项目路径 · ${prj.name}`,
-        sub: prj.path,
-        tag: "项目",
-        run: () => callHost("copyText", { text: prj.path }).then(() => showToast(`已复制路径：${prj.name}`)).catch((err) => showToast(err.message, true)),
-      });
-    }
-    items.push({ title: "打开需求池", sub: "查看与管理 AI Hub / Life Hub 需求条目", tag: "导航", run: () => switchTab("backlog") });
-    items.push({ title: "新建需求（需求池）", sub: "记录新想法与讨论要点", tag: "操作", run: () => { switchTab("backlog"); openBacklogModal(null); } });
-    items.push({ title: "查看更新日志", sub: "更新日志.md", tag: "信息", run: openChangelogModal });
-    return items;
-  }
-
-  function renderCmdkList(query) {
-    const q = (query || "").trim().toLowerCase();
-    const all = buildCmdkCatalog();
-    cmdkItems = q ? all.filter((x) => (x.title + " " + x.sub + " " + x.tag).toLowerCase().includes(q)) : all;
-    cmdkSelected = Math.min(cmdkSelected, Math.max(0, cmdkItems.length - 1));
-    $("#cmdk-list").innerHTML = cmdkItems.length === 0
-      ? `<div style="padding:18px;text-align:center;font-size:12.5px;color:var(--text-muted);">未匹配到相关操作</div>`
-      : cmdkItems.map((it, idx) => `
-          <button class="cmdk-item ${idx === cmdkSelected ? "selected" : ""}" data-cmdk-idx="${idx}">
-            <div>
-              <div class="cmdk-item-title">${esc(it.title)}</div>
-              <div class="cmdk-item-sub">${esc(it.sub)}</div>
-            </div>
-            <span class="tag">${esc(it.tag)}</span>
-          </button>
-        `).join("");
-  }
-
-  function openCmdk() {
-    closePopover();
-    cmdkSelected = 0;
-    $("#cmdk-input").value = "";
-    renderCmdkList("");
-    showLayer($("#cmdk-backdrop"));
-    $("#cmdk-input").focus();
-  }
-
-  function closeCmdk() {
-    dismissLayer($("#cmdk-backdrop"));
-  }
-
   // ==================== EVENTS & WIRING ====================
 
   document.addEventListener("mousedown", (e) => {
@@ -2310,21 +2218,8 @@
 
   $("#btn-batch-exit").addEventListener("click", openBatchExitModal);
 
-  $("#cmdk-input").addEventListener("input", (e) => { cmdkSelected = 0; renderCmdkList(e.target.value); });
-  $("#cmdk-input").addEventListener("keydown", (e) => {
-    if (e.key === "Escape") return closeCmdk();
-    if (e.key === "ArrowDown") { e.preventDefault(); cmdkSelected = Math.min(cmdkItems.length - 1, cmdkSelected + 1); renderCmdkList($("#cmdk-input").value); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); cmdkSelected = Math.max(0, cmdkSelected - 1); renderCmdkList($("#cmdk-input").value); }
-    else if (e.key === "Enter" && cmdkItems[cmdkSelected]) { e.preventDefault(); const fn = cmdkItems[cmdkSelected].run; closeCmdk(); fn(); }
-  });
-
   document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-      e.preventDefault();
-      if (layerIsOpen($("#cmdk-backdrop"))) closeCmdk();
-      else openCmdk();
-    } else if (e.key === "Escape") {
-      closeCmdk();
+    if (e.key === "Escape") {
       closeModal();
       closePopover();
     }
@@ -2345,15 +2240,6 @@
   document.addEventListener("click", (e) => {
     if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"]')) closePopover();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
-    if (e.target === $("#cmdk-backdrop")) return closeCmdk();
-
-    const cmdkBtn = e.target.closest("[data-cmdk-idx]");
-    if (cmdkBtn) {
-      const item = cmdkItems[Number(cmdkBtn.dataset.cmdkIdx)];
-      closeCmdk();
-      if (item) item.run();
-      return;
-    }
 
     const actBtn = e.target.closest("[data-act]");
     if (!actBtn) return;
