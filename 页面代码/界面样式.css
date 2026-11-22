@@ -409,14 +409,14 @@ kbd {
 }
 
 .main-header {
-  height: 52px;
+  height: 46px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px 0 22px;
-  background: transparent;
-  border-bottom: none;
+  padding: 0 8px 0 22px;
+  background: var(--white);
+  border-bottom: 1px solid #CFD5D3;
 }
 
 .header-left {
@@ -427,7 +427,7 @@ kbd {
 
 .header-left h1 {
   margin: 0;
-  font-size: 16.5px;
+  font-size: 14.5px;
   font-weight: 800;
   letter-spacing: 0.03em;
   color: var(--ink);
@@ -440,10 +440,10 @@ kbd {
   gap: 6px;
   font-size: 11.5px;
   font-weight: 500;
-  color: #6E7580;
+  color: #636A75;
   line-height: 1.1;
   padding-left: 11px;
-  border-left: 1px solid #D4D7D5;
+  border-left: 1px solid #DCDFE0;
 }
 
 .header-sub:empty {
@@ -473,15 +473,19 @@ kbd {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-left: 4px;
+}
+
+.header-actions:not(:empty) + .win-controls {
+  padding-left: 8px;
+  border-left: 1px solid #E4E7E6;
 }
 
 .win-btn {
   width: 34px;
-  height: 30px;
+  height: 28px;
   border: 1px solid transparent;
   background: transparent;
-  color: #6E7580;
+  color: #5A616C;
   display: grid;
   place-items: center;
   transition: background-color 85ms ease, color 85ms ease, border-color 85ms ease;
@@ -496,13 +500,13 @@ kbd {
 }
 
 .win-btn:hover {
-  background: var(--white);
+  background: #F7F8F7;
   border-color: #1A1D22;
   color: var(--ink);
 }
 
 .win-btn:active {
-  background: #ECEBE5;
+  background: #ECEEEB;
 }
 
 .win-btn-close:hover {
@@ -520,7 +524,7 @@ kbd {
 .view-content {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 22px 24px;
+  padding: 14px 22px 24px;
 }
 
 .view-content::-webkit-scrollbar,
