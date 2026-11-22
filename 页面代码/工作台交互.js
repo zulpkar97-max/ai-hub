@@ -259,28 +259,24 @@
     const shotKey = shot?.enabled && shot.registered ? shot.hotkey : "";
     const voiceKey = appState.voice_recorder_hotkey || "";
     const ledger = appState.quick_ledger_forms?.[0];
-    const version = appState.version || "v5.9.0";
+    const version = appState.version || "v5.9.1";
     const key = JSON.stringify([shotKey, voiceKey, ledger, version]);
     if (key === sidebarToolsKey) return;
     sidebarToolsKey = key;
     $("#sidebar-tools").innerHTML = `
-      <div class="tools-hdr">QUICK BLOCKS</div>
+      <div class="tools-hdr">快捷工具</div>
       <div class="tools-grid">
-        <button type="button" class="tool-tile" data-act="startScreenshot" title="${esc(shotKey || "截图")}">
-          <span class="tool-tile-top">${ICONS.crop}<span>截图</span></span>
-          <span class="tool-tile-sub mono">${shotKey ? esc(shortcutLabel(shotKey)) : "点击"}</span>
+        <button type="button" class="tool-tile" data-act="startScreenshot" title="${esc(shotKey ? `截图 (${shotKey})` : "截图")}">
+          ${ICONS.crop}<span>截图</span>
         </button>
-        <button type="button" class="tool-tile" data-act="startVoiceRecorder" title="${esc(voiceKey || "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
-          <span class="tool-tile-top">${ICONS.mic}<span>录音笔</span></span>
-          <span class="tool-tile-sub mono">${voiceKey ? esc(shortcutLabel(voiceKey)) : "未启用"}</span>
+        <button type="button" class="tool-tile" data-act="startVoiceRecorder" title="${esc(voiceKey ? `AI 录音笔 (${voiceKey})` : "AI 录音笔不可用")}" ${voiceKey ? "" : "disabled"}>
+          ${ICONS.mic}<span>录音笔</span>
         </button>
         ${ledger ? `<button type="button" class="tool-tile" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
-          <span class="tool-tile-top">${ICONS.ledger}<span>记账</span></span>
-          <span class="tool-tile-sub mono">WEB ↗</span>
+          ${ICONS.ledger}<span>记账</span>
         </button>` : ""}
-        <button type="button" class="tool-tile" data-act="openChangelog" title="查看更新日志">
-          <span class="tool-tile-top">${ICONS.changelog}<span>日志</span></span>
-          <span class="tool-tile-sub mono">${esc(version.toUpperCase())}</span>
+        <button type="button" class="tool-tile" data-act="openChangelog" title="查看更新日志 (${esc(version)})">
+          ${ICONS.changelog}<span>日志</span>
         </button>
       </div>`;
   }
