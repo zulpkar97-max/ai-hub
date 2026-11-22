@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.5";
+        public const string AppVersion = "v5.9.6";
         private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 

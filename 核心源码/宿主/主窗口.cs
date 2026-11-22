@@ -55,6 +55,7 @@ namespace CodexLauncher
         private IntPtr _hwnd = IntPtr.Zero;
         private bool _hotkeyRegistered = false;
         private string _hotkeyError = "";
+        private DispatcherTimer _screenshotDelayTimer;
         private const string UiProtocol = "4";
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
@@ -225,14 +226,20 @@ namespace CodexLauncher
         private void StartScreenshotNow(int delayMs)
         {
             if (ScreenshotSession.IsActive) return;
+            if (_screenshotDelayTimer != null)
+            {
+                _screenshotDelayTimer.Stop();
+                _screenshotDelayTimer = null;
+            }
             Action run = () =>
             {
+                if (ScreenshotSession.IsActive) return;
                 ScreenshotSession.Start((msg, isErr) =>
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (IsVisible && _webReady) SendToastToJs(msg, isErr);
-                        else if (isErr) ShowDesktopNotification("AI Hub 截图", msg, "warn", 4500);
+                        if (IsVisible && IsActive && _webReady) SendToastToJs(msg, isErr);
+                        else ShowDesktopNotification("AI BASE 截图", msg, isErr ? "danger" : "ok", isErr ? 4500 : 1800);
                     }));
                 });
             };
@@ -240,7 +247,13 @@ namespace CodexLauncher
             if (delayMs > 0)
             {
                 var dt = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delayMs) };
-                dt.Tick += (s, e) => { dt.Stop(); run(); };
+                _screenshotDelayTimer = dt;
+                dt.Tick += (s, e) =>
+                {
+                    dt.Stop();
+                    if (_screenshotDelayTimer == dt) _screenshotDelayTimer = null;
+                    run();
+                };
                 dt.Start();
             }
             else

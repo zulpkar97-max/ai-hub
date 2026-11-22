@@ -150,6 +150,13 @@ namespace CodexLauncher
             if (tone == "warn") accent = UiHelpers.WarnBg;
             else if (tone == "error" || tone == "danger") accent = UiHelpers.DangerBg;
 
+            var shadowRect = new Rectangle
+            {
+                Fill = UiHelpers.BorderStrong,
+                Margin = new Thickness(10, 10, 6, 6),
+                IsHitTestVisible = false
+            };
+
             var outer = new Border
             {
                 Width = 318,
@@ -157,17 +164,13 @@ namespace CodexLauncher
                 BorderBrush = UiHelpers.BorderStrong,
                 BorderThickness = new Thickness(1.5),
                 CornerRadius = new CornerRadius(0),
-                Margin = new Thickness(8),
-                Cursor = onClick != null ? Cursors.Hand : Cursors.Arrow,
-                Effect = new DropShadowEffect
-                {
-                    Color = UiHelpers.TextPrimary.Color,
-                    BlurRadius = 0,
-                    ShadowDepth = 2,
-                    Direction = 315,
-                    Opacity = 1.0
-                }
+                Margin = new Thickness(8, 8, 8, 8),
+                Cursor = onClick != null ? Cursors.Hand : Cursors.Arrow
             };
+
+            var outerWrap = new Grid();
+            outerWrap.Children.Add(shadowRect);
+            outerWrap.Children.Add(outer);
 
             var rootGrid = new Grid();
             rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3.5) });
@@ -259,7 +262,7 @@ namespace CodexLauncher
             contentStack.Children.Add(body);
             rootGrid.Children.Add(contentStack);
             outer.Child = rootGrid;
-            Content = outer;
+            Content = outerWrap;
 
             outer.MouseLeftButtonUp += (s, e) =>
             {
@@ -268,7 +271,7 @@ namespace CodexLauncher
                 if (onClick != null) onClick();
             };
 
-            _dismissTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(2500, durationMs)) };
+            _dismissTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(1500, durationMs)) };
             _dismissTimer.Tick += (s, e) => { _dismissTimer.Stop(); Dismiss(); };
 
             MouseEnter += (s, e) => _dismissTimer.Stop();

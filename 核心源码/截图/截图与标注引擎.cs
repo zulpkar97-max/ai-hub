@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -16,7 +16,6 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -29,7 +28,6 @@ using WpfPoint = System.Windows.Point;
 using WpfRect = System.Windows.Rect;
 using WpfRectangle = System.Windows.Shapes.Rectangle;
 using GdiColor = System.Drawing.Color;
-using GdiPointF = System.Drawing.PointF;
 using GdiRect = System.Drawing.Rectangle;
 
 namespace CodexLauncher
@@ -57,24 +55,38 @@ namespace CodexLauncher
             vk = 0;
             if (string.IsNullOrWhiteSpace(spec)) return false;
 
+            uint pureMod = 0;
+            bool allowNoModifier = false;
             string[] parts = spec.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (string raw in parts)
             {
                 string p = raw.Trim().ToUpperInvariant();
-                if (p == "CTRL" || p == "CONTROL") modifiers |= MOD_CONTROL;
-                else if (p == "SHIFT") modifiers |= MOD_SHIFT;
-                else if (p == "ALT") modifiers |= MOD_ALT;
-                else if (p == "WIN") modifiers |= MOD_WIN;
+                if (p == "CTRL" || p == "CONTROL") { modifiers |= MOD_CONTROL; pureMod |= MOD_CONTROL; }
+                else if (p == "SHIFT") { modifiers |= MOD_SHIFT; pureMod |= MOD_SHIFT; }
+                else if (p == "ALT") { modifiers |= MOD_ALT; pureMod |= MOD_ALT; }
+                else if (p == "WIN") { modifiers |= MOD_WIN; pureMod |= MOD_WIN; }
+                else if (p == "PRINTSCREEN" || p == "PRTSC" || p == "SNAPSHOT")
+                {
+                    vk = 0x2C;
+                    allowNoModifier = true;
+                }
+                else if (p == "SPACE") vk = 0x20;
+                else if (p == "~" || p == "`" || p == "OEM3") vk = 0xC0;
                 else if (p.Length == 1 && p[0] >= 'A' && p[0] <= 'Z') vk = (uint)p[0];
                 else if (p.Length == 1 && p[0] >= '0' && p[0] <= '9') vk = (uint)p[0];
                 else if (p.StartsWith("F") && p.Length >= 2)
                 {
                     int fn;
                     if (int.TryParse(p.Substring(1), out fn) && fn >= 1 && fn <= 12)
+                    {
                         vk = (uint)(0x70 + fn - 1);
+                        allowNoModifier = true;
+                    }
                 }
             }
-            return vk != 0;
+            if (vk == 0) return false;
+            if (!allowNoModifier && pureMod == 0) return false;
+            return true;
         }
 
         public static bool Register(IntPtr hwnd, int id, string spec, out string errorMsg)
@@ -354,12 +366,30 @@ namespace CodexLauncher
         {
             var rows = new bool[12];
             var columns = new bool[16];
-            for (int y = 0; y < rows.Length; y++)
-            for (int x = 0; x < columns.Length; x++)
+            var lockRect = new GdiRect(0, 0, bitmap.Width, bitmap.Height);
+            BitmapData data = bitmap.LockBits(lockRect, ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
             {
-                var pixel = bitmap.GetPixel((2 * x + 1) * bitmap.Width / (2 * columns.Length),
-                    (2 * y + 1) * bitmap.Height / (2 * rows.Length));
-                if (pixel.R > 3 || pixel.G > 3 || pixel.B > 3) rows[y] = columns[x] = true;
+                int stride = data.Stride;
+                int w = bitmap.Width;
+                int h = bitmap.Height;
+                byte[] rowBuf = new byte[w * 4];
+                for (int y = 0; y < rows.Length; y++)
+                {
+                    int py = (2 * y + 1) * h / (2 * rows.Length);
+                    Marshal.Copy(IntPtr.Add(data.Scan0, py * stride), rowBuf, 0, rowBuf.Length);
+                    for (int x = 0; x < columns.Length; x++)
+                    {
+                        int px = (2 * x + 1) * w / (2 * columns.Length);
+                        int off = px * 4;
+                        if (rowBuf[off] > 3 || rowBuf[off + 1] > 3 || rowBuf[off + 2] > 3)
+                            rows[y] = columns[x] = true;
+                    }
+                }
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
             }
             return Math.Max(BlankEdge(rows), BlankEdge(columns));
         }
@@ -415,6 +445,55 @@ namespace CodexLauncher
             {
                 DeleteObject(hBmp);
             }
+        }
+    }
+
+    internal static class ClipboardHelper
+    {
+        public static bool TrySetImage(Bitmap bmp, out string error)
+        {
+            error = "";
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    using (var pngStream = new MemoryStream())
+                    {
+                        bmp.Save(pngStream, ImageFormat.Png);
+                        pngStream.Position = 0;
+                        var data = new WinForms.DataObject();
+                        data.SetData(WinForms.DataFormats.Bitmap, true, bmp);
+                        data.SetData("PNG", false, pngStream);
+                        WinForms.Clipboard.SetDataObject(data, true);
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                    if (attempt < 4) Thread.Sleep(30);
+                }
+            }
+            return false;
+        }
+
+        public static bool TrySetText(string text, out string error)
+        {
+            error = "";
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    WinForms.Clipboard.SetText(text ?? "");
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                    if (attempt < 4) Thread.Sleep(30);
+                }
+            }
+            return false;
         }
     }
 
@@ -514,7 +593,8 @@ namespace CodexLauncher
         Arrow,
         Brush,
         Mosaic,
-        Text
+        Text,
+        Stamp
     }
 
     internal class AnnotationItem
@@ -527,16 +607,28 @@ namespace CodexLauncher
         public List<WpfPoint> Points;
         public string Text;
         public double FontSize;
+        public int StampNumber;
+        public int MosaicBlockSize = 10;
+        public UIElement CachedVisual;
     }
 
     internal sealed class SelectionShade : FrameworkElement
     {
         private readonly DrawingVisual _visual = new DrawingVisual();
-        private readonly SolidColorBrush _shade = new SolidColorBrush(WpfColor.FromArgb(0x6E, 0x09, 0x0D, 0x16));
+        private readonly SolidColorBrush _shade = new SolidColorBrush(WpfColor.FromArgb(0x73, 0x1A, 0x19, 0x17));
+        private readonly SolidColorBrush _badgeBg = new SolidColorBrush(WpfColor.FromRgb(0x1A, 0x19, 0x17));
+        private readonly System.Windows.Media.Pen _badgeRim = new System.Windows.Media.Pen(WpfBrushes.White, 1.0);
+        private static readonly Typeface MonoTypeface = new Typeface(
+            new System.Windows.Media.FontFamily("Cascadia Mono, Consolas, Segoe UI"),
+            FontStyles.Normal,
+            FontWeights.Bold,
+            FontStretches.Normal);
 
         internal SelectionShade()
         {
             _shade.Freeze();
+            _badgeBg.Freeze();
+            _badgeRim.Freeze();
             IsHitTestVisible = false;
             AddVisualChild(_visual);
         }
@@ -548,7 +640,7 @@ namespace CodexLauncher
             return _visual;
         }
 
-        internal void Paint(WpfRect monitor, WpfRect opening, System.Windows.Media.Pen outline = null)
+        internal void Paint(WpfRect monitor, WpfRect opening, System.Windows.Media.Pen outline = null, string sizeLabel = null, double uiScale = 1.0)
         {
             using (var drawing = _visual.RenderOpen())
             {
@@ -570,9 +662,27 @@ namespace CodexLauncher
                     double inset = outline.Thickness / 2;
                     if (cutout.Width > outline.Thickness && cutout.Height > outline.Thickness)
                     {
-                        cutout.Inflate(-inset, -inset);
-                        drawing.DrawRectangle(null, outline, cutout);
+                        var frameRect = cutout;
+                        frameRect.Inflate(-inset, -inset);
+                        drawing.DrawRectangle(null, outline, frameRect);
                     }
+                }
+
+                if (!string.IsNullOrEmpty(sizeLabel))
+                {
+                    double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+                    var ft = new FormattedText(sizeLabel, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                        MonoTypeface, 11.0 * uiScale, WpfBrushes.White, dpi);
+                    double padX = 7.0 * uiScale;
+                    double padY = 3.0 * uiScale;
+                    double bw = ft.Width + padX * 2;
+                    double bh = ft.Height + padY * 2;
+                    double margin = 6.0 * uiScale;
+                    double bx = Math.Max(monitor.Left + margin, Math.Min(monitor.Right - bw - margin, cutout.Left));
+                    double by = cutout.Top - bh - margin >= monitor.Top + margin ? cutout.Top - bh - margin : cutout.Top + margin;
+                    var badgeRect = new WpfRect(bx, by, bw, bh);
+                    drawing.DrawRectangle(_badgeBg, _badgeRim, badgeRect);
+                    drawing.DrawText(ft, new WpfPoint(bx + padX, by + padY));
                 }
             }
         }
@@ -587,31 +697,44 @@ namespace CodexLauncher
         private readonly Action _closeSession;
         private readonly Action<string, bool> _notify;
 
+        // Cached BGRA32 raw pixels for lock-free loupe magnifier
+        private byte[] _rawPixels;
+        private int _rawStride;
+        private int _rawWidth;
+        private int _rawHeight;
+
         private Grid _root;
         private HwndSource _source;
         private Canvas _canvas;
         private SelectionShade _shade;
         private Border _selFrame;
         private Border _hoverFrame;
-        private Border _sizePill;
+        private Grid _sizePill;
         private TextBlock _sizeText;
         private Canvas _annotCanvas;
+        private Grid _topHintBar;
 
         // Magnifier loupe
-        private Border _loupeCard;
+        private Grid _loupeCard;
         private System.Windows.Controls.Image _loupeImg;
+        private WriteableBitmap _loupeBitmap;
+        private byte[] _loupeBuf;
         private Border _loupeColorDot;
         private TextBlock _loupeInfoText;
-        private string _lastHexColor = "#000000";
+        private bool _loupeHexMode = true;
+        private string _lastColorText = "#000000";
 
         // Floating toolbar & color sub-bar
-        private Border _toolbar;
-        private Border _subBar;
+        private Grid _toolbar;
+        private Grid _subBar;
         private readonly Dictionary<DrawTool, Button> _toolButtons = new Dictionary<DrawTool, Button>();
-        private readonly List<Border> _colorDots = new List<Border>();
         private readonly List<Border> _sizeDots = new List<Border>();
+        private readonly List<Border> _colorFrames = new List<Border>();
+        private readonly List<Border> _colorDots = new List<Border>();
         private TextBlock _strokeHud;
-        private Border _strokeHudWrap;
+        private Grid _strokeHudWrap;
+        private DispatcherTimer _strokeHudTimer;
+        private DrawingBrush _screentoneBrush;
 
         // 8 resize handles
         private readonly Border[] _handles = new Border[8];
@@ -630,10 +753,12 @@ namespace CodexLauncher
         private WpfRect _dragOrigRect;
 
         private DrawTool _activeTool = DrawTool.None;
-        private WpfColor _activeColor = WpfColor.FromRgb(0xEF, 0x44, 0x44);
+        private WpfColor _activeColor = WpfColor.FromRgb(0xC2, 0x48, 0x40);
         private double _activeThickness = 3.5;
+        private int _mosaicBlockSize = 10;
 
         private readonly List<AnnotationItem> _annotations = new List<AnnotationItem>();
+        private readonly List<AnnotationItem> _redoStack = new List<AnnotationItem>();
         private AnnotationItem _currentAnnot = null;
         private TextBox _activeTextBox = null;
         private WpfPoint _activeTextPos;
@@ -647,12 +772,12 @@ namespace CodexLauncher
 
         private static readonly WpfColor[] PaletteColors = new[]
         {
-            WpfColor.FromRgb(0xEF, 0x44, 0x44), // Red
-            WpfColor.FromRgb(0xF5, 0x9E, 0x0B), // Amber
-            WpfColor.FromRgb(0x10, 0xB9, 0x81), // Emerald
-            WpfColor.FromRgb(0x3B, 0x82, 0xF6), // Blue
-            WpfColor.FromRgb(0xFF, 0xFF, 0xFF), // White
-            WpfColor.FromRgb(0x18, 0x18, 0x1B)  // Charcoal
+            WpfColor.FromRgb(0xC2, 0x48, 0x40), // AA Vermilion
+            WpfColor.FromRgb(0xE3, 0x8D, 0x17), // Amber
+            WpfColor.FromRgb(0x14, 0xA0, 0x6D), // Emerald
+            WpfColor.FromRgb(0x25, 0x63, 0xEB), // Architectural Blue
+            WpfColor.FromRgb(0xFF, 0xFF, 0xFF), // Pure White
+            WpfColor.FromRgb(0x1A, 0x19, 0x17)  // Warm Ink
         };
 
         private static readonly double[] StrokePresets = new[] { 2.0, 3.5, 6.0 };
@@ -672,6 +797,8 @@ namespace CodexLauncher
             _closeSession = closeSession;
             _notify = notify;
 
+            CacheRawPixels();
+            _screentoneBrush = BuildScreentoneBrush();
             BuildVisualTree();
 
             _root.SizeChanged += (s, e) =>
@@ -688,6 +815,74 @@ namespace CodexLauncher
                     _loupeCard.Visibility = Visibility.Collapsed;
             };
             _root.PreviewMouseWheel += OnPreviewMouseWheel;
+        }
+
+        private void CacheRawPixels()
+        {
+            if (_rawBmp == null) return;
+            _rawWidth = _rawBmp.Width;
+            _rawHeight = _rawBmp.Height;
+            _rawStride = _rawWidth * 4;
+            _rawPixels = new byte[_rawStride * _rawHeight];
+            var rect = new GdiRect(0, 0, _rawWidth, _rawHeight);
+            BitmapData data = _rawBmp.LockBits(rect, ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                if (data.Stride == _rawStride)
+                {
+                    Marshal.Copy(data.Scan0, _rawPixels, 0, _rawPixels.Length);
+                }
+                else
+                {
+                    for (int y = 0; y < _rawHeight; y++)
+                        Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), _rawPixels, y * _rawStride, _rawStride);
+                }
+            }
+            finally
+            {
+                _rawBmp.UnlockBits(data);
+            }
+        }
+
+        private static DrawingBrush BuildScreentoneBrush()
+        {
+            var group = new DrawingGroup();
+            var bg = new GeometryDrawing(
+                new SolidColorBrush(WpfColor.FromRgb(0xFA, 0xF8, 0xF5)),
+                null,
+                new RectangleGeometry(new WpfRect(0, 0, 4, 4)));
+            var dotsGeom = new GeometryGroup();
+            dotsGeom.Children.Add(new RectangleGeometry(new WpfRect(0, 0, 1, 1)));
+            dotsGeom.Children.Add(new RectangleGeometry(new WpfRect(2, 2, 1, 1)));
+            var dots = new GeometryDrawing(
+                new SolidColorBrush(WpfColor.FromRgb(0xD2, 0xCF, 0xC7)),
+                null,
+                dotsGeom);
+            group.Children.Add(bg);
+            group.Children.Add(dots);
+            var brush = new DrawingBrush(group)
+            {
+                TileMode = TileMode.Tile,
+                Viewport = new WpfRect(0, 0, 4, 4),
+                ViewportUnits = BrushMappingMode.Absolute
+            };
+            brush.Freeze();
+            return brush;
+        }
+
+        private static Grid WrapWithHardShadow(Border card, double offset = 3.0)
+        {
+            var wrap = new Grid { Visibility = Visibility.Collapsed };
+            var shadow = new WpfRectangle
+            {
+                Fill = UiHelpers.BorderStrong,
+                Margin = new Thickness(offset, offset, 0, 0),
+                IsHitTestVisible = false
+            };
+            card.Margin = new Thickness(0, 0, offset, offset);
+            wrap.Children.Add(shadow);
+            wrap.Children.Add(card);
+            return wrap;
         }
 
         internal void ShowOverlay()
@@ -763,6 +958,7 @@ namespace CodexLauncher
             if (_closing) return;
             _closing = true;
             CancelPointerFrame();
+            if (_strokeHudTimer != null) { _strokeHudTimer.Stop(); _strokeHudTimer = null; }
             var source = _source;
             _source = null;
             try
@@ -771,6 +967,7 @@ namespace CodexLauncher
             }
             finally
             {
+                _rawPixels = null;
                 if (_rawBmp != null) { _rawBmp.Dispose(); _rawBmp = null; }
             }
         }
@@ -813,6 +1010,7 @@ namespace CodexLauncher
             var transform = new ScaleTransform(scale, scale);
             transform.Freeze();
             _toolbar.LayoutTransform = _subBar.LayoutTransform = _sizePill.LayoutTransform = _strokeHudWrap.LayoutTransform = transform;
+            if (_topHintBar != null) _topHintBar.LayoutTransform = transform;
             foreach (var handle in _handles) handle.LayoutTransform = transform;
             _selFrame.BorderThickness = new Thickness(1.5 * scale);
         }
@@ -836,7 +1034,14 @@ namespace CodexLauncher
 
         private void BuildVisualTree()
         {
-            var root = new Grid { Background = WpfBrushes.Black, Cursor = Cursors.Cross, Focusable = true };
+            var root = new Grid
+            {
+                Background = WpfBrushes.Black,
+                Cursor = Cursors.Cross,
+                Focusable = true,
+                UseLayoutRounding = true,
+                SnapsToDevicePixels = true
+            };
             TextElement.SetFontFamily(root, UiHelpers.MainFont);
             _root = root;
 
@@ -876,28 +1081,30 @@ namespace CodexLauncher
             _shade = new SelectionShade();
             _canvas.Children.Add(_shade);
 
-            // 5. Smart window hover highlight frame
+            // 5. Smart window hover highlight frame (0px sharp emerald)
             _hoverFrame = new Border
             {
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)),
-                BorderThickness = new Thickness(2.2),
-                Background = new SolidColorBrush(WpfColor.FromArgb(0x18, 0x10, 0xB9, 0x81)),
+                BorderBrush = UiHelpers.OkAccent,
+                BorderThickness = new Thickness(2.0),
+                Background = new SolidColorBrush(WpfColor.FromArgb(0x14, 0x14, 0xA0, 0x6D)),
+                CornerRadius = new CornerRadius(0),
                 IsHitTestVisible = false,
                 Visibility = Visibility.Collapsed
             };
             _canvas.Children.Add(_hoverFrame);
 
-            // 6. Active selection border
+            // 6. Active selection border (0px sharp emerald)
             _selFrame = new Border
             {
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)),
+                BorderBrush = UiHelpers.OkAccent,
                 BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(0),
                 IsHitTestVisible = false,
                 Visibility = Visibility.Collapsed
             };
             _canvas.Children.Add(_selFrame);
 
-            // 7. 8 resize handles
+            // 7. 8 resize handles (0px 8x8 white squares + 1.5px warm-ink border)
             var handleCursors = new[]
             {
                 Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE,
@@ -908,12 +1115,12 @@ namespace CodexLauncher
                 int idx = i;
                 var h = new Border
                 {
-                    Width = 9,
-                    Height = 9,
-                    CornerRadius = new CornerRadius(5),
+                    Width = 8,
+                    Height = 8,
+                    CornerRadius = new CornerRadius(0),
                     Background = WpfBrushes.White,
-                    BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)),
-                    BorderThickness = new Thickness(1.6),
+                    BorderBrush = UiHelpers.BorderStrong,
+                    BorderThickness = new Thickness(1.5),
                     Cursor = handleCursors[i],
                     Visibility = Visibility.Collapsed
                 };
@@ -932,59 +1139,83 @@ namespace CodexLauncher
                 _canvas.Children.Add(h);
             }
 
-            // 8. Selection size pill
+            // 8. Selection size pill (0px #1A1917 + 1px white rim + 11px mono)
             _sizeText = new TextBlock
             {
-                FontSize = 11.5,
-                FontWeight = FontWeights.SemiBold,
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
                 Foreground = WpfBrushes.White,
                 FontFamily = new System.Windows.Media.FontFamily("Cascadia Mono, Consolas, Segoe UI")
             };
-            _sizePill = new Border
+            var sizeBorder = new Border
             {
-                Background = new SolidColorBrush(WpfColor.FromArgb(0xDC, 0x18, 0x1B, 0x20)),
-                CornerRadius = new CornerRadius(5),
+                Background = UiHelpers.PrimaryBg,
+                BorderBrush = WpfBrushes.White,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(0),
                 Padding = new Thickness(7, 3, 7, 3),
-                Child = _sizeText,
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed
+                Child = _sizeText
             };
+            _sizePill = WrapWithHardShadow(sizeBorder, 2);
+            _sizePill.IsHitTestVisible = false;
             _canvas.Children.Add(_sizePill);
+
+            // 8b. Top-center subtle hotkey hint strip (0px)
+            var hintBorder = new Border
+            {
+                Background = new SolidColorBrush(WpfColor.FromArgb(0xEE, 0x1A, 0x19, 0x17)),
+                BorderBrush = UiHelpers.TextSecondary,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(0),
+                Padding = new Thickness(10, 4, 10, 4),
+                Child = new TextBlock
+                {
+                    Text = "拖动取景 · 单击识窗 · Alt 放大镜 · C 取色 · Shift 正交 · 右键返回",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(WpfColor.FromRgb(0xFA, 0xF8, 0xF5))
+                }
+            };
+            _topHintBar = WrapWithHardShadow(hintBorder, 2);
+            _topHintBar.IsHitTestVisible = false;
+            _canvas.Children.Add(_topHintBar);
 
             // 9. Pixel Magnifier Loupe
             BuildLoupe();
             _canvas.Children.Add(_loupeCard);
 
-            // 10. Stroke wheel feedback HUD
-            _strokeHud = new TextBlock { FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = WpfBrushes.White };
-            _strokeHudWrap = new Border
+            // 10. Stroke / Mosaic / FontSize wheel feedback HUD (0px)
+            _strokeHud = new TextBlock { FontSize = 11, FontWeight = FontWeights.Bold, Foreground = WpfBrushes.White };
+            var hudBorder = new Border
             {
-                Background = new SolidColorBrush(WpfColor.FromArgb(0xDC, 0x18, 0x1B, 0x20)),
-                CornerRadius = new CornerRadius(6),
+                Background = UiHelpers.PrimaryBg,
+                BorderBrush = WpfBrushes.White,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(0),
                 Padding = new Thickness(8, 3, 8, 3),
-                Child = _strokeHud,
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed
+                Child = _strokeHud
             };
+            _strokeHudWrap = WrapWithHardShadow(hudBorder, 2);
+            _strokeHudWrap.IsHitTestVisible = false;
             _canvas.Children.Add(_strokeHudWrap);
 
             // 11. Contextual Floating Toolbar + Color/Weight Sub-bar
             BuildToolbar();
             _canvas.Children.Add(_toolbar);
             _canvas.Children.Add(_subBar);
-
         }
 
         private void BuildLoupe()
         {
-            _loupeImg = new System.Windows.Controls.Image { Width = 121, Height = 121, Stretch = Stretch.Fill };
+            _loupeBitmap = new WriteableBitmap(11, 11, 96, 96, PixelFormats.Bgra32, null);
+            _loupeBuf = new byte[11 * 11 * 4];
+            _loupeImg = new System.Windows.Controls.Image { Source = _loupeBitmap, Width = 121, Height = 121, Stretch = Stretch.Fill };
             RenderOptions.SetBitmapScalingMode(_loupeImg, BitmapScalingMode.NearestNeighbor);
 
             var imgGrid = new Grid { Width = 121, Height = 121, ClipToBounds = true };
             imgGrid.Children.Add(_loupeImg);
 
-            // Crosshair lines
-            var crossBrush = new SolidColorBrush(WpfColor.FromArgb(0xCC, 0x10, 0xB9, 0x81));
+            // Crosshair lines (v1.2 Emerald #14A06D)
+            var crossBrush = new SolidColorBrush(WpfColor.FromArgb(0xCC, 0x14, 0xA0, 0x6D));
             imgGrid.Children.Add(new WpfRectangle { Height = 1, Fill = crossBrush, VerticalAlignment = VerticalAlignment.Center });
             imgGrid.Children.Add(new WpfRectangle { Width = 1, Fill = crossBrush, HorizontalAlignment = HorizontalAlignment.Center });
             imgGrid.Children.Add(new Border
@@ -993,6 +1224,7 @@ namespace CodexLauncher
                 Height = 11,
                 BorderBrush = WpfBrushes.White,
                 BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(0),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             });
@@ -1001,104 +1233,109 @@ namespace CodexLauncher
             {
                 Width = 10,
                 Height = 10,
-                CornerRadius = new CornerRadius(3),
-                BorderBrush = new SolidColorBrush(WpfColor.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                CornerRadius = new CornerRadius(0),
+                BorderBrush = WpfBrushes.White,
                 BorderThickness = new Thickness(1),
-                Margin = new Thickness(0, 0, 5, 0)
+                Margin = new Thickness(0, 0, 6, 0)
             };
             _loupeInfoText = new TextBlock
             {
-                FontSize = 10.5,
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
                 Foreground = WpfBrushes.White,
                 FontFamily = new System.Windows.Media.FontFamily("Cascadia Mono, Consolas, Segoe UI")
             };
 
-            var footer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(6, 5, 6, 5) };
+            var footer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(7, 6, 7, 6) };
             var row1 = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             row1.Children.Add(_loupeColorDot);
             row1.Children.Add(_loupeInfoText);
             footer.Children.Add(row1);
             footer.Children.Add(new TextBlock
             {
-                Text = "按 C 复制色值 · Esc 取消",
-                FontSize = 9.5,
-                Foreground = new SolidColorBrush(WpfColor.FromRgb(0x94, 0xA3, 0xB8)),
-                Margin = new Thickness(0, 2, 0, 0)
+                Text = "C 复制色值 · Shift 切格式",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(WpfColor.FromRgb(0xBD, 0xB9, 0xB0)),
+                Margin = new Thickness(0, 3, 0, 0)
             });
 
             var sp = new StackPanel();
             sp.Children.Add(imgGrid);
+            sp.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(WpfColor.FromRgb(0x3B, 0x38, 0x33)) });
             sp.Children.Add(footer);
 
-            _loupeCard = new Border
+            var loupeBorder = new Border
             {
-                Background = new SolidColorBrush(WpfColor.FromArgb(0xEA, 0x18, 0x1B, 0x20)),
-                BorderBrush = new SolidColorBrush(WpfColor.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
+                Background = UiHelpers.PrimaryBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(0),
                 ClipToBounds = true,
-                Child = sp,
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed,
-                Effect = new DropShadowEffect { Color = WpfColors.Black, BlurRadius = 14, ShadowDepth = 3, Opacity = 0.35 }
+                Child = sp
             };
+            _loupeCard = WrapWithHardShadow(loupeBorder, 3);
+            _loupeCard.IsHitTestVisible = false;
         }
 
         private void BuildToolbar()
         {
             var bar = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-            // Annotation tools with crisp 1.5px vector SVG geometry
-            AddToolBtn(bar, DrawTool.Rect, "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z", "矩形框 (1 / R)");
-            AddToolBtn(bar, DrawTool.Arrow, "M5 19 L19 5 M19 5 H10 M19 5 V14", "箭头 (2 / A)");
-            AddToolBtn(bar, DrawTool.Brush, "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z", "画笔 (3 / P)");
-            AddToolBtn(bar, DrawTool.Mosaic, "M4 4h5v5H4ZM10 10h5v5h-5ZM15 4h5v5h-5ZM4 15h5v5H4ZM15 15h5v5h-5Z", "马赛克打码 (4 / M)");
-            AddToolBtn(bar, DrawTool.Text, "M4 6h16 M12 6v13 M9 19h6", "文字标注 (5 / T)");
+            // Annotation tools: 100% sharp 0px miter geometry
+            AddToolBtn(bar, DrawTool.Rect, "M3 3 H21 V21 H3 Z", "矩形框 (1 / R · Shift 正方)");
+            AddToolBtn(bar, DrawTool.Arrow, "M5 19 L19 5 M19 5 H10 M19 5 V14", "箭头 (2 / A · Shift 正交)");
+            AddToolBtn(bar, DrawTool.Brush, "M16 4 L20 8 L8 20 H4 V16 Z M13 7 L17 11", "画笔 (3 / P)");
+            AddToolBtn(bar, DrawTool.Mosaic, "M4 4h5v5H4Z M10 10h4v4h-4Z M15 4h5v5h-5Z M4 15h5v5H4Z M15 15h5v5h-5Z", "马赛克打码 (4 / M · 滚轮调粒度)");
+            AddToolBtn(bar, DrawTool.Text, "M5 6 H19 M12 6 V19 M9 19 H15", "文字标注 (5 / T · 滚轮调字号)");
+            AddToolBtn(bar, DrawTool.Stamp, "M3 3 H21 V21 H3 Z M10 8 H12 V16 M10 16 H14", "序号图章 [01][02] (6 / N)");
 
             bar.Children.Add(MakeBarSep());
 
-            bar.Children.Add(MakeActionBtn("M9 14L4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 0 11H11", "撤销 (Ctrl+Z)", null, false, UndoLast));
-            bar.Children.Add(MakeActionBtn("M4 7V5a1 1 0 0 1 1-1h2 M17 4h2a1 1 0 0 1 1 1v2 M20 17v2a1 1 0 0 1-1 1h-2 M7 20H5a1 1 0 0 1-1-1v-2 M8 9h8 M8 13h6 M8 17h4", "提取文字 OCR", "提字", false, RunOcr));
-            bar.Children.Add(MakeActionBtn("M12 17v5 M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 1 1 0 0 0 1-1V4H7v1a1 1 0 0 0 1 1 1 1 0 0 1 1 1Z", "钉在桌面置顶贴图 (Ctrl+T)", null, false, PinToDesktop));
-            bar.Children.Add(MakeActionBtn("M12 3v12 M7 10l5 5 5-5 M5 20h14", "下载保存为 PNG (Ctrl+S)", null, false, SaveToFile));
+            bar.Children.Add(MakeActionBtn("M9 14 L4 9 L9 4 M4 9 H18 V18 H11", "撤销 (Ctrl+Z)", null, false, false, UndoLast));
+            bar.Children.Add(MakeActionBtn("M15 14 L20 9 L15 4 M20 9 H6 V18 H13", "重做 (Ctrl+Y / Ctrl+Shift+Z)", null, false, false, RedoLast));
+            bar.Children.Add(MakeActionBtn("M4 8 V4 H8 M16 4 H20 V8 M20 16 V20 H16 M8 20 H4 V16 M8 9 H16 M8 12.5 H14 M8 16 H12", "提取文字 OCR", "提字", false, false, RunOcr));
+            bar.Children.Add(MakeActionBtn("M3 5 H10 L12 7 H21 V19 H3 Z M9 13 H15", "保存并复制路径，方便直接贴给 AI CLI (Alt+C)", "路径", false, false, SaveTempAndCopyPath));
+            bar.Children.Add(MakeActionBtn("M7 4 H17 V7 L15 10 V14 H18 V16 H6 V14 H9 V10 L7 7 Z M12 16 V21", "钉在桌面置顶贴图 (Ctrl+T)", null, false, false, PinToDesktop));
+            bar.Children.Add(MakeActionBtn("M12 3 V15 M7 10 L12 15 L17 10 M4 19 H20", "下载保存为 PNG (Ctrl+S)", null, false, false, SaveToFile));
 
             bar.Children.Add(MakeBarSep());
 
-            bar.Children.Add(MakeActionBtn("M18 6L6 18 M6 6l12 12", "取消 (Esc)", null, false, () => _closeSession()));
-            bar.Children.Add(MakeActionBtn("M20 6L9 17l-5-5", "复制到剪贴板 (Enter / 双击)", "复制", true, CopyAndFinish));
+            bar.Children.Add(MakeActionBtn("M6 6 L18 18 M18 6 L6 18", "取消 (Esc)", null, false, true, () => _closeSession()));
+            bar.Children.Add(MakeActionBtn("M4 12 L9 17 L20 6", "复制到剪贴板 (Enter / 双击)", "复制", true, false, CopyAndFinish));
 
-            _toolbar = new Border
+            var toolbarBorder = new Border
             {
-                Background = UiHelpers.SubtleBg,
+                Background = UiHelpers.MainBg,
                 BorderBrush = UiHelpers.BorderStrong,
                 BorderThickness = new Thickness(1.5),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(6, 5, 6, 5),
+                CornerRadius = new CornerRadius(0),
+                Padding = new Thickness(5, 4, 5, 4),
                 Child = bar,
-                Cursor = Cursors.Arrow,
-                Visibility = Visibility.Collapsed,
-                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 2, ShadowDepth = 3, Direction = 315, Opacity = 0.22 }
+                Cursor = Cursors.Arrow
             };
+            _toolbar = WrapWithHardShadow(toolbarBorder, 3);
 
-            // Color & Stroke sub-bar
+            // Color & Stroke sub-bar (0px architectural)
             var subSp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-            // 3 stroke size dots
+            // 3 stroke size squares (4x4 / 7x7 / 10x10)
             for (int i = 0; i < StrokePresets.Length; i++)
             {
                 double sz = StrokePresets[i];
-                double dotVisual = 5 + i * 3.5;
-                var inner = new Ellipse
+                double sqVisual = 4 + i * 3;
+                var inner = new WpfRectangle
                 {
-                    Width = dotVisual,
-                    Height = dotVisual,
-                    Fill = UiHelpers.TextSecondary
+                    Width = sqVisual,
+                    Height = sqVisual,
+                    Fill = UiHelpers.TextPrimary
                 };
                 var wrap = new Border
                 {
                     Width = 22,
                     Height = 22,
-                    CornerRadius = new CornerRadius(6),
+                    CornerRadius = new CornerRadius(0),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = WpfBrushes.Transparent,
                     Background = WpfBrushes.Transparent,
                     Child = inner,
                     Cursor = Cursors.Hand,
@@ -1117,46 +1354,55 @@ namespace CodexLauncher
 
             subSp.Children.Add(MakeBarSep());
 
-            // 6 color swatches
+            // 6 fixed-size color swatches (18x18 inside 22x22 frame — zero layout jump!)
             for (int i = 0; i < PaletteColors.Length; i++)
             {
                 WpfColor c = PaletteColors[i];
-                var dot = new Border
+                var innerDot = new Border
                 {
-                    Width = 17,
-                    Height = 17,
-                    CornerRadius = new CornerRadius(6),
+                    Width = 16,
+                    Height = 16,
+                    CornerRadius = new CornerRadius(0),
                     Background = new SolidColorBrush(c),
-                    BorderBrush = c == WpfColors.White
-                        ? new SolidColorBrush(WpfColor.FromRgb(0xCB, 0xD5, 0xE1))
-                        : WpfBrushes.Transparent,
+                    BorderBrush = c == WpfColors.White ? new SolidColorBrush(WpfColor.FromRgb(0xD2, 0xCF, 0xC7)) : WpfBrushes.Transparent,
+                    BorderThickness = new Thickness(1)
+                };
+                var frame = new Border
+                {
+                    Width = 22,
+                    Height = 22,
+                    CornerRadius = new CornerRadius(0),
+                    Background = WpfBrushes.White,
+                    BorderBrush = WpfBrushes.Transparent,
                     BorderThickness = new Thickness(1.5),
-                    Margin = new Thickness(3, 0, 3, 0),
+                    Padding = new Thickness(1),
+                    Margin = new Thickness(2, 0, 2, 0),
+                    Child = innerDot,
                     Cursor = Cursors.Hand
                 };
-                dot.MouseLeftButtonDown += (s, e) =>
+                frame.MouseLeftButtonDown += (s, e) =>
                 {
                     _activeColor = c;
                     if (_activeTextBox != null) _activeTextBox.Foreground = new SolidColorBrush(c);
                     SyncSubBarVisuals();
                     e.Handled = true;
                 };
-                _colorDots.Add(dot);
-                subSp.Children.Add(dot);
+                _colorFrames.Add(frame);
+                _colorDots.Add(innerDot);
+                subSp.Children.Add(frame);
             }
 
-            _subBar = new Border
+            var subBorder = new Border
             {
-                Background = UiHelpers.SubtleBg,
+                Background = UiHelpers.MainBg,
                 BorderBrush = UiHelpers.BorderStrong,
                 BorderThickness = new Thickness(1.5),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(8, 5, 8, 5),
+                CornerRadius = new CornerRadius(0),
+                Padding = new Thickness(7, 4, 7, 4),
                 Child = subSp,
-                Cursor = Cursors.Arrow,
-                Visibility = Visibility.Collapsed,
-                Effect = new DropShadowEffect { Color = UiHelpers.TextPrimary.Color, BlurRadius = 2, ShadowDepth = 3, Direction = 315, Opacity = 0.22 }
+                Cursor = Cursors.Arrow
             };
+            _subBar = WrapWithHardShadow(subBorder, 3);
 
             SyncSubBarVisuals();
         }
@@ -1167,7 +1413,7 @@ namespace CodexLauncher
             {
                 Width = 1,
                 Height = 18,
-                Background = UiHelpers.Hairline,
+                Background = new SolidColorBrush(WpfColor.FromRgb(0xD2, 0xCF, 0xC7)),
                 Margin = new Thickness(5, 0, 5, 0)
             };
         }
@@ -1179,9 +1425,9 @@ namespace CodexLauncher
                 Data = Geometry.Parse(pathData),
                 Stroke = stroke,
                 StrokeThickness = 1.6,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
+                StrokeStartLineCap = PenLineCap.Square,
+                StrokeEndLineCap = PenLineCap.Square,
+                StrokeLineJoin = PenLineJoin.Miter,
                 Width = 15,
                 Height = 15,
                 Stretch = Stretch.Uniform
@@ -1192,63 +1438,86 @@ namespace CodexLauncher
         {
             var btn = new Button
             {
-                Width = 30,
+                Width = 28,
                 Height = 28,
                 Margin = new Thickness(1, 0, 1, 0),
                 Background = WpfBrushes.Transparent,
-                BorderThickness = new Thickness(0),
+                BorderBrush = WpfBrushes.Transparent,
+                BorderThickness = new Thickness(1),
                 Cursor = Cursors.Hand,
                 ToolTip = tip,
+                FocusVisualStyle = null,
                 Content = MakeSvgIcon(svgData, UiHelpers.TextSecondary)
             };
-            ApplyFlatButtonTemplate(btn);
+            ApplyFlatButtonTemplate(btn, false, false);
             btn.Click += (s, e) => SelectTool(_activeTool == tool ? DrawTool.None : tool);
             _toolButtons[tool] = btn;
             bar.Children.Add(btn);
         }
 
-        private Button MakeActionBtn(string svgData, string tip, string label, bool primary, Action onClick)
+        private Button MakeActionBtn(string svgData, string tip, string label, bool primary, bool dangerHover, Action onClick)
         {
             var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            var fg = primary ? WpfBrushes.White : UiHelpers.TextSecondary;
-            sp.Children.Add(MakeSvgIcon(svgData, fg));
+            var fg = primary ? WpfBrushes.White : UiHelpers.TextPrimary;
+            var icon = MakeSvgIcon(svgData, fg);
+            if (!primary)
+            {
+                icon.SetBinding(System.Windows.Shapes.Shape.StrokeProperty, new System.Windows.Data.Binding("Foreground")
+                {
+                    RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(Button), 1)
+                });
+            }
+            sp.Children.Add(icon);
             if (!string.IsNullOrEmpty(label))
             {
-                sp.Children.Add(new TextBlock
+                var tb = new TextBlock
                 {
                     Text = label,
-                    FontSize = 11.5,
-                    FontWeight = primary ? FontWeights.SemiBold : FontWeights.Medium,
+                    FontSize = 12,
+                    FontWeight = primary ? FontWeights.Bold : FontWeights.SemiBold,
                     Foreground = fg,
                     Margin = new Thickness(4, 0, 0, 0),
                     VerticalAlignment = VerticalAlignment.Center
-                });
+                };
+                if (!primary)
+                {
+                    tb.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground")
+                    {
+                        RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(Button), 1)
+                    });
+                }
+                sp.Children.Add(tb);
             }
 
             var btn = new Button
             {
                 Height = 28,
-                MinWidth = string.IsNullOrEmpty(label) ? 30 : 54,
+                MinWidth = string.IsNullOrEmpty(label) ? 28 : 54,
                 Padding = string.IsNullOrEmpty(label) ? new Thickness(0) : new Thickness(8, 0, 9, 0),
                 Margin = new Thickness(1.5, 0, 1.5, 0),
+                Foreground = fg,
                 Background = primary ? UiHelpers.PrimaryBg : WpfBrushes.Transparent,
-                BorderThickness = new Thickness(0),
+                BorderBrush = primary ? UiHelpers.BorderStrong : WpfBrushes.Transparent,
+                BorderThickness = new Thickness(1),
                 Cursor = Cursors.Hand,
                 ToolTip = tip,
+                FocusVisualStyle = null,
                 Content = sp
             };
-            ApplyFlatButtonTemplate(btn, primary);
+            ApplyFlatButtonTemplate(btn, primary, dangerHover);
             btn.Click += (s, e) => onClick();
             return btn;
         }
 
-        private void ApplyFlatButtonTemplate(Button btn, bool primary = false)
+        private void ApplyFlatButtonTemplate(Button btn, bool primary, bool dangerHover)
         {
             var tmpl = new ControlTemplate(typeof(Button));
             var bd = new FrameworkElementFactory(typeof(Border));
             bd.Name = "bd";
             bd.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
+            bd.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            bd.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(0));
             bd.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
             var cp = new FrameworkElementFactory(typeof(ContentPresenter));
             cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
@@ -1257,12 +1526,20 @@ namespace CodexLauncher
             tmpl.VisualTree = bd;
 
             var hov = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-            hov.Setters.Add(new Setter(
-                Border.BackgroundProperty,
-                primary
-                    ? UiHelpers.PrimaryHover
-                    : UiHelpers.HoverBg,
-                "bd"));
+            if (primary)
+            {
+                hov.Setters.Add(new Setter(Border.BackgroundProperty, UiHelpers.PrimaryHover, "bd"));
+            }
+            else if (dangerHover)
+            {
+                hov.Setters.Add(new Setter(Border.BackgroundProperty, UiHelpers.DangerBg, "bd"));
+                hov.Setters.Add(new Setter(Border.BorderBrushProperty, UiHelpers.BorderStrong, "bd"));
+                hov.Setters.Add(new Setter(Control.ForegroundProperty, WpfBrushes.White));
+            }
+            else
+            {
+                hov.Setters.Add(new Setter(Border.BackgroundProperty, UiHelpers.HoverBg, "bd"));
+            }
             tmpl.Triggers.Add(hov);
             btn.Template = tmpl;
         }
@@ -1274,15 +1551,12 @@ namespace CodexLauncher
             foreach (var kv in _toolButtons)
             {
                 bool active = kv.Key == tool;
-                kv.Value.Background = active
-                    ? new SolidColorBrush(WpfColor.FromRgb(0xEC, 0xFD, 0xF5))
-                    : WpfBrushes.Transparent;
+                kv.Value.Background = active ? (System.Windows.Media.Brush)_screentoneBrush : WpfBrushes.Transparent;
+                kv.Value.BorderBrush = active ? UiHelpers.BorderStrong : WpfBrushes.Transparent;
                 var path = kv.Value.Content as System.Windows.Shapes.Path;
                 if (path != null)
                 {
-                    path.Stroke = active
-                        ? new SolidColorBrush(WpfColor.FromRgb(0x05, 0x96, 0x69))
-                        : new SolidColorBrush(WpfColor.FromRgb(0x33, 0x41, 0x55));
+                    path.Stroke = active ? UiHelpers.TextPrimary : UiHelpers.TextSecondary;
                 }
             }
             _root.Cursor = tool == DrawTool.None ? Cursors.Arrow : (tool == DrawTool.Text ? Cursors.IBeam : Cursors.Cross);
@@ -1294,19 +1568,13 @@ namespace CodexLauncher
             for (int i = 0; i < _sizeDots.Count; i++)
             {
                 bool match = Math.Abs(StrokePresets[i] - _activeThickness) < 0.8;
-                _sizeDots[i].Background = match
-                    ? new SolidColorBrush(WpfColor.FromRgb(0xEC, 0xFD, 0xF5))
-                    : WpfBrushes.Transparent;
+                _sizeDots[i].Background = match ? (System.Windows.Media.Brush)_screentoneBrush : WpfBrushes.Transparent;
+                _sizeDots[i].BorderBrush = match ? UiHelpers.BorderStrong : WpfBrushes.Transparent;
             }
-            for (int i = 0; i < _colorDots.Count; i++)
+            for (int i = 0; i < _colorFrames.Count; i++)
             {
                 bool match = PaletteColors[i] == _activeColor;
-                _colorDots[i].Width = match ? 20 : 16;
-                _colorDots[i].Height = match ? 20 : 16;
-                _colorDots[i].BorderBrush = match
-                    ? new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81))
-                    : (PaletteColors[i] == WpfColors.White ? new SolidColorBrush(WpfColor.FromRgb(0xCB, 0xD5, 0xE1)) : WpfBrushes.Transparent);
-                _colorDots[i].BorderThickness = new Thickness(match ? 2.2 : 1.2);
+                _colorFrames[i].BorderBrush = match ? UiHelpers.BorderStrong : WpfBrushes.Transparent;
             }
         }
 
@@ -1359,18 +1627,37 @@ namespace CodexLauncher
                 return;
             }
 
+            if (_activeTool == DrawTool.Stamp)
+            {
+                int nextNum = _annotations.Count(a => a.Tool == DrawTool.Stamp) + 1;
+                var stamp = new AnnotationItem
+                {
+                    Tool = DrawTool.Stamp,
+                    Color = _activeColor,
+                    Thickness = _activeThickness,
+                    Start = clamped,
+                    StampNumber = nextNum
+                };
+                _redoStack.Clear();
+                _annotations.Add(stamp);
+                AddAnnotationVisual(stamp);
+                return;
+            }
+
             _currentAnnot = new AnnotationItem
             {
                 Tool = _activeTool,
                 Color = _activeColor,
                 Thickness = _activeThickness,
+                MosaicBlockSize = _mosaicBlockSize,
                 Start = clamped,
                 End = clamped,
                 Points = _activeTool == DrawTool.Brush ? new List<WpfPoint> { clamped } : null
             };
+            _redoStack.Clear();
             _annotations.Add(_currentAnnot);
             _canvas.CaptureMouse();
-            RedrawAnnotations();
+            UpdateCurrentAnnotationVisual();
         }
 
         private void BeginOutline()
@@ -1380,12 +1667,15 @@ namespace CodexLauncher
             _hoverWinRect = null;
             _hoverFrame.Visibility = Visibility.Collapsed;
             _loupeCard.Visibility = Visibility.Collapsed;
+            if (_topHintBar != null) _topHintBar.Visibility = Visibility.Collapsed;
             _selFrame.Visibility = _sizePill.Visibility = _toolbar.Visibility = _subBar.Visibility = Visibility.Collapsed;
             foreach (var handle in _handles) handle.Visibility = Visibility.Collapsed;
 
             _dragPen = new System.Windows.Media.Pen(_selFrame.BorderBrush, _selFrame.BorderThickness.Left);
             _dragPen.Freeze();
-            _shade.Paint(_selectionMonitor, _selRect, _dragPen);
+            GdiRect pixels = ToBitmapRect(_selRect);
+            string sizeLabel = (_selRect.Width >= 2 && _selRect.Height >= 2) ? string.Format("{0} × {1}", pixels.Width, pixels.Height) : null;
+            _shade.Paint(_selectionMonitor, _selRect, _dragPen, sizeLabel, _selectionUiScale);
         }
 
         private void UpdateDragGeometry(WpfPoint point)
@@ -1413,8 +1703,38 @@ namespace CodexLauncher
             {
                 if ((_currentAnnot.Points.Last() - clamped).Length > 1)
                     _currentAnnot.Points.Add(clamped);
+                return;
             }
-            else _currentAnnot.End = clamped;
+
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+            {
+                double dx = clamped.X - _currentAnnot.Start.X;
+                double dy = clamped.Y - _currentAnnot.Start.Y;
+                if (_currentAnnot.Tool == DrawTool.Rect)
+                {
+                    double side = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                    double sx = _currentAnnot.Start.X + (dx >= 0 ? side : -side);
+                    double sy = _currentAnnot.Start.Y + (dy >= 0 ? side : -side);
+                    clamped = ClampToSelection(new WpfPoint(sx, sy));
+                    double actualSide = Math.Min(Math.Abs(clamped.X - _currentAnnot.Start.X), Math.Abs(clamped.Y - _currentAnnot.Start.Y));
+                    clamped = new WpfPoint(
+                        _currentAnnot.Start.X + (dx >= 0 ? actualSide : -actualSide),
+                        _currentAnnot.Start.Y + (dy >= 0 ? actualSide : -actualSide));
+                }
+                else if (_currentAnnot.Tool == DrawTool.Arrow)
+                {
+                    double len = Math.Sqrt(dx * dx + dy * dy);
+                    if (len > 1)
+                    {
+                        double angle = Math.Round(Math.Atan2(dy, dx) / (Math.PI / 4.0)) * (Math.PI / 4.0);
+                        clamped = ClampToSelection(new WpfPoint(
+                            _currentAnnot.Start.X + Math.Cos(angle) * len,
+                            _currentAnnot.Start.Y + Math.Sin(angle) * len));
+                    }
+                }
+            }
+
+            _currentAnnot.End = clamped;
         }
 
         private void OnCanvasMouseMove(object sender, MouseEventArgs e)
@@ -1448,9 +1768,18 @@ namespace CodexLauncher
             {
                 var previous = _selRect;
                 UpdateDragGeometry(_latestPointer);
-                if (previous != _selRect) _shade.Paint(_selectionMonitor, _selRect, _dragPen);
+                if (previous != _selRect)
+                {
+                    GdiRect pixels = ToBitmapRect(_selRect);
+                    string sizeLabel = string.Format("{0} × {1}", pixels.Width, pixels.Height);
+                    _shade.Paint(_selectionMonitor, _selRect, _dragPen, sizeLabel, _selectionUiScale);
+                }
+                if ((_isDraggingSelection || _activeHandle >= 0) && (Keyboard.Modifiers & ModifierKeys.Alt) != 0)
+                    UpdateLoupe(_latestPointer);
+                else
+                    _loupeCard.Visibility = Visibility.Collapsed;
             }
-            else if (_currentAnnot != null) RedrawAnnotations();
+            else if (_currentAnnot != null) UpdateCurrentAnnotationVisual();
             else if (!_hasSelection)
             {
                 UpdateHoverWindow(_latestPointer);
@@ -1522,9 +1851,16 @@ namespace CodexLauncher
                 // Discard accidental zero-size shapes
                 bool tiny = (_currentAnnot.Tool == DrawTool.Rect || _currentAnnot.Tool == DrawTool.Arrow || _currentAnnot.Tool == DrawTool.Mosaic)
                     && (_currentAnnot.End - _currentAnnot.Start).Length < 4.0;
-                if (tiny) _annotations.Remove(_currentAnnot);
+                if (tiny)
+                {
+                    if (_currentAnnot.CachedVisual != null) _annotCanvas.Children.Remove(_currentAnnot.CachedVisual);
+                    _annotations.Remove(_currentAnnot);
+                }
+                else
+                {
+                    UpdateCurrentAnnotationVisual();
+                }
                 _currentAnnot = null;
-                RedrawAnnotations();
             }
         }
 
@@ -1565,6 +1901,7 @@ namespace CodexLauncher
                 // Clear selection back to fresh capture mode (Snipaste/Feishu muscle memory!)
                 _hasSelection = false;
                 _annotations.Clear();
+                _redoStack.Clear();
                 RedrawAnnotations();
                 _toolbar.Visibility = Visibility.Collapsed;
                 _subBar.Visibility = Visibility.Collapsed;
@@ -1581,7 +1918,23 @@ namespace CodexLauncher
 
         private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (!_hasSelection || _activeTool == DrawTool.None) return;
+            if (!_hasSelection) return;
+            if (_activeTextBox != null)
+            {
+                double nextFs = Math.Max(12, Math.Min(48, _activeTextBox.FontSize + (e.Delta > 0 ? 2 : -2)));
+                _activeTextBox.FontSize = nextFs;
+                ShowStrokeHud(string.Format("字号 {0:0}px", nextFs));
+                e.Handled = true;
+                return;
+            }
+            if (_activeTool == DrawTool.Mosaic)
+            {
+                _mosaicBlockSize = Math.Max(4, Math.Min(28, _mosaicBlockSize + (e.Delta > 0 ? 2 : -2)));
+                ShowStrokeHud(string.Format("马赛克粒度 {0}px", _mosaicBlockSize));
+                e.Handled = true;
+                return;
+            }
+            if (_activeTool == DrawTool.None) return;
             double step = e.Delta > 0 ? 1.0 : -1.0;
             _activeThickness = Math.Max(1.5, Math.Min(16.0, _activeThickness + step));
             SyncSubBarVisuals();
@@ -1598,15 +1951,39 @@ namespace CodexLauncher
             double center = _selRect.Left + _selRect.Width / 2;
             Canvas.SetLeft(_strokeHudWrap, Math.Max(_selectionMonitor.Left + margin, center - _strokeHudWrap.DesiredSize.Width / 2));
             Canvas.SetTop(_strokeHudWrap, _selRect.Top + margin);
-            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
-            t.Tick += (s, ev) => { t.Stop(); _strokeHudWrap.Visibility = Visibility.Collapsed; };
-            t.Start();
+            if (_strokeHudTimer == null)
+            {
+                _strokeHudTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                _strokeHudTimer.Tick += (s, ev) =>
+                {
+                    _strokeHudTimer.Stop();
+                    _strokeHudWrap.Visibility = Visibility.Collapsed;
+                };
+            }
+            _strokeHudTimer.Stop();
+            _strokeHudTimer.Start();
         }
 
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (!_hasSelection && !_outlineActive && (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt))
+            bool altDown = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
+            bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+
+            if ((e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt) && (!_hasSelection || _isDraggingSelection || _activeHandle >= 0))
+            {
                 UpdateLoupe(PointerPosition(null));
+                return;
+            }
+
+            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && !_hasSelection && _loupeCard.Visibility == Visibility.Visible)
+            {
+                _loupeHexMode = !_loupeHexMode;
+                UpdateLoupe(PointerPosition(null));
+                e.Handled = true;
+                return;
+            }
+
             if (_activeTextBox != null)
             {
                 if (e.Key == Key.Escape)
@@ -1615,7 +1992,7 @@ namespace CodexLauncher
                     _activeTextBox = null;
                     e.Handled = true;
                 }
-                else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+                else if (e.Key == Key.Enter && !shift)
                 {
                     CommitActiveTextBox();
                     e.Handled = true;
@@ -1630,20 +2007,29 @@ namespace CodexLauncher
                 return;
             }
 
-            if (!_hasSelection && e.Key == Key.C)
+            if (!_hasSelection && e.Key == Key.C && !ctrl && !altDown)
             {
                 UpdateLoupe(PointerPosition(null));
-                try { Clipboard.SetText(_lastHexColor); } catch { }
+                string clipErr;
+                ClipboardHelper.TrySetText(_lastColorText, out clipErr);
                 _closeSession();
-                _notify("已复制色值 " + _lastHexColor, false);
+                _notify("已复制色值 " + _lastColorText, false);
                 e.Handled = true;
                 return;
             }
 
             if (!_hasSelection) return;
 
-            bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-            if (ctrl && e.Key == Key.Z) { UndoLast(); e.Handled = true; }
+            if (altDown && e.SystemKey == Key.C)
+            {
+                SaveTempAndCopyPath();
+                e.Handled = true;
+                return;
+            }
+
+            if (ctrl && e.Key == Key.Z && shift) { RedoLast(); e.Handled = true; }
+            else if (ctrl && e.Key == Key.Y) { RedoLast(); e.Handled = true; }
+            else if (ctrl && e.Key == Key.Z) { UndoLast(); e.Handled = true; }
             else if (ctrl && e.Key == Key.S) { SaveToFile(); e.Handled = true; }
             else if (ctrl && e.Key == Key.C) { CopyAndFinish(); e.Handled = true; }
             else if (ctrl && e.Key == Key.T) { PinToDesktop(); e.Handled = true; }
@@ -1653,6 +2039,34 @@ namespace CodexLauncher
             else if (e.Key == Key.D3 || e.Key == Key.P) { SelectTool(DrawTool.Brush); e.Handled = true; }
             else if (e.Key == Key.D4 || e.Key == Key.M) { SelectTool(DrawTool.Mosaic); e.Handled = true; }
             else if (e.Key == Key.D5 || e.Key == Key.T) { SelectTool(DrawTool.Text); e.Handled = true; }
+            else if (e.Key == Key.D6 || e.Key == Key.N) { SelectTool(DrawTool.Stamp); e.Handled = true; }
+            else if (e.Key == Key.Left || e.Key == Key.Right || e.Key == Key.Up || e.Key == Key.Down)
+            {
+                NudgeSelectionByArrow(e.Key, shift);
+                e.Handled = true;
+            }
+        }
+
+        private void NudgeSelectionByArrow(Key key, bool resize)
+        {
+            double stepX = 1.0 / ScaleX;
+            double stepY = 1.0 / ScaleY;
+            double dx = key == Key.Left ? -stepX : (key == Key.Right ? stepX : 0);
+            double dy = key == Key.Up ? -stepY : (key == Key.Down ? stepY : 0);
+
+            if (resize)
+            {
+                double w = Math.Max(12 * stepX, Math.Min(_selectionMonitor.Right - _selRect.Left, _selRect.Width + dx));
+                double h = Math.Max(12 * stepY, Math.Min(_selectionMonitor.Bottom - _selRect.Top, _selRect.Height + dy));
+                _selRect = new WpfRect(_selRect.Left, _selRect.Top, w, h);
+            }
+            else
+            {
+                double x = Math.Max(_selectionMonitor.Left, Math.Min(_selectionMonitor.Right - _selRect.Width, _selRect.Left + dx));
+                double y = Math.Max(_selectionMonitor.Top, Math.Min(_selectionMonitor.Bottom - _selRect.Height, _selRect.Top + dy));
+                _selRect = new WpfRect(x, y, _selRect.Width, _selRect.Height);
+            }
+            UpdateToolbarPositions();
         }
 
         private bool IsMouseOverUi(DependencyObject src)
@@ -1708,54 +2122,71 @@ namespace CodexLauncher
 
         private void UpdateLoupe(WpfPoint pt)
         {
-            if (_rawBmp == null || _root.ActualWidth <= 0 || _root.ActualHeight <= 0) return;
+            if (_rawPixels == null || _rawWidth <= 0 || _rawHeight <= 0 || _root.ActualWidth <= 0 || _root.ActualHeight <= 0) return;
             double uiScale;
             var monitor = MonitorAt(pt, out uiScale);
             if (monitor.IsEmpty) return;
 
-            int px = Math.Max(0, Math.Min(_rawBmp.Width - 1, (int)Math.Round(pt.X * ScaleX)));
-            int py = Math.Max(0, Math.Min(_rawBmp.Height - 1, (int)Math.Round(pt.Y * ScaleY)));
+            int px = Math.Max(0, Math.Min(_rawWidth - 1, (int)Math.Round(pt.X * ScaleX)));
+            int py = Math.Max(0, Math.Min(_rawHeight - 1, (int)Math.Round(pt.Y * ScaleY)));
 
-            GdiColor c = _rawBmp.GetPixel(px, py);
-            _lastHexColor = string.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
-            _loupeColorDot.Background = new SolidColorBrush(WpfColor.FromRgb(c.R, c.G, c.B));
-            if (_isDraggingSelection)
+            int centerOff = py * _rawStride + px * 4;
+            byte cb = _rawPixels[centerOff];
+            byte cg = _rawPixels[centerOff + 1];
+            byte cr = _rawPixels[centerOff + 2];
+
+            _lastColorText = _loupeHexMode
+                ? string.Format("#{0:X2}{1:X2}{2:X2}", cr, cg, cb)
+                : string.Format("rgb({0}, {1}, {2})", cr, cg, cb);
+            _loupeColorDot.Background = new SolidColorBrush(WpfColor.FromRgb(cr, cg, cb));
+            if (_isDraggingSelection || _activeHandle >= 0)
             {
                 GdiRect pixels = ToBitmapRect(_selRect);
-                _loupeInfoText.Text = string.Format("{0}×{1}  {2}", pixels.Width, pixels.Height, _lastHexColor);
+                _loupeInfoText.Text = string.Format("{0}×{1}  {2}", pixels.Width, pixels.Height, _lastColorText);
             }
             else
             {
-                _loupeInfoText.Text = string.Format("{0},{1}  {2}", px, py, _lastHexColor);
+                _loupeInfoText.Text = string.Format("{0}  ({1},{2})", _lastColorText, px, py);
             }
 
-            // Build 11x11 pixel zoom crop
+            // Lock-free 11x11 pixel copy into reusable WriteableBitmap
             const int half = 5;
             const int size = 11;
-            using (var mini = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format24bppRgb))
+            int dst = 0;
+            for (int dy = -half; dy <= half; dy++)
             {
-                for (int dy = -half; dy <= half; dy++)
+                int sy = py + dy;
+                bool rowValid = sy >= 0 && sy < _rawHeight;
+                int rowBase = sy * _rawStride;
+                for (int dx = -half; dx <= half; dx++)
                 {
-                    for (int dx = -half; dx <= half; dx++)
+                    int sx = px + dx;
+                    if (rowValid && sx >= 0 && sx < _rawWidth)
                     {
-                        int sx = px + dx;
-                        int sy = py + dy;
-                        GdiColor col = (sx >= 0 && sx < _rawBmp.Width && sy >= 0 && sy < _rawBmp.Height)
-                            ? _rawBmp.GetPixel(sx, sy)
-                            : GdiColor.Black;
-                        mini.SetPixel(dx + half, dy + half, col);
+                        int off = rowBase + sx * 4;
+                        _loupeBuf[dst++] = _rawPixels[off];
+                        _loupeBuf[dst++] = _rawPixels[off + 1];
+                        _loupeBuf[dst++] = _rawPixels[off + 2];
+                        _loupeBuf[dst++] = 0xFF;
+                    }
+                    else
+                    {
+                        _loupeBuf[dst++] = 0x17;
+                        _loupeBuf[dst++] = 0x19;
+                        _loupeBuf[dst++] = 0x1A;
+                        _loupeBuf[dst++] = 0xFF;
                     }
                 }
-                _loupeImg.Source = NativeScreen.ToBitmapSource(mini);
             }
+            _loupeBitmap.WritePixels(new Int32Rect(0, 0, size, size), _loupeBuf, size * 4, 0);
 
             var transform = _loupeCard.LayoutTransform as ScaleTransform;
             if (transform == null || transform.ScaleX != uiScale)
                 _loupeCard.LayoutTransform = new ScaleTransform(uiScale, uiScale);
             double lx = pt.X + 18 * uiScale;
             double ly = pt.Y + 18 * uiScale;
-            if (lx + 145 * uiScale > monitor.Right) lx = pt.X - 155 * uiScale;
-            if (ly + 170 * uiScale > monitor.Bottom) ly = pt.Y - 175 * uiScale;
+            if (lx + 160 * uiScale > monitor.Right) lx = pt.X - 170 * uiScale;
+            if (ly + 180 * uiScale > monitor.Bottom) ly = pt.Y - 185 * uiScale;
             Canvas.SetLeft(_loupeCard, Math.Max(monitor.Left + 6 * uiScale, lx));
             Canvas.SetTop(_loupeCard, Math.Max(monitor.Top + 6 * uiScale, ly));
             _loupeCard.Visibility = Visibility.Visible;
@@ -1769,6 +2200,28 @@ namespace CodexLauncher
             var monitor = selecting ? _selectionMonitor : _hoverMonitor;
             WpfRect highlight = selecting ? _selRect : (_hoverWinRect ?? WpfRect.Empty);
             _shade.Paint(monitor, highlight);
+            _annotCanvas.Clip = _hasSelection ? new RectangleGeometry(_selRect) : null;
+
+            if (_topHintBar != null)
+            {
+                if (!selecting)
+                {
+                    WpfRect hintMonitor = !monitor.IsEmpty ? monitor : (_monitors.Count > 0 ? ToCanvasRect(_monitors[0].Bounds) : WpfRect.Empty);
+                    if (!hintMonitor.IsEmpty)
+                    {
+                        _topHintBar.Visibility = Visibility.Visible;
+                        _topHintBar.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+                        double hw = _topHintBar.DesiredSize.Width;
+                        Canvas.SetLeft(_topHintBar, hintMonitor.Left + (hintMonitor.Width - hw) / 2.0);
+                        Canvas.SetTop(_topHintBar, hintMonitor.Top + 12.0);
+                    }
+                }
+                else
+                {
+                    _topHintBar.Visibility = Visibility.Collapsed;
+                }
+            }
+
             if (!selecting || monitor.IsEmpty) return;
 
             double l = Math.Max(monitor.Left, Math.Min(monitor.Right, highlight.Left));
@@ -1792,7 +2245,7 @@ namespace CodexLauncher
             Canvas.SetTop(_sizePill, py);
             _sizePill.Visibility = Visibility.Visible;
 
-            // 8 resize handles (show only when selection is settled and no draw tool active)
+            // 8 resize handles (8x8 sharp white squares)
             bool showHandles = _hasSelection && !_isDraggingSelection && _activeTool == DrawTool.None;
             double mx = (l + r) / 2.0;
             double my = (t + b) / 2.0;
@@ -1806,8 +2259,8 @@ namespace CodexLauncher
                 _handles[i].Visibility = showHandles ? Visibility.Visible : Visibility.Collapsed;
                 if (showHandles)
                 {
-                    Canvas.SetLeft(_handles[i], pts[i].X - 4.5 * _selectionUiScale);
-                    Canvas.SetTop(_handles[i], pts[i].Y - 4.5 * _selectionUiScale);
+                    Canvas.SetLeft(_handles[i], pts[i].X - 4.0 * _selectionUiScale);
+                    Canvas.SetTop(_handles[i], pts[i].Y - 4.0 * _selectionUiScale);
                 }
             }
         }
@@ -1841,7 +2294,8 @@ namespace CodexLauncher
             Canvas.SetLeft(_toolbar, left);
             Canvas.SetTop(_toolbar, top);
 
-            bool needSub = _activeTool == DrawTool.Rect || _activeTool == DrawTool.Arrow || _activeTool == DrawTool.Brush || _activeTool == DrawTool.Text;
+            bool needSub = _activeTool == DrawTool.Rect || _activeTool == DrawTool.Arrow
+                || _activeTool == DrawTool.Brush || _activeTool == DrawTool.Text || _activeTool == DrawTool.Stamp;
             _subBar.Visibility = needSub ? Visibility.Visible : Visibility.Collapsed;
             if (needSub)
             {
@@ -1895,15 +2349,18 @@ namespace CodexLauncher
             CommitActiveTextBox();
             _activeTextPos = pos;
             double fontSize = Math.Max(14, 12 + _activeThickness * 2.0);
+            double maxW = Math.Max(90, _selRect.Right - pos.X - 6);
             _activeTextBox = new TextBox
             {
                 MinWidth = 90,
+                MaxWidth = maxW,
+                TextWrapping = TextWrapping.Wrap,
                 FontSize = fontSize,
                 FontWeight = FontWeights.SemiBold,
                 FontFamily = UiHelpers.MainFont,
                 Foreground = new SolidColorBrush(_activeColor),
-                Background = new SolidColorBrush(WpfColor.FromArgb(0x28, 0x00, 0x00, 0x00)),
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)),
+                Background = new SolidColorBrush(WpfColor.FromArgb(0x36, 0x1A, 0x19, 0x17)),
+                BorderBrush = UiHelpers.OkAccent,
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(4, 2, 4, 2),
                 AcceptsReturn = true
@@ -1926,7 +2383,7 @@ namespace CodexLauncher
 
             if (!string.IsNullOrEmpty(txt))
             {
-                _annotations.Add(new AnnotationItem
+                var item = new AnnotationItem
                 {
                     Tool = DrawTool.Text,
                     Color = _activeColor,
@@ -1934,8 +2391,10 @@ namespace CodexLauncher
                     Start = new WpfPoint(x, y),
                     Text = txt,
                     FontSize = fs
-                });
-                RedrawAnnotations();
+                };
+                _redoStack.Clear();
+                _annotations.Add(item);
+                AddAnnotationVisual(item);
             }
         }
 
@@ -1944,9 +2403,48 @@ namespace CodexLauncher
             CommitActiveTextBox();
             if (_annotations.Count > 0)
             {
+                var last = _annotations[_annotations.Count - 1];
                 _annotations.RemoveAt(_annotations.Count - 1);
-                RedrawAnnotations();
+                if (last.CachedVisual != null)
+                {
+                    _annotCanvas.Children.Remove(last.CachedVisual);
+                    last.CachedVisual = null;
+                }
+                _redoStack.Add(last);
             }
+        }
+
+        private void RedoLast()
+        {
+            CommitActiveTextBox();
+            if (_redoStack.Count > 0)
+            {
+                var item = _redoStack[_redoStack.Count - 1];
+                _redoStack.RemoveAt(_redoStack.Count - 1);
+                _annotations.Add(item);
+                AddAnnotationVisual(item);
+            }
+        }
+
+        private void AddAnnotationVisual(AnnotationItem item)
+        {
+            if (_hasSelection)
+                _annotCanvas.Clip = new RectangleGeometry(_selRect);
+            var el = BuildAnnotationElement(item);
+            item.CachedVisual = el;
+            if (el != null) _annotCanvas.Children.Add(el);
+        }
+
+        private void UpdateCurrentAnnotationVisual()
+        {
+            if (_currentAnnot == null) return;
+            if (_hasSelection)
+                _annotCanvas.Clip = new RectangleGeometry(_selRect);
+            if (_currentAnnot.CachedVisual != null)
+                _annotCanvas.Children.Remove(_currentAnnot.CachedVisual);
+            var el = BuildAnnotationElement(_currentAnnot);
+            _currentAnnot.CachedVisual = el;
+            if (el != null) _annotCanvas.Children.Add(el);
         }
 
         private void RedrawAnnotations()
@@ -1957,77 +2455,134 @@ namespace CodexLauncher
 
             foreach (var item in _annotations)
             {
-                var brush = new SolidColorBrush(item.Color);
-                if (item.Tool == DrawTool.Rect)
-                {
-                    var r = MakeRect(item.Start, item.End);
-                    var shape = new WpfRectangle
-                    {
-                        Width = r.Width,
-                        Height = r.Height,
-                        RadiusX = 2,
-                        RadiusY = 2,
-                        Stroke = brush,
-                        StrokeThickness = item.Thickness
-                    };
-                    Canvas.SetLeft(shape, r.Left);
-                    Canvas.SetTop(shape, r.Top);
-                    _annotCanvas.Children.Add(shape);
-                }
-                else if (item.Tool == DrawTool.Arrow)
-                {
-                    var poly = BuildTaperedArrowPolygon(item.Start, item.End, item.Thickness);
-                    if (poly != null)
-                    {
-                        poly.Fill = brush;
-                        _annotCanvas.Children.Add(poly);
-                    }
-                }
-                else if (item.Tool == DrawTool.Brush && item.Points != null && item.Points.Count >= 2)
-                {
-                    var pl = new Polyline
-                    {
-                        Stroke = brush,
-                        StrokeThickness = item.Thickness,
-                        StrokeStartLineCap = PenLineCap.Round,
-                        StrokeEndLineCap = PenLineCap.Round,
-                        StrokeLineJoin = PenLineJoin.Round,
-                        Points = new PointCollection(item.Points)
-                    };
-                    _annotCanvas.Children.Add(pl);
-                }
-                else if (item.Tool == DrawTool.Mosaic)
-                {
-                    var r = MakeRect(item.Start, item.End);
-                    if (r.Width >= 4 && r.Height >= 4)
-                    {
-                        var bmpSrc = BuildMosaicPreview(r);
-                        if (bmpSrc != null)
-                        {
-                            var img = new System.Windows.Controls.Image { Source = bmpSrc, Width = r.Width, Height = r.Height, Stretch = Stretch.Fill };
-                            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
-                            Canvas.SetLeft(img, r.Left);
-                            Canvas.SetTop(img, r.Top);
-                            _annotCanvas.Children.Add(img);
-                        }
-                    }
-                }
-                else if (item.Tool == DrawTool.Text && !string.IsNullOrEmpty(item.Text))
-                {
-                    var tb = new TextBlock
-                    {
-                        Text = item.Text,
-                        FontSize = item.FontSize,
-                        FontWeight = FontWeights.SemiBold,
-                        FontFamily = UiHelpers.MainFont,
-                        Foreground = brush,
-                        Effect = new DropShadowEffect { Color = WpfColors.Black, BlurRadius = 3, ShadowDepth = 1, Opacity = 0.45 }
-                    };
-                    Canvas.SetLeft(tb, item.Start.X);
-                    Canvas.SetTop(tb, item.Start.Y);
-                    _annotCanvas.Children.Add(tb);
-                }
+                var el = BuildAnnotationElement(item);
+                item.CachedVisual = el;
+                if (el != null) _annotCanvas.Children.Add(el);
             }
+        }
+
+        private UIElement BuildAnnotationElement(AnnotationItem item)
+        {
+            var brush = new SolidColorBrush(item.Color);
+            brush.Freeze();
+
+            if (item.Tool == DrawTool.Rect)
+            {
+                var r = MakeRect(item.Start, item.End);
+                var shape = new WpfRectangle
+                {
+                    Width = r.Width,
+                    Height = r.Height,
+                    RadiusX = 0,
+                    RadiusY = 0,
+                    Stroke = brush,
+                    StrokeThickness = item.Thickness
+                };
+                Canvas.SetLeft(shape, r.Left);
+                Canvas.SetTop(shape, r.Top);
+                return shape;
+            }
+            if (item.Tool == DrawTool.Arrow)
+            {
+                var poly = BuildTaperedArrowPolygon(item.Start, item.End, item.Thickness);
+                if (poly != null) poly.Fill = brush;
+                return poly;
+            }
+            if (item.Tool == DrawTool.Brush && item.Points != null && item.Points.Count >= 2)
+            {
+                return new Polyline
+                {
+                    Stroke = brush,
+                    StrokeThickness = item.Thickness,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round,
+                    Points = new PointCollection(item.Points)
+                };
+            }
+            if (item.Tool == DrawTool.Mosaic)
+            {
+                var r = MakeRect(item.Start, item.End);
+                if (r.Width >= 4 && r.Height >= 4)
+                {
+                    var bmpSrc = BuildMosaicPreview(r, item.MosaicBlockSize);
+                    if (bmpSrc != null)
+                    {
+                        var img = new System.Windows.Controls.Image { Source = bmpSrc, Width = r.Width, Height = r.Height, Stretch = Stretch.Fill };
+                        RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
+                        Canvas.SetLeft(img, r.Left);
+                        Canvas.SetTop(img, r.Top);
+                        return img;
+                    }
+                }
+                return null;
+            }
+            if (item.Tool == DrawTool.Text && !string.IsNullOrEmpty(item.Text))
+            {
+                var container = new Grid();
+                var shadow = new TextBlock
+                {
+                    Text = item.Text,
+                    FontSize = item.FontSize,
+                    FontWeight = FontWeights.SemiBold,
+                    FontFamily = UiHelpers.MainFont,
+                    Foreground = new SolidColorBrush(WpfColor.FromArgb(0xA6, 0x1A, 0x19, 0x17)),
+                    Margin = new Thickness(1, 1, 0, 0),
+                    TextWrapping = TextWrapping.Wrap
+                };
+                var fg = new TextBlock
+                {
+                    Text = item.Text,
+                    FontSize = item.FontSize,
+                    FontWeight = FontWeights.SemiBold,
+                    FontFamily = UiHelpers.MainFont,
+                    Foreground = brush,
+                    TextWrapping = TextWrapping.Wrap
+                };
+                container.Children.Add(shadow);
+                container.Children.Add(fg);
+                Canvas.SetLeft(container, item.Start.X);
+                Canvas.SetTop(container, item.Start.Y);
+                return container;
+            }
+            if (item.Tool == DrawTool.Stamp)
+            {
+                double boxSize = Math.Max(22, 18 + item.Thickness * 1.8);
+                var wrap = new Grid();
+                wrap.Children.Add(new WpfRectangle
+                {
+                    Width = boxSize,
+                    Height = boxSize,
+                    Fill = UiHelpers.BorderStrong,
+                    Margin = new Thickness(2, 2, 0, 0)
+                });
+                bool lightFill = item.Color == WpfColors.White;
+                var box = new Border
+                {
+                    Width = boxSize,
+                    Height = boxSize,
+                    Background = brush,
+                    BorderBrush = UiHelpers.BorderStrong,
+                    BorderThickness = new Thickness(1.5),
+                    CornerRadius = new CornerRadius(0),
+                    Margin = new Thickness(0, 0, 2, 2),
+                    Child = new TextBlock
+                    {
+                        Text = item.StampNumber.ToString("D2"),
+                        FontSize = Math.Max(11, Math.Round(boxSize * 0.48)),
+                        FontWeight = FontWeights.Bold,
+                        FontFamily = new System.Windows.Media.FontFamily("Cascadia Mono, Consolas, Segoe UI"),
+                        Foreground = lightFill ? UiHelpers.TextPrimary : WpfBrushes.White,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                wrap.Children.Add(box);
+                Canvas.SetLeft(wrap, item.Start.X - boxSize / 2.0);
+                Canvas.SetTop(wrap, item.Start.Y - boxSize / 2.0);
+                return wrap;
+            }
+            return null;
         }
 
         private static List<WpfPoint> ComputeArrowPoints(WpfPoint start, WpfPoint end, double thickness)
@@ -2069,13 +2624,13 @@ namespace CodexLauncher
             return new Polygon { Points = new PointCollection(pts) };
         }
 
-        private BitmapSource BuildMosaicPreview(WpfRect dipRect)
+        private BitmapSource BuildMosaicPreview(WpfRect dipRect, int blockDip = 10)
         {
             if (_rawBmp == null) return null;
             GdiRect pixels = ToBitmapRect(dipRect);
             if (pixels.Width <= 1 || pixels.Height <= 1) return null;
 
-            int block = Math.Max(8, (int)Math.Round(10 * ScaleX));
+            int block = Math.Max(4, (int)Math.Round(Math.Max(4, blockDip) * ScaleX));
             int gw = Math.Max(1, pixels.Width / block);
             int gh = Math.Max(1, pixels.Height / block);
             using (var tiny = new Bitmap(gw, gh))
@@ -2097,94 +2652,62 @@ namespace CodexLauncher
             if (crop.Width <= 0 || crop.Height <= 0) throw new InvalidOperationException("请选择有面积的截图区域。");
 
             // The overlay shows this exact frame, even if the desktop has changed underneath it.
-            var result = _rawBmp.Clone(crop, _rawBmp.PixelFormat);
-            try { DrawFinalAnnotations(result, crop); }
+            var result = _rawBmp.Clone(crop, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                if (_annotations.Count > 0)
+                    CompositeWpfAnnotations(result, crop);
+            }
             catch { result.Dispose(); throw; }
             return result;
         }
 
-        private void DrawFinalAnnotations(Bitmap result, GdiRect crop)
+        private void CompositeWpfAnnotations(Bitmap result, GdiRect crop)
         {
-            if (_annotations.Count == 0) return;
-            using (var g = Graphics.FromImage(result))
+            double sx = ScaleX;
+            double sy = ScaleY;
+            double dipW = crop.Width / sx;
+            double dipH = crop.Height / sy;
+            double dipX = crop.Left / sx;
+            double dipY = crop.Top / sy;
+
+            _annotCanvas.Measure(new System.Windows.Size(_root.ActualWidth, _root.ActualHeight));
+            _annotCanvas.Arrange(new WpfRect(0, 0, _root.ActualWidth, _root.ActualHeight));
+            _annotCanvas.UpdateLayout();
+
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
             {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-
-                double sx = ScaleX;
-                double sy = ScaleY;
-                double ox = crop.Left / sx;
-                double oy = crop.Top / sy;
-
-                foreach (var item in _annotations)
+                var vb = new VisualBrush(_annotCanvas)
                 {
-                    GdiColor col = GdiColor.FromArgb(item.Color.A, item.Color.R, item.Color.G, item.Color.B);
-                    float penW = (float)(item.Thickness * sx);
+                    Viewbox = new WpfRect(dipX, dipY, dipW, dipH),
+                    ViewboxUnits = BrushMappingMode.Absolute,
+                    Stretch = Stretch.Fill
+                };
+                dc.DrawRectangle(vb, null, new WpfRect(0, 0, dipW, dipH));
+            }
 
-                    if (item.Tool == DrawTool.Rect)
-                    {
-                        var r = MakeRect(item.Start, item.End);
-                        using (var pen = new System.Drawing.Pen(col, penW))
-                        {
-                            pen.LineJoin = LineJoin.Round;
-                            g.DrawRectangle(pen, (float)((r.Left - ox) * sx), (float)((r.Top - oy) * sy), (float)(r.Width * sx), (float)(r.Height * sy));
-                        }
-                    }
-                    else if (item.Tool == DrawTool.Arrow)
-                    {
-                        var pts = ComputeArrowPoints(item.Start, item.End, item.Thickness);
-                        if (pts != null)
-                        {
-                            var gdiPts = pts.Select(p => new GdiPointF((float)((p.X - ox) * sx), (float)((p.Y - oy) * sy))).ToArray();
-                            using (var br = new SolidBrush(col))
-                                g.FillPolygon(br, gdiPts);
-                        }
-                    }
-                    else if (item.Tool == DrawTool.Brush && item.Points != null && item.Points.Count >= 2)
-                    {
-                        var gdiPts = item.Points.Select(p => new GdiPointF((float)((p.X - ox) * sx), (float)((p.Y - oy) * sy))).ToArray();
-                        using (var pen = new System.Drawing.Pen(col, penW))
-                        {
-                            pen.StartCap = LineCap.Round;
-                            pen.EndCap = LineCap.Round;
-                            pen.LineJoin = LineJoin.Round;
-                            g.DrawLines(pen, gdiPts);
-                        }
-                    }
-                    else if (item.Tool == DrawTool.Mosaic)
-                    {
-                        var r = MakeRect(item.Start, item.End);
-                        GdiRect pixels = GdiRect.Intersect(crop, ToBitmapRect(r));
-                        if (pixels.Width <= 0 || pixels.Height <= 0) continue;
-                        var output = new GdiRect(pixels.Left - crop.Left, pixels.Top - crop.Top, pixels.Width, pixels.Height);
-                        int block = Math.Max(8, (int)Math.Round(10 * sx));
-                        int gw = Math.Max(1, output.Width / block);
-                        int gh = Math.Max(1, output.Height / block);
-                        using (var tiny = new Bitmap(gw, gh))
-                        using (var gt = Graphics.FromImage(tiny))
-                        {
-                            gt.InterpolationMode = InterpolationMode.Bilinear;
-                            gt.DrawImage(result, new GdiRect(0, 0, gw, gh), output, GraphicsUnit.Pixel);
-                            var prevInterp = g.InterpolationMode;
-                            g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                            g.DrawImage(tiny, output, new GdiRect(0, 0, gw, gh), GraphicsUnit.Pixel);
-                            g.InterpolationMode = prevInterp;
-                        }
-                    }
-                    else if (item.Tool == DrawTool.Text && !string.IsNullOrEmpty(item.Text))
-                    {
-                        float pxFont = (float)(item.FontSize * sy * 0.96);
-                        using (var font = new Font("Microsoft YaHei UI", pxFont, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel))
-                        using (var shadowBr = new SolidBrush(GdiColor.FromArgb(110, 0, 0, 0)))
-                        using (var br = new SolidBrush(col))
-                        {
-                            float tx = (float)((item.Start.X - ox) * sx);
-                            float ty = (float)((item.Start.Y - oy) * sy);
-                            g.DrawString(item.Text, font, shadowBr, tx + 1.5f, ty + 1.5f);
-                            g.DrawString(item.Text, font, br, tx, ty);
-                        }
-                    }
+            var rtb = new RenderTargetBitmap(crop.Width, crop.Height, 96.0 * sx, 96.0 * sy, PixelFormats.Pbgra32);
+            rtb.Render(dv);
+
+            using (var overlayBmp = new Bitmap(crop.Width, crop.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+            {
+                BitmapData data = overlayBmp.LockBits(
+                    new GdiRect(0, 0, crop.Width, crop.Height),
+                    ImageLockMode.WriteOnly,
+                    System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                try
+                {
+                    rtb.CopyPixels(Int32Rect.Empty, data.Scan0, data.Stride * crop.Height, data.Stride);
+                }
+                finally
+                {
+                    overlayBmp.UnlockBits(data);
+                }
+
+                using (var g = Graphics.FromImage(result))
+                {
+                    g.DrawImageUnscaled(overlayBmp, 0, 0);
                 }
             }
         }
@@ -2193,18 +2716,64 @@ namespace CodexLauncher
         {
             try
             {
+                string clipErr;
+                bool ok;
                 using (var finalBmp = BuildFinalBitmap())
                 {
-                    WinForms.Clipboard.SetImage(finalBmp);
+                    ok = ClipboardHelper.TrySetImage(finalBmp, out clipErr);
                 }
                 _closeSession();
-                _notify("截图已复制到剪贴板，可直接 Ctrl+V 粘贴", false);
+                if (ok) _notify("截图已复制到剪贴板，可直接 Ctrl+V 粘贴", false);
+                else _notify("复制截图失败：" + clipErr, true);
             }
             catch (Exception ex)
             {
                 _closeSession();
                 _notify("复制截图失败：" + ex.Message, true);
             }
+        }
+
+        private void SaveTempAndCopyPath()
+        {
+            try
+            {
+                string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AIBase_Shots");
+                Directory.CreateDirectory(dir);
+                PruneOldTempShots(dir);
+
+                string filePath = System.IO.Path.Combine(dir, "shot_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png");
+                using (var finalBmp = BuildFinalBitmap())
+                {
+                    finalBmp.Save(filePath, ImageFormat.Png);
+                }
+                string clipErr;
+                bool ok = ClipboardHelper.TrySetText(filePath, out clipErr);
+                _closeSession();
+                if (ok) _notify("已保存并复制路径：" + filePath, false);
+                else _notify("已保存图片，但复制路径失败：" + clipErr, true);
+            }
+            catch (Exception ex)
+            {
+                _closeSession();
+                _notify("保存临时路径失败：" + ex.Message, true);
+            }
+        }
+
+        private static void PruneOldTempShots(string dir)
+        {
+            try
+            {
+                DateTime cutoff = DateTime.UtcNow.AddHours(-24);
+                foreach (string f in Directory.GetFiles(dir, "shot_*.png"))
+                {
+                    try
+                    {
+                        if (File.GetCreationTimeUtc(f) < cutoff) File.Delete(f);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
         }
 
         private void SaveToFile()
@@ -2224,7 +2793,7 @@ namespace CodexLauncher
                     Title = "保存截图",
                     Filter = "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpg)|*.jpg",
                     InitialDirectory = defaultDir,
-                    FileName = "AIHub_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png"
+                    FileName = "AIBase_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png"
                 };
                 if (sfd.ShowDialog() == true)
                 {
@@ -2250,12 +2819,18 @@ namespace CodexLauncher
         {
             try
             {
+                GdiRect crop = ToBitmapRect(_selRect);
                 Bitmap finalBmp = BuildFinalBitmap();
-                double dispW = _selRect.Width;
-                double dispH = _selRect.Height;
+                var physTarget = new NativeScreen.RECT
+                {
+                    Left = _physRect.Left + crop.Left,
+                    Top = _physRect.Top + crop.Top,
+                    Right = _physRect.Left + crop.Right,
+                    Bottom = _physRect.Top + crop.Bottom
+                };
                 _closeSession();
 
-                var pinWin = new PinnedImageWindow(finalBmp, dispW, dispH, _notify);
+                var pinWin = new PinnedImageWindow(finalBmp, physTarget, _notify);
                 pinWin.Show();
             }
             catch (Exception ex)
@@ -2286,22 +2861,32 @@ namespace CodexLauncher
     }
 
     /// <summary>
-    /// Borderless always-on-top zoomable floating pin window for screenshots.
+    /// Borderless always-on-top zoomable floating pin window for screenshots (v1.2 0px architectural).
     /// </summary>
     internal class PinnedImageWindow : Window
     {
         private Bitmap _bmp;
-        private readonly double _baseW;
-        private readonly double _baseH;
+        private readonly NativeScreen.RECT _physRect;
+        private double _baseW;
+        private double _baseH;
         private double _zoom = 1.0;
+        private double _pinOpacity = 1.0;
+        private bool _isTopmost = true;
         private readonly Action<string, bool> _notify;
+        private Grid _hudWrap;
+        private TextBlock _hudText;
+        private DispatcherTimer _hudTimer;
+        private PinContextMenuWindow _activeMenu;
 
-        public PinnedImageWindow(Bitmap bmp, double displayW, double displayH, Action<string, bool> notify)
+        public PinnedImageWindow(Bitmap bmp, NativeScreen.RECT physicalScreenRect, Action<string, bool> notify)
         {
             _bmp = bmp;
-            _baseW = Math.Max(80, displayW);
-            _baseH = Math.Max(60, displayH);
+            _physRect = physicalScreenRect;
             _notify = notify;
+
+            double dpiScale = 1.0;
+            _baseW = Math.Max(40, _physRect.Width / dpiScale);
+            _baseH = Math.Max(40, _physRect.Height / dpiScale);
 
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
@@ -2309,9 +2894,9 @@ namespace CodexLauncher
             Topmost = true;
             ShowInTaskbar = false;
             ResizeMode = ResizeMode.NoResize;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Width = _baseW + 20;
-            Height = _baseH + 20;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
 
             var img = new System.Windows.Controls.Image
             {
@@ -2320,218 +2905,772 @@ namespace CodexLauncher
             };
             RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
+            _hudText = new TextBlock
+            {
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = WpfBrushes.White,
+                FontFamily = new System.Windows.Media.FontFamily("Cascadia Mono, Consolas, Segoe UI")
+            };
+            var hudBorder = new Border
+            {
+                Background = UiHelpers.PrimaryBg,
+                BorderBrush = WpfBrushes.White,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(0),
+                Padding = new Thickness(6, 2, 6, 2),
+                Child = _hudText
+            };
+            _hudWrap = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 6, 6, 0),
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed
+            };
+            _hudWrap.Children.Add(hudBorder);
+
+            var imgLayer = new Grid();
+            imgLayer.Children.Add(img);
+            imgLayer.Children.Add(_hudWrap);
+
             var card = new Border
             {
-                Margin = new Thickness(10),
-                BorderBrush = new SolidColorBrush(WpfColor.FromRgb(0x10, 0xB9, 0x81)),
-                BorderThickness = new Thickness(1.2),
-                CornerRadius = new CornerRadius(4),
-                Child = img,
-                Effect = new DropShadowEffect { Color = WpfColors.Black, BlurRadius = 16, ShadowDepth = 4, Opacity = 0.30 }
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(0),
+                Background = WpfBrushes.White,
+                Child = imgLayer,
+                Margin = new Thickness(0, 0, 3, 3)
             };
-            Content = card;
 
-            var cm = new ContextMenu();
-            var mCopy = new MenuItem { Header = "复制图片 (Ctrl+C)" };
-            mCopy.Click += (s, e) => CopyPin();
-            var mSave = new MenuItem { Header = "保存为 PNG..." };
-            mSave.Click += (s, e) => SavePin();
-            var mClose = new MenuItem { Header = "关闭贴图 (Esc)" };
-            mClose.Click += (s, e) => Close();
-            cm.Items.Add(mCopy);
-            cm.Items.Add(mSave);
-            cm.Items.Add(new Separator());
-            cm.Items.Add(mClose);
-            ContextMenu = cm;
+            var root = new Grid();
+            root.Children.Add(new WpfRectangle
+            {
+                Fill = UiHelpers.BorderStrong,
+                Margin = new Thickness(3, 3, 0, 0),
+                IsHitTestVisible = false
+            });
+            root.Children.Add(card);
+            Content = root;
+
+            Width = _baseW + 6;
+            Height = _baseH + 6;
+
+            SourceInitialized += (s, e) => PlaceInOriginalPosition();
 
             MouseLeftButtonDown += (s, e) =>
             {
                 if (e.ClickCount == 2) Close();
                 else { try { DragMove(); } catch { } }
             };
-            MouseWheel += (s, e) =>
+            MouseRightButtonUp += (s, e) =>
             {
-                _zoom = Math.Max(0.3, Math.Min(3.0, _zoom + (e.Delta > 0 ? 0.1 : -0.1)));
-                Width = _baseW * _zoom + 20;
-                Height = _baseH * _zoom + 20;
+                ShowContextMenu();
+                e.Handled = true;
             };
+            MouseWheel += OnPinMouseWheel;
             KeyDown += (s, e) =>
             {
+                bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
                 if (e.Key == Key.Escape) Close();
-                else if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) != 0) CopyPin();
+                else if (ctrl && e.Key == Key.C) CopyPin();
+                else if (ctrl && e.Key == Key.S) SavePin();
+                else if (e.Key == Key.D0 || e.Key == Key.NumPad0) ResetPin();
+                else if (e.Key == Key.T) ToggleTopmost();
             };
-            Closed += (s, e) => { try { if (_bmp != null) { _bmp.Dispose(); _bmp = null; } } catch { } };
+            Closed += (s, e) =>
+            {
+                if (_hudTimer != null) _hudTimer.Stop();
+                if (_activeMenu != null) { try { _activeMenu.Close(); } catch { } }
+                try { if (_bmp != null) { _bmp.Dispose(); _bmp = null; } } catch { }
+            };
+        }
+
+        private void PlaceInOriginalPosition()
+        {
+            try
+            {
+                var src = PresentationSource.FromVisual(this);
+                double dpiX = 1.0, dpiY = 1.0;
+                if (src != null && src.CompositionTarget != null)
+                {
+                    dpiX = src.CompositionTarget.TransformToDevice.M11;
+                    dpiY = src.CompositionTarget.TransformToDevice.M22;
+                }
+                _baseW = Math.Max(40, _physRect.Width / dpiX);
+                _baseH = Math.Max(40, _physRect.Height / dpiY);
+                Width = _baseW + 6;
+                Height = _baseH + 6;
+
+                var helper = new WindowInteropHelper(this);
+                int physX = _physRect.Left - (int)Math.Round(1.5 * dpiX);
+                int physY = _physRect.Top - (int)Math.Round(1.5 * dpiY);
+                int physW = (int)Math.Round(Width * dpiX);
+                int physH = (int)Math.Round(Height * dpiY);
+                NativeScreen.SetWindowPos(helper.Handle, NativeScreen.HWND_TOPMOST, physX, physY, physW, physH, NativeScreen.SWP_NOACTIVATE);
+            }
+            catch { }
+        }
+
+        private void OnPinMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+            {
+                _pinOpacity = Math.Max(0.20, Math.Min(1.0, _pinOpacity + (e.Delta > 0 ? 0.08 : -0.08)));
+                Opacity = _pinOpacity;
+                ShowHud(string.Format("透明度 {0:0}%", _pinOpacity * 100));
+                return;
+            }
+
+            double nextZoom = Math.Max(0.25, Math.Min(4.0, _zoom + (e.Delta > 0 ? 0.10 : -0.10)));
+            if (Math.Abs(nextZoom - _zoom) < 0.001) return;
+
+            double oldW = Width;
+            double oldH = Height;
+            double newW = _baseW * nextZoom + 6;
+            double newH = _baseH * nextZoom + 6;
+            _zoom = nextZoom;
+            Left -= (newW - oldW) / 2.0;
+            Top -= (newH - oldH) / 2.0;
+            Width = newW;
+            Height = newH;
+            ShowHud(string.Format("{0:0}%", _zoom * 100));
+        }
+
+        private void ResetPin()
+        {
+            double oldW = Width;
+            double oldH = Height;
+            _zoom = 1.0;
+            _pinOpacity = 1.0;
+            Opacity = 1.0;
+            double newW = _baseW + 6;
+            double newH = _baseH + 6;
+            Left -= (newW - oldW) / 2.0;
+            Top -= (newH - oldH) / 2.0;
+            Width = newW;
+            Height = newH;
+            ShowHud("100%");
+        }
+
+        private void ToggleTopmost()
+        {
+            _isTopmost = !_isTopmost;
+            Topmost = _isTopmost;
+            ShowHud(_isTopmost ? "已置顶" : "已取消置顶");
+        }
+
+        private void ShowHud(string text)
+        {
+            _hudText.Text = text;
+            _hudWrap.Visibility = Visibility.Visible;
+            if (_hudTimer == null)
+            {
+                _hudTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                _hudTimer.Tick += (s, ev) => { _hudTimer.Stop(); _hudWrap.Visibility = Visibility.Collapsed; };
+            }
+            _hudTimer.Stop();
+            _hudTimer.Start();
+        }
+
+        private void ShowContextMenu()
+        {
+            if (_activeMenu != null)
+            {
+                try { _activeMenu.Close(); } catch { }
+                _activeMenu = null;
+            }
+            NativeScreen.POINT pt;
+            NativeScreen.GetPhysicalCursorPos(out pt);
+            _activeMenu = new PinContextMenuWindow(
+                _isTopmost,
+                CopyPin,
+                SavePin,
+                RunPinOcr,
+                ToggleTopmost,
+                ResetPin,
+                Close);
+            _activeMenu.Closed += (s, e) => { if (_activeMenu == s) _activeMenu = null; };
+            _activeMenu.ShowAtPhysical(pt.X, pt.Y);
         }
 
         private void CopyPin()
         {
-            try { WinForms.Clipboard.SetImage(_bmp); if (_notify != null) _notify("已复制贴图到剪贴板", false); } catch { }
+            if (_bmp == null) return;
+            string err;
+            if (ClipboardHelper.TrySetImage(_bmp, out err))
+            {
+                if (_notify != null) _notify("已复制贴图到剪贴板", false);
+            }
+            else if (_notify != null)
+            {
+                _notify("复制贴图失败：" + err, true);
+            }
         }
 
         private void SavePin()
         {
-            var sfd = new SaveFileDialog
+            if (_bmp == null) return;
+            bool prevTop = Topmost;
+            try
             {
-                Title = "保存贴图",
-                Filter = "PNG 图片 (*.png)|*.png",
-                FileName = "AIHub_Pin_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png"
-            };
-            if (sfd.ShowDialog() == true)
+                Topmost = false;
+                var sfd = new SaveFileDialog
+                {
+                    Title = "保存贴图",
+                    Filter = "PNG 图片 (*.png)|*.png",
+                    FileName = "AIBase_Pin_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png"
+                };
+                if (sfd.ShowDialog(this) == true)
+                {
+                    _bmp.Save(sfd.FileName, ImageFormat.Png);
+                    if (_notify != null) _notify("贴图已保存：" + System.IO.Path.GetFileName(sfd.FileName), false);
+                }
+            }
+            catch (Exception ex)
             {
-                _bmp.Save(sfd.FileName, ImageFormat.Png);
-                if (_notify != null) _notify("贴图已保存：" + System.IO.Path.GetFileName(sfd.FileName), false);
+                if (_notify != null) _notify("保存贴图失败：" + ex.Message, true);
+            }
+            finally
+            {
+                Topmost = prevTop;
+            }
+        }
+
+        private void RunPinOcr()
+        {
+            if (_bmp == null) return;
+            try
+            {
+                var clone = new Bitmap(_bmp);
+                var win = new OcrResultWindow(clone, _notify);
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                if (_notify != null) _notify("提取文字失败：" + ex.Message, true);
             }
         }
     }
 
+    internal sealed class PinContextMenuWindow : Window
+    {
+        public PinContextMenuWindow(
+            bool isTopmost,
+            Action onCopy,
+            Action onSave,
+            Action onOcr,
+            Action onToggleTopmost,
+            Action onReset,
+            Action onClosePin)
+        {
+            WindowStyle = WindowStyle.None;
+            AllowsTransparency = true;
+            Background = WpfBrushes.Transparent;
+            Topmost = true;
+            ShowInTaskbar = false;
+            ResizeMode = ResizeMode.NoResize;
+            SizeToContent = SizeToContent.WidthAndHeight;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
+
+            var sp = new StackPanel { Margin = new Thickness(4) };
+            sp.Children.Add(MakeRow("复制图片 (Ctrl+C)", UiHelpers.PrimaryBg, false, onCopy));
+            sp.Children.Add(MakeRow("保存为 PNG (Ctrl+S)", null, false, onSave));
+            sp.Children.Add(MakeRow("提取文字 (OCR)", UiHelpers.OkAccent, false, onOcr));
+            sp.Children.Add(MakeRow(isTopmost ? "取消置顶 (T)" : "置顶锁定 (T)", isTopmost ? UiHelpers.OkAccent : UiHelpers.TextMuted, false, onToggleTopmost));
+            sp.Children.Add(MakeRow("重置 100% (0)", null, false, onReset));
+            sp.Children.Add(new Border { Height = 1, Background = UiHelpers.Hairline, Margin = new Thickness(4, 3, 4, 3) });
+            sp.Children.Add(MakeRow("关闭贴图 (Esc)", UiHelpers.DangerBg, true, onClosePin));
+
+            var card = new Border
+            {
+                MinWidth = 176,
+                Background = UiHelpers.MainBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(0),
+                Child = sp,
+                Margin = new Thickness(0, 0, 3, 3)
+            };
+
+            var root = new Grid();
+            root.Children.Add(new WpfRectangle { Fill = UiHelpers.BorderStrong, Margin = new Thickness(3, 3, 0, 0), IsHitTestVisible = false });
+            root.Children.Add(card);
+            Content = root;
+
+            Deactivated += (s, e) => { try { Close(); } catch { } };
+            KeyDown += (s, e) => { if (e.Key == Key.Escape) Close(); };
+        }
+
+        private Button MakeRow(string label, System.Windows.Media.Brush dot, bool danger, Action action)
+        {
+            var btn = UiHelpers.MakeMenuRowButton(label, dot, danger ? "danger" : "normal", false);
+            btn.Click += (s, e) =>
+            {
+                Close();
+                if (action != null) action();
+            };
+            return btn;
+        }
+
+        public void ShowAtPhysical(int physX, int physY)
+        {
+            Show();
+            var src = PresentationSource.FromVisual(this);
+            double dpiX = 1.0, dpiY = 1.0;
+            if (src != null && src.CompositionTarget != null)
+            {
+                dpiX = src.CompositionTarget.TransformToDevice.M11;
+                dpiY = src.CompositionTarget.TransformToDevice.M22;
+            }
+            var work = SystemParameters.WorkArea;
+            double x = physX / dpiX;
+            double y = physY / dpiY;
+            if (x + ActualWidth > work.Right) x = Math.Max(work.Left, work.Right - ActualWidth - 4);
+            if (y + ActualHeight > work.Bottom) y = Math.Max(work.Top, work.Bottom - ActualHeight - 4);
+            Left = x;
+            Top = y;
+            Activate();
+        }
+    }
+
     /// <summary>
-    /// Displays the text returned by the local OCR engine.
+    /// Displays the text returned by the local OCR engine (v1.2 0px architectural).
     /// </summary>
     internal class OcrResultWindow : Window
     {
-        private Bitmap _bmp;
-        private TextBox _textBox;
-        private TextBlock _statusText;
+        private Bitmap _sourceBmp;
+        private readonly TextBox _textBox;
+        private readonly TextBlock _statusText;
+        private readonly StackPanel _loaderBox;
+        private readonly WpfRectangle[] _loaderSquares = new WpfRectangle[3];
+        private readonly DispatcherTimer _loaderTimer;
+        private int _loaderTick = 0;
+
+        private readonly Button _btnPaddle;
+        private readonly Button _btnWindows;
+        private readonly Button _btnPreview;
+        private readonly Button _btnMerge;
+        private readonly Border _previewWrap;
         private readonly Action<string, bool> _notify;
+
+        private CancellationTokenSource _ocrCts;
+        private string _preferredEngine = "auto";
+        private string _rawOcrText = "";
+        private bool _mergedMode = false;
 
         public OcrResultWindow(Bitmap bmp, Action<string, bool> notify)
         {
-            _bmp = bmp;
+            _sourceBmp = bmp;
             _notify = notify;
 
-            Title = "AI Hub · 提取文字（本机离线 OCR）";
-            Width = 520;
-            Height = 380;
-            MinWidth = 380;
-            MinHeight = 260;
+            Title = "AI BASE · 提取文字（本机离线 OCR）";
+            Width = 580;
+            Height = 430;
+            MinWidth = 440;
+            MinHeight = 300;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Topmost = true;
             Background = UiHelpers.MainBg;
             FontFamily = UiHelpers.MainFont;
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
             Icon = UiHelpers.LoadWindowIcon();
             UiHelpers.ApplySeamlessLightTitlebar(this);
 
-            var grid = new Grid { Margin = new Thickness(16) };
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var root = new Grid { Margin = new Thickness(14) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // 1. Top status & toolbar strip
+            var topBar = new Border
+            {
+                Background = UiHelpers.SubtleBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5, 1.5, 1.5, 0),
+                Padding = new Thickness(10, 7, 10, 7)
+            };
+            var topGrid = new Grid();
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var statusRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            _loaderBox = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            for (int i = 0; i < 3; i++)
+            {
+                var sq = new WpfRectangle
+                {
+                    Width = 5,
+                    Height = 5,
+                    Fill = UiHelpers.PrimaryBg,
+                    Opacity = i == 0 ? 1.0 : 0.28,
+                    Margin = new Thickness(0, 0, 2, 0)
+                };
+                _loaderSquares[i] = sq;
+                _loaderBox.Children.Add(sq);
+            }
+            statusRow.Children.Add(_loaderBox);
 
             _statusText = new TextBlock
             {
                 Text = "正在本机识别中英文文字…",
-                FontSize = 12.5,
-                Foreground = UiHelpers.TextSecondary,
-                Margin = new Thickness(0, 0, 0, 10)
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = UiHelpers.TextPrimary,
+                VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetRow(_statusText, 0);
-            grid.Children.Add(_statusText);
+            statusRow.Children.Add(_statusText);
+            Grid.SetColumn(statusRow, 0);
+            topGrid.Children.Add(statusRow);
 
+            var toolsRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            _btnPaddle = MakeMiniBtn("PaddleOCR", () => SwitchEngine("paddle"));
+            _btnWindows = MakeMiniBtn("Windows OCR", () => SwitchEngine("windows"));
+            _btnWindows.Margin = new Thickness(-1, 0, 6, 0);
+            _btnPreview = MakeMiniBtn("原图", TogglePreview);
+            _btnPreview.Margin = new Thickness(0, 0, 6, 0);
+            _btnMerge = MakeMiniBtn("智能合并换行", ToggleMergeLines);
+
+            toolsRow.Children.Add(_btnPaddle);
+            toolsRow.Children.Add(_btnWindows);
+            toolsRow.Children.Add(_btnPreview);
+            toolsRow.Children.Add(_btnMerge);
+            Grid.SetColumn(toolsRow, 1);
+            topGrid.Children.Add(toolsRow);
+            topBar.Child = topGrid;
+            Grid.SetRow(topBar, 0);
+            root.Children.Add(topBar);
+
+            // 2. Collapsible source image preview
+            var previewImg = new System.Windows.Controls.Image
+            {
+                Source = _sourceBmp != null ? NativeScreen.ToBitmapSource(_sourceBmp) : null,
+                MaxHeight = 140,
+                Stretch = Stretch.Uniform
+            };
+            RenderOptions.SetBitmapScalingMode(previewImg, BitmapScalingMode.HighQuality);
+            _previewWrap = new Border
+            {
+                Background = UiHelpers.HoverBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1.5, 1, 1.5, 0),
+                Padding = new Thickness(8),
+                Child = previewImg,
+                Visibility = Visibility.Collapsed
+            };
+            Grid.SetRow(_previewWrap, 1);
+            root.Children.Add(_previewWrap);
+
+            // 3. Editable OCR text area
             _textBox = new TextBox
             {
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                FontSize = 13.5,
+                FontSize = 13,
                 Padding = new Thickness(10),
                 BorderBrush = UiHelpers.BorderStrong,
                 BorderThickness = new Thickness(1.5),
-                Background = UiHelpers.SubtleBg,
+                Background = WpfBrushes.White,
                 Foreground = UiHelpers.TextPrimary
             };
-            Grid.SetRow(_textBox, 1);
-            grid.Children.Add(_textBox);
+            Grid.SetRow(_textBox, 2);
+            root.Children.Add(_textBox);
 
-            var footer = new StackPanel
+            // 4. Footer
+            var footerGrid = new Grid { Margin = new Thickness(0, 12, 0, 0) };
+            footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var hintText = new TextBlock
             {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 12, 0, 0)
+                Text = "Ctrl+Enter 复制并关闭 · Esc 关闭",
+                FontSize = 11,
+                Foreground = UiHelpers.TextMuted,
+                VerticalAlignment = VerticalAlignment.Center
             };
+            Grid.SetColumn(hintText, 0);
+            footerGrid.Children.Add(hintText);
 
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal };
             var closeBtn = new Button
             {
                 Content = "关闭",
+                FontSize = 12,
                 Padding = new Thickness(14, 6, 14, 6),
                 Margin = new Thickness(0, 0, 8, 0),
                 Background = WpfBrushes.White,
-                BorderBrush = UiHelpers.DangerBorder,
-                Foreground = UiHelpers.DangerText,
+                BorderBrush = UiHelpers.BorderStrong,
+                Foreground = UiHelpers.TextPrimary,
                 BorderThickness = new Thickness(1.5),
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                FocusVisualStyle = null
             };
+            ApplyOcrBtnTemplate(closeBtn, false);
             closeBtn.Click += (s, e) => Close();
 
             var copyBtn = new Button
             {
                 Content = "复制全部文字",
+                FontSize = 12,
                 Padding = new Thickness(16, 6, 16, 6),
                 Background = UiHelpers.PrimaryBg,
                 Foreground = WpfBrushes.White,
                 BorderBrush = UiHelpers.BorderStrong,
                 BorderThickness = new Thickness(1.5),
-                FontWeight = FontWeights.SemiBold,
-                Cursor = Cursors.Hand
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                FocusVisualStyle = null
             };
-            copyBtn.Click += (s, e) =>
+            ApplyOcrBtnTemplate(copyBtn, true);
+            copyBtn.Click += (s, e) => CopyAndClose();
+
+            btnRow.Children.Add(closeBtn);
+            btnRow.Children.Add(copyBtn);
+            Grid.SetColumn(btnRow, 1);
+            footerGrid.Children.Add(btnRow);
+            Grid.SetRow(footerGrid, 3);
+            root.Children.Add(footerGrid);
+
+            Content = root;
+
+            _loaderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+            _loaderTimer.Tick += (s, e) =>
             {
-                try
-                {
-                    if (!string.IsNullOrEmpty(_textBox.Text))
-                    {
-                        Clipboard.SetText(_textBox.Text);
-                        if (_notify != null) _notify("已复制识别出的文字到剪贴板", false);
-                    }
-                    Close();
-                }
-                catch { }
+                _loaderTick = (_loaderTick + 1) % 3;
+                for (int i = 0; i < 3; i++)
+                    _loaderSquares[i].Opacity = i == _loaderTick ? 1.0 : 0.25;
             };
 
-            footer.Children.Add(closeBtn);
-            footer.Children.Add(copyBtn);
-            Grid.SetRow(footer, 2);
-            grid.Children.Add(footer);
-
-            Content = grid;
-            KeyDown += (s, e) => { if (e.Key == Key.Escape) Close(); };
-            Loaded += OnLoaded;
-            Closed += (s, e) => { try { if (_bmp != null) { _bmp.Dispose(); _bmp = null; } } catch { } };
+            KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Escape) Close();
+                else if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+                {
+                    CopyAndClose();
+                    e.Handled = true;
+                }
+            };
+            Loaded += (s, e) => StartOcr(_preferredEngine);
+            Closed += (s, e) =>
+            {
+                _loaderTimer.Stop();
+                if (_ocrCts != null)
+                {
+                    try { _ocrCts.Cancel(); _ocrCts.Dispose(); } catch { }
+                    _ocrCts = null;
+                }
+                try { if (_sourceBmp != null) { _sourceBmp.Dispose(); _sourceBmp = null; } } catch { }
+            };
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
+        private static Button MakeMiniBtn(string label, Action onClick)
         {
-            Bitmap input = _bmp;
-            if (input == null) return;
-            _bmp = null;
+            var btn = new Button
+            {
+                Content = label,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Padding = new Thickness(8, 3, 8, 3),
+                Background = WpfBrushes.White,
+                Foreground = UiHelpers.TextPrimary,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                FocusVisualStyle = null
+            };
+            ApplyOcrBtnTemplate(btn, false);
+            btn.Click += (s, e) => onClick();
+            return btn;
+        }
+
+        private static void ApplyOcrBtnTemplate(Button btn, bool primary)
+        {
+            var tmpl = new ControlTemplate(typeof(Button));
+            var bd = new FrameworkElementFactory(typeof(Border));
+            bd.Name = "bd";
+            bd.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            bd.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            bd.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            bd.SetValue(Border.CornerRadiusProperty, new CornerRadius(0));
+            bd.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            var cp = new FrameworkElementFactory(typeof(ContentPresenter));
+            cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            bd.AppendChild(cp);
+            tmpl.VisualTree = bd;
+
+            var hov = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hov.Setters.Add(new Setter(Border.BackgroundProperty, primary ? UiHelpers.PrimaryHover : UiHelpers.HoverBg, "bd"));
+            tmpl.Triggers.Add(hov);
+            btn.Template = tmpl;
+        }
+
+        private void SyncButtonStates(string activeEngine)
+        {
+            bool paddleActive = activeEngine != null && activeEngine.IndexOf("Paddle", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool winActive = activeEngine != null && activeEngine.IndexOf("Windows", StringComparison.OrdinalIgnoreCase) >= 0;
+            _btnPaddle.Background = paddleActive ? UiHelpers.PrimaryBg : WpfBrushes.White;
+            _btnPaddle.Foreground = paddleActive ? WpfBrushes.White : UiHelpers.TextPrimary;
+            _btnWindows.Background = winActive ? UiHelpers.PrimaryBg : WpfBrushes.White;
+            _btnWindows.Foreground = winActive ? WpfBrushes.White : UiHelpers.TextPrimary;
+
+            _btnMerge.Background = _mergedMode ? UiHelpers.PrimaryBg : WpfBrushes.White;
+            _btnMerge.Foreground = _mergedMode ? WpfBrushes.White : UiHelpers.TextPrimary;
+
+            bool previewShown = _previewWrap.Visibility == Visibility.Visible;
+            _btnPreview.Background = previewShown ? UiHelpers.PrimaryBg : WpfBrushes.White;
+            _btnPreview.Foreground = previewShown ? WpfBrushes.White : UiHelpers.TextPrimary;
+        }
+
+        private void TogglePreview()
+        {
+            _previewWrap.Visibility = _previewWrap.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            SyncButtonStates(_preferredEngine == "windows" ? "Windows" : (_preferredEngine == "paddle" ? "Paddle" : ""));
+        }
+
+        private void ToggleMergeLines()
+        {
+            _mergedMode = !_mergedMode;
+            _textBox.Text = _mergedMode ? SmartMergeLines(_rawOcrText) : _rawOcrText;
+            SyncButtonStates(_preferredEngine == "windows" ? "Windows" : (_preferredEngine == "paddle" ? "Paddle" : ""));
+        }
+
+        private static string SmartMergeLines(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return raw ?? "";
+            string[] lines = raw.Replace("\r\n", "\n").Split('\n');
+            var sb = new StringBuilder();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string cur = lines[i].Trim();
+                if (cur.Length == 0)
+                {
+                    if (sb.Length > 0 && !sb.ToString().EndsWith("\n\n"))
+                        sb.Append("\r\n\r\n");
+                    continue;
+                }
+                if (sb.Length == 0)
+                {
+                    sb.Append(cur);
+                    continue;
+                }
+                string soFar = sb.ToString();
+                if (soFar.EndsWith("\n"))
+                {
+                    sb.Append(cur);
+                    continue;
+                }
+                char prevLast = soFar[soFar.Length - 1];
+                char curFirst = cur[0];
+                bool prevEndsSentence = "。！？.!?:：；;".IndexOf(prevLast) >= 0;
+                bool curIsList = cur.StartsWith("- ") || cur.StartsWith("* ") || cur.StartsWith("• ")
+                    || (cur.Length >= 3 && char.IsDigit(cur[0]) && (cur[1] == '.' || cur[1] == '、'));
+                if (prevEndsSentence || curIsList)
+                {
+                    sb.Append("\r\n").Append(cur);
+                }
+                else if (IsCjk(prevLast) && IsCjk(curFirst))
+                {
+                    sb.Append(cur);
+                }
+                else
+                {
+                    sb.Append(' ').Append(cur);
+                }
+            }
+            return sb.ToString().Trim();
+        }
+
+        private static bool IsCjk(char ch)
+        {
+            return (ch >= '\u4e00' && ch <= '\u9fff') || (ch >= '\u3000' && ch <= '\u303f') || (ch >= '\uff00' && ch <= '\uffef');
+        }
+
+        private void SwitchEngine(string mode)
+        {
+            _preferredEngine = mode;
+            StartOcr(mode);
+        }
+
+        private void StartOcr(string mode)
+        {
+            if (_sourceBmp == null) return;
+            if (_ocrCts != null)
+            {
+                try { _ocrCts.Cancel(); _ocrCts.Dispose(); } catch { }
+            }
+            _ocrCts = new CancellationTokenSource();
+            var token = _ocrCts.Token;
+
+            Bitmap clone = new Bitmap(_sourceBmp);
+            _loaderBox.Visibility = Visibility.Visible;
+            _loaderTimer.Start();
+            _statusText.Text = mode == "windows" ? "正在使用 Windows OCR 识别…" : "正在本机识别中英文文字…";
+            SyncButtonStates(mode == "windows" ? "Windows" : (mode == "paddle" ? "Paddle" : ""));
+
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
                     string engine, text;
-                    using (input) text = OcrService.RecognizeBitmap(input, out engine);
+                    using (clone) text = OcrService.RecognizeBitmap(clone, out engine, mode, token);
+                    if (token.IsCancellationRequested) return;
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (!IsVisible) return;
-                        if (string.IsNullOrWhiteSpace(text))
+                        if (!IsVisible || token.IsCancellationRequested) return;
+                        _loaderTimer.Stop();
+                        _loaderBox.Visibility = Visibility.Collapsed;
+                        _rawOcrText = text ?? "";
+                        _textBox.Text = _mergedMode ? SmartMergeLines(_rawOcrText) : _rawOcrText;
+                        SyncButtonStates(engine);
+                        if (string.IsNullOrWhiteSpace(_rawOcrText))
                         {
                             _statusText.Text = engine + " · 未在选区内识别到清晰文字";
-                            _textBox.Text = "";
                         }
                         else
                         {
-                            _statusText.Text = string.Format("{0} · 共 {1} 个字符，可编辑或复制", engine, text.Length);
-                            _textBox.Text = text;
+                            _statusText.Text = string.Format("{0} · 共 {1} 个字符，可编辑或复制", engine, _rawOcrText.Length);
                             _textBox.Focus();
                         }
                     }));
                 }
+                catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (IsVisible) _statusText.Text = "识别失败：" + ex.Message;
+                        if (!IsVisible || token.IsCancellationRequested) return;
+                        _loaderTimer.Stop();
+                        _loaderBox.Visibility = Visibility.Collapsed;
+                        _statusText.Text = "识别失败：" + ex.Message;
                     }));
                 }
             });
+        }
+
+        private void CopyAndClose()
+        {
+            string txt = _textBox.Text ?? "";
+            if (!string.IsNullOrEmpty(txt))
+            {
+                string err;
+                if (ClipboardHelper.TrySetText(txt, out err))
+                {
+                    if (_notify != null) _notify("已复制识别出的文字到剪贴板", false);
+                }
+                else if (_notify != null)
+                {
+                    _notify("复制文字失败：" + err, true);
+                }
+            }
+            Close();
         }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
@@ -23,13 +24,14 @@ namespace CodexLauncher
             @"(?<=[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])\s+(?=[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])",
             RegexOptions.Compiled);
 
-        private static T AwaitOp<T>(IAsyncOperation<T> op)
+        private static T AwaitOp<T>(IAsyncOperation<T> op, CancellationToken token)
         {
             using (var ev = new ManualResetEventSlim(false))
             {
                 op.Completed = (info, status) => ev.Set();
                 if (op.Status == AsyncStatus.Started)
-                    ev.Wait();
+                    ev.Wait(token);
+                token.ThrowIfCancellationRequested();
                 if (op.Status == AsyncStatus.Error)
                     throw op.ErrorCode ?? new InvalidOperationException("Windows OCR 异步调用失败");
                 return op.GetResults();
@@ -38,28 +40,75 @@ namespace CodexLauncher
 
         public static string RecognizeBitmap(Bitmap bmp, out string engineName)
         {
+            return RecognizeBitmap(bmp, out engineName, "auto", CancellationToken.None);
+        }
+
+        public static string RecognizeBitmap(Bitmap bmp, out string engineName, string preferredEngine = "auto", CancellationToken cancellationToken = default(CancellationToken))
+        {
             if (bmp == null) throw new ArgumentNullException("bmp");
+            cancellationToken.ThrowIfCancellationRequested();
 
             byte[] pngBytes;
-            using (var ms = new MemoryStream())
+            Bitmap prepared = PrepareForOcr(bmp);
+            try
             {
-                bmp.Save(ms, ImageFormat.Png);
-                pngBytes = ms.ToArray();
+                using (var ms = new MemoryStream())
+                {
+                    prepared.Save(ms, ImageFormat.Png);
+                    pngBytes = ms.ToArray();
+                }
+            }
+            finally
+            {
+                if (!ReferenceEquals(prepared, bmp)) prepared.Dispose();
             }
 
-            string text = TryRecognizeWithPaddle(pngBytes);
-            if (!string.IsNullOrWhiteSpace(text))
+            string mode = (preferredEngine ?? "auto").Trim().ToLowerInvariant();
+            if (mode == "windows")
+            {
+                engineName = "Windows OCR";
+                return RecognizeWithWindows(pngBytes, cancellationToken);
+            }
+
+            string text = TryRecognizeWithPaddle(pngBytes, cancellationToken);
+            if (text != null)
             {
                 engineName = "PaddleOCR（PP-OCRv6）";
                 return text;
             }
 
+            if (mode == "paddle")
+                throw new InvalidOperationException("本机未检测到可用 PaddleOCR 环境");
+
             engineName = "Windows OCR（回退）";
-            return RecognizeWithWindows(pngBytes);
+            return RecognizeWithWindows(pngBytes, cancellationToken);
         }
 
-        private static string TryRecognizeWithPaddle(byte[] pngBytes)
+        /// <summary>
+        /// Small crops (&lt;180w or &lt;80h) are 2x bicubic upscaled with 16px white padding for higher OCR accuracy.
+        /// </summary>
+        private static Bitmap PrepareForOcr(Bitmap source)
         {
+            if (source.Width >= 180 && source.Height >= 80) return source;
+
+            const int pad = 16;
+            int scaledW = source.Width * 2;
+            int scaledH = source.Height * 2;
+            var dst = new Bitmap(scaledW + pad * 2, scaledH + pad * 2, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(dst))
+            {
+                g.Clear(Color.White);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(source, new Rectangle(pad, pad, scaledW, scaledH),
+                    new Rectangle(0, 0, source.Width, source.Height), GraphicsUnit.Pixel);
+            }
+            return dst;
+        }
+
+        private static string TryRecognizeWithPaddle(byte[] pngBytes, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
             string environment = Path.Combine(CoreService.DataDir, "ocr", "rapidocr-3.10.0");
             string python = Path.Combine(environment, "Scripts", "python.exe");
             string script = Path.Combine(CoreService.BaseDir, "资源", "OCR", "识别.py");
@@ -82,19 +131,28 @@ namespace CodexLauncher
                 using (var process = Process.Start(start))
                 {
                     if (process == null) return null;
-                    process.BeginErrorReadLine();
-                    Task<string> output = process.StandardOutput.ReadToEndAsync();
-                    var input = SendImageAsync(process.StandardInput.BaseStream, pngBytes);
-                    if (!process.WaitForExit(45000))
+                    using (token.Register(() =>
                     {
-                        if (!process.HasExited) process.Kill();
-                        return null;
-                    }
+                        try { if (!process.HasExited) process.Kill(); } catch { }
+                    }))
+                    {
+                        process.BeginErrorReadLine();
+                        Task<string> output = process.StandardOutput.ReadToEndAsync();
+                        var input = SendImageAsync(process.StandardInput.BaseStream, pngBytes);
+                        if (!process.WaitForExit(45000))
+                        {
+                            try { if (!process.HasExited) process.Kill(); } catch { }
+                            token.ThrowIfCancellationRequested();
+                            return null;
+                        }
 
-                    if (process.ExitCode != 0 || !input.GetAwaiter().GetResult()) return null;
-                    return output.GetAwaiter().GetResult().Trim();
+                        token.ThrowIfCancellationRequested();
+                        if (process.ExitCode != 0 || !input.GetAwaiter().GetResult()) return null;
+                        return (output.GetAwaiter().GetResult() ?? "").Trim();
+                    }
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Win32Exception) { return null; }
             catch (IOException) { return null; }
             catch (InvalidOperationException) { return null; }
@@ -111,21 +169,22 @@ namespace CodexLauncher
             catch (ObjectDisposedException) { return false; }
         }
 
-        private static string RecognizeWithWindows(byte[] pngBytes)
+        private static string RecognizeWithWindows(byte[] pngBytes, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
             using (var ras = new InMemoryRandomAccessStream())
             {
                 using (var writer = new DataWriter(ras.GetOutputStreamAt(0)))
                 {
                     writer.WriteBytes(pngBytes);
-                    AwaitOp(writer.StoreAsync());
-                    AwaitOp(writer.FlushAsync());
+                    AwaitOp(writer.StoreAsync(), token);
+                    AwaitOp(writer.FlushAsync(), token);
                     writer.DetachStream();
                 }
 
                 ras.Seek(0);
-                BitmapDecoder decoder = AwaitOp(BitmapDecoder.CreateAsync(ras));
-                SoftwareBitmap softBmp = AwaitOp(decoder.GetSoftwareBitmapAsync());
+                BitmapDecoder decoder = AwaitOp(BitmapDecoder.CreateAsync(ras), token);
+                SoftwareBitmap softBmp = AwaitOp(decoder.GetSoftwareBitmapAsync(), token);
                 try
                 {
                     OcrEngine engine = null;
@@ -140,7 +199,8 @@ namespace CodexLauncher
                     if (engine == null)
                         throw new InvalidOperationException("当前系统未安装可用的 Windows OCR 语言包");
 
-                    OcrResult res = AwaitOp(engine.RecognizeAsync(softBmp));
+                    OcrResult res = AwaitOp(engine.RecognizeAsync(softBmp), token);
+                    token.ThrowIfCancellationRequested();
                     if (res == null || res.Lines == null || res.Lines.Count == 0)
                         return "";
 
