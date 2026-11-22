@@ -117,12 +117,7 @@
         el.remove();
       });
     }
-    const bar = el.querySelector(".toast-progress-bar");
-    if (reducedMotion.matches) {
-      setTimeout(() => el.remove(), ms);
-    } else {
-      bar.addEventListener("animationend", () => el.remove());
-    }
+    el.querySelector(".toast-progress-bar").addEventListener("animationend", () => el.remove());
     host.appendChild(el);
   }
 

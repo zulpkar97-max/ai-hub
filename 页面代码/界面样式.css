@@ -3139,7 +3139,7 @@ kbd {
   transform-origin: left center;
   animation: toastShrink var(--toast-ms, 3800ms) linear forwards;
 }
-.toast:hover .toast-progress-bar {
+.toast:is(:hover, :focus-within) .toast-progress-bar {
   animation-play-state: paused;
 }
 @keyframes toastShrink {
@@ -3174,5 +3174,9 @@ kbd {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .toast-progress-bar {
+    animation-duration: var(--toast-ms, 3800ms) !important;
+    animation-timing-function: steps(8, end);
   }
 }
