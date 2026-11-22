@@ -105,6 +105,7 @@ namespace CodexLauncher
                     }
 
                     PushFullState();
+                    SyncTrayStatus();
                     TryAutoApplyPendingUpdate();
                     if (IsVisible) PollNetwork();
                     CheckExpiryBalloon();
@@ -187,7 +188,57 @@ namespace CodexLauncher
             if (Json.Serialize(_networkStatus) == Json.Serialize(status)) return;
             _networkStatus = status;
             PushFullState();
+            SyncTrayStatus();
             if (_quotaRefreshOnResume) CheckQuotaRefresh();
+        }
+
+        private void SyncTrayStatus()
+        {
+            try
+            {
+                bool hasDanger = false;
+                if (_proxy != null && _proxy.Running && _networkStatus != null &&
+                    (_networkStatus.state == "timeout" || _networkStatus.state == "unavailable"))
+                {
+                    hasDanger = true;
+                }
+                if (!hasDanger && _antigravityUsage != null && _antigravityUsage.quota != null)
+                {
+                    foreach (var kv in _antigravityUsage.quota)
+                    {
+                        var b = kv.Value;
+                        if (b != null && !b.disabled && b.remaining_fraction.HasValue && b.remaining_fraction.Value * 100.0 <= 10.0)
+                        {
+                            hasDanger = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasDanger && _usageCache != null)
+                {
+                    foreach (var kv in _usageCache)
+                    {
+                        var snap = kv.Value;
+                        if (snap == null || !snap.Success) continue;
+                        if ((snap.Primary != null && snap.Primary.LeftPercent <= 10.0) ||
+                            (snap.Secondary != null && snap.Secondary.LeftPercent <= 10.0))
+                        {
+                            hasDanger = true;
+                            break;
+                        }
+                    }
+                }
+
+                bool anyRunning = (_proxy != null && _proxy.Running)
+                    || _accounts.Any(a => a.Running)
+                    || _installedApps.Any(t => t != null && t.kind != "url" && CoreService.IsToolRunning(t));
+
+                string state = hasDanger ? "danger" : (!anyRunning ? "idle" : "normal");
+                string tip = hasDanger ? "AI BASE · 额度告急或节点超时"
+                    : (!anyRunning ? "AI BASE · 全部待机" : "AI BASE · 运行正常");
+                UpdateTrayStatusIcon(state, tip);
+            }
+            catch { }
         }
 
         private void CheckExpiryBalloon()

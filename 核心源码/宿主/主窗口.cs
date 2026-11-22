@@ -43,6 +43,7 @@ namespace CodexLauncher
         private bool _balloonShownThisSession = false;
 
         private WinForms.NotifyIcon _trayIcon;
+        private string _lastTrayState = "";
         private TrayPopupWindow _activeTrayPopup;
         private EventWaitHandle _wakeEvent;
         private volatile bool _wakeStop = false;
@@ -78,7 +79,7 @@ namespace CodexLauncher
             _store = CoreService.LoadStore();
             _quotaAutoRefreshEnabled = _store.settings.quota_auto_refresh;
 
-            Title = "AI Hub";
+            Title = "AI BASE";
             Width = 940;
             Height = 630;
             MinWidth = 820;
@@ -136,7 +137,7 @@ namespace CodexLauncher
                 DwmSetWindowAttribute(_hwnd, 20, ref dark, sizeof(int));
                 int corner = 1; // DWMWCP_DONOTROUND (strict 0px sharp corners)
                 DwmSetWindowAttribute(_hwnd, 33, ref corner, sizeof(int));
-                int borderColor = 0x001E1917; // COLORREF 0x00BBGGRR for #17191E
+                int borderColor = 0x0017191A; // COLORREF 0x00BBGGRR for #1A1917
                 DwmSetWindowAttribute(_hwnd, 34, ref borderColor, sizeof(int));
                 int mica = 2; // DWMSBT_MAINWINDOW (True Windows 11 Mica)
                 int hr = DwmSetWindowAttribute(_hwnd, 38, ref mica, sizeof(int));
@@ -304,9 +305,8 @@ namespace CodexLauncher
             try
             {
                 _trayIcon = new WinForms.NotifyIcon();
-                _trayIcon.Text = "AI Hub · 点击打开";
-                string icoPath = File.Exists(CoreService.PermanentIcon) ? CoreService.PermanentIcon : CoreService.BundledIcon;
-                _trayIcon.Icon = File.Exists(icoPath) ? new Icon(icoPath) : SystemIcons.Application;
+                _trayIcon.Text = "AI BASE · 点击打开";
+                UpdateTrayStatusIcon("normal", "AI BASE · 点击打开");
 
                 _trayIcon.MouseUp += (s, e) =>
                 {
@@ -316,6 +316,32 @@ namespace CodexLauncher
                         Dispatcher.BeginInvoke(new Action(ShowModernTrayMenu));
                 };
                 _trayIcon.Visible = true;
+            }
+            catch { }
+        }
+
+        private void UpdateTrayStatusIcon(string state, string tooltip)
+        {
+            if (_trayIcon == null) return;
+            try
+            {
+                string next = string.IsNullOrEmpty(state) ? "normal" : state;
+                if (next != _lastTrayState)
+                {
+                    _lastTrayState = next;
+                    Icon icon = null;
+                    try { icon = TrayIconFactory.GetStatusIcon(next); } catch { }
+                    if (icon == null)
+                    {
+                        string icoPath = File.Exists(CoreService.PermanentIcon) ? CoreService.PermanentIcon : CoreService.BundledIcon;
+                        icon = File.Exists(icoPath) ? new Icon(icoPath) : SystemIcons.Application;
+                    }
+                    _trayIcon.Icon = icon;
+                }
+                if (!string.IsNullOrEmpty(tooltip))
+                {
+                    _trayIcon.Text = tooltip.Length > 63 ? tooltip.Substring(0, 63) : tooltip;
+                }
             }
             catch { }
         }

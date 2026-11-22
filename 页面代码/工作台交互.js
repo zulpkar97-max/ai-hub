@@ -38,30 +38,33 @@
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const layerExits = new WeakMap();
 
+  const gSvg = (sym, cls = "ic ic-sm") => `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true"><use href="#${sym}"/></svg>`;
   const ICONS = {
-    power: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
-    switch: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg>',
-    refresh: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
-    plus: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-    play: '<svg class="ic ic-xs" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none"/></svg>',
-    more: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>',
-    edit: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-    sync: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>',
-    monitor: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14"/><path d="M8 21h8M12 17v4"/></svg>',
-    trash: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
-    close: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>',
-    ext: '<svg class="ic ic-xs" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M18 13v6H5V6h6"/></svg>',
-    crop: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 2v16h16"/><path d="M18 22V6H2"/></svg>',
-    mic: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M9 22h6"/></svg>',
-    ledger: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18"/><path d="M9 3v18m3-13h5m-5 4h5m-5 4h3"/></svg>',
-    changelog: '<svg class="ic ic-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h5"/></svg>',
-    chevronDown: '<svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
-    copy: '<svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11"/><path d="M5 15H4V4h11v1"/></svg>',
-    folder: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3Z"/></svg>',
-    pin: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z"/></svg>',
-    eye: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
-    eyeOff: '<svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>',
-    key: '<svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
+    power: gSvg("g-power"),
+    switch: gSvg("g-switch"),
+    refresh: gSvg("g-refresh"),
+    plus: gSvg("g-plus"),
+    play: gSvg("g-play", "ic ic-xs"),
+    more: gSvg("g-more"),
+    edit: gSvg("g-edit"),
+    sync: gSvg("g-sync"),
+    monitor: gSvg("g-monitor"),
+    trash: gSvg("g-trash"),
+    close: gSvg("g-close"),
+    ext: gSvg("g-ext", "ic ic-xs"),
+    crop: gSvg("g-crop"),
+    mic: gSvg("g-mic"),
+    ledger: gSvg("g-ledger"),
+    changelog: gSvg("g-list"),
+    chevronDown: gSvg("g-chev", "ic ic-xs"),
+    copy: gSvg("g-copy"),
+    folder: gSvg("g-folder"),
+    pin: gSvg("g-pin"),
+    eye: gSvg("g-eye"),
+    eyeOff: gSvg("g-eye-off"),
+    key: gSvg("g-key"),
+    bolt: gSvg("g-bolt", "ic ic-xs"),
+    node: gSvg("g-node"),
   };
 
   function esc(str) {
@@ -87,14 +90,36 @@
     });
   }
 
-  function showToast(text, isError = false) {
+  function showToast(text, isErrorOrOpts = false) {
     if (!text) return;
+    const opts = typeof isErrorOrOpts === "object" && isErrorOrOpts !== null
+      ? isErrorOrOpts
+      : { isError: !!isErrorOrOpts };
+    const isError = !!opts.isError;
+    const ms = opts.ms || 3800;
     const host = $("#toast-host");
+    while (host.children.length >= 3) host.firstElementChild.remove();
+
     const el = document.createElement("div");
     el.className = "toast" + (isError ? " err" : "");
-    el.textContent = text;
+    el.style.setProperty("--toast-ms", `${ms}ms`);
+    el.innerHTML = `
+      <span class="toast-left"><span>${esc(text)}</span></span>
+      ${opts.undo ? `<button type="button" class="toast-undo">撤销</button>` : ""}
+      <div class="toast-progress"><div class="toast-progress-bar"></div></div>`;
+    if (opts.undo) {
+      el.querySelector(".toast-undo").addEventListener("click", () => {
+        opts.undo();
+        el.remove();
+      });
+    }
+    const bar = el.querySelector(".toast-progress-bar");
+    if (reducedMotion.matches) {
+      setTimeout(() => el.remove(), ms);
+    } else {
+      bar.addEventListener("animationend", () => el.remove());
+    }
     host.appendChild(el);
-    setTimeout(() => dismissLayer(el, () => el.remove()), 3000);
   }
 
   // ==================== DATE & COUNTDOWN ====================
@@ -180,11 +205,15 @@
 
     const pending = !!appState.pending_update;
     const refreshingProjects = activeTab === "projects" && !!appState.projects_refreshing;
+    const refreshingWorkspace = activeTab === "workspace"
+      && ((appState.accounts || []).some((a) => a.usage_loading) || !!appState.antigravity?.loading);
     const headerActions = $("#header-actions");
-    const headerKey = `${pending}|${activeTab === "projects"}|${refreshingProjects}`;
+    const headerKey = `${activeTab}|${pending}|${refreshingProjects}|${refreshingWorkspace}`;
     if (headerKey !== headerActions.dataset.key) {
       const parts = [];
-      if (activeTab === "projects") {
+      if (activeTab === "workspace") {
+        parts.push(`<button type="button" class="btn btn-paper btn-sm${refreshingWorkspace ? " is-spinning" : ""}" data-act="refreshAllQuotas" ${refreshingWorkspace ? "disabled" : ""}>${ICONS.refresh} 刷新全部额度</button>`);
+      } else if (activeTab === "projects") {
         parts.push(iconButton("refreshProjects", "刷新项目 Git 状态", ICONS.refresh, { disabled: refreshingProjects, spinning: refreshingProjects }));
       }
       if (pending) {
@@ -245,17 +274,19 @@
     const key = JSON.stringify([shotKey, voiceKey, ledger]);
     if (key === sidebarToolsKey) return;
     sidebarToolsKey = key;
-    const arrow = '<svg class="tool-tile-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>';
     $("#sidebar-tools").innerHTML = `
       <div class="tools-stack">
-        <button type="button" class="tool-tile" data-act="startScreenshot" title="${esc(shotKey ? `截图 (${shotKey})` : "截图")}">
-          <span class="tool-tile-left">${ICONS.crop}<span>截图</span></span>${arrow}
+        <button type="button" class="tool-tile" data-act="startScreenshot" data-tip="${esc(shotKey ? `截图 (${shotKey})` : "截图")}">
+          <span class="tool-tile-left">${ICONS.crop}<span>截图</span></span>
+          ${shotKey ? `<span class="tool-tile-key mono">${esc(shotKey)}</span>` : ""}
         </button>
-        <button type="button" class="tool-tile" data-act="startVoiceRecorder" title="${esc(voiceKey ? `录音 (${voiceKey})` : "录音不可用")}" ${voiceKey ? "" : "disabled"}>
-          <span class="tool-tile-left">${ICONS.mic}<span>录音</span></span>${arrow}
+        <button type="button" class="tool-tile" data-act="startVoiceRecorder" data-tip="${esc(voiceKey ? `录音 (${voiceKey})` : "录音不可用")}" ${voiceKey ? "" : "disabled"}>
+          <span class="tool-tile-left">${ICONS.mic}<span>录音</span></span>
+          ${voiceKey ? `<span class="tool-tile-key mono">${esc(voiceKey)}</span>` : ""}
         </button>
-        ${ledger ? `<button type="button" class="tool-tile" data-act="openLedgerForm" data-id="${esc(ledger)}" title="打开飞书账本">
-          <span class="tool-tile-left">${ICONS.ledger}<span>记账</span></span>${arrow}
+        ${ledger ? `<button type="button" class="tool-tile" data-act="openLedgerForm" data-id="${esc(ledger)}" data-tip="打开飞书账本">
+          <span class="tool-tile-left">${ICONS.ledger}<span>记账</span></span>
+          <span class="tool-tile-key">飞书</span>
         </button>` : ""}
       </div>`;
   }
@@ -271,6 +302,7 @@
 
   function toolHeading(id, icon, name, description, status = "", metadata = "") {
     return `<div class="tool-identity">
+      <span class="head-bar" aria-hidden="true"></span>
       ${icon ? `<img class="app-icon" src="${esc(icon)}" alt="" />` : `<span class="tool-icon-fallback" aria-hidden="true">${ICONS.monitor}</span>`}
       <div class="app-info">
         <div class="app-name-line"><h2 class="app-name" id="${id}">${esc(name)}</h2>${status}${metadata}</div>
@@ -315,9 +347,9 @@
     const id = esc(tool?.id);
     const attrs = `data-id="${id}"`;
     const running = !!tool?.running;
-    return `<button class="btn ${running ? "btn-mint" : startStyle} btn-sm" data-act="${launchAction}" ${attrs} ${id ? "" : "disabled"}>
-      ${running ? "打开" : ICONS.play + " 启动"}</button>
-      ${running ? iconButton(stopAction, "关闭 " + name, ICONS.power, { danger: true, attrs }) : ""}`;
+    return `<button class="btn ${running ? "btn-focus" : startStyle} btn-sm" data-act="${launchAction}" ${attrs} ${id ? "" : "disabled"}>
+      ${running ? '<span class="dot-ok-sq" aria-hidden="true"></span> 打开' : ICONS.play + " 启动"}</button>
+      ${running ? `<span class="v-sep" aria-hidden="true"></span>` + iconButton(stopAction, "关闭 " + name, ICONS.power, { danger: true, attrs }) : ""}`;
   }
 
   function timeToReset(timestamp) {
@@ -354,20 +386,19 @@
   function renderWebTool(tool, profiles) {
     const profile = webIdentity(tool.id, profiles);
     const available = !!profile && appState.chrome_available !== false;
-    const headTone = tool.id === "gemini" ? "mint" : "sky";
     return `<section class="surface-card block tool-card compact-tool" aria-labelledby="tool-${tool.id}">
-      <header class="block-head ${headTone}">
-        ${toolHeading("tool-" + tool.id, tool.icon, tool.name, "", statusHtml(available ? "可用" : "不可用", available ? "healthy" : "status-error"))}
+      <header class="block-head">
+        ${toolHeading("tool-" + tool.id, tool.icon, tool.name, "")}
         <div class="tool-actions">
-          <button class="btn btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
+          <button class="btn btn-paper btn-sm" data-act="openWebTool" data-id="${tool.id}" aria-label="打开 ${esc(tool.name)}" ${available ? "" : "disabled"}>打开 ${ICONS.ext}</button>
         </div>
       </header>
       <div class="tool-card-body">
         <div class="compact-identity">
+          <button type="button" class="web-id-btn" data-act="openWebIdentityMenu" data-id="${tool.id}" data-tip="切换 Chrome 身份 (${esc(profile?.email || "默认")})" ${available ? "" : "disabled"}>
+            <span>Web · ${esc(profile?.name || "默认")}</span>${ICONS.chevronDown}
+          </button>
           <span class="tool-identity-email mono" data-web-email="${tool.id}" title="${esc(profile?.email)}">${esc(profile?.email || "—")}</span>
-          <select id="identity-${tool.id}" class="sel" aria-label="${esc(tool.name)} Google 身份" data-web-identity="${tool.id}" ${available ? "" : "disabled"}>
-            ${profiles.length ? profiles.map((item) => `<option value="${esc(item.dir)}" ${item.dir === profile?.dir ? "selected" : ""}>${esc(item.name)}</option>`).join("") : "<option>暂无可用身份</option>"}
-          </select>
         </div>
       </div>
     </section>`;
@@ -376,7 +407,7 @@
   function renderOpenDesign(tool) {
     const ready = !!tool;
     return `<section class="surface-card block tool-card compact-tool" aria-labelledby="tool-open-design">
-      <header class="block-head stone">
+      <header class="block-head">
         ${toolHeading("tool-open-design", tool?.icon_url, "Open Design", "",
           statusHtml(ready ? (tool.running ? "运行中" : "未运行") : "未安装", tool?.running ? "running" : ""))}
         <div class="tool-actions">
@@ -425,14 +456,14 @@
         return renderQuotaMeter({ title, value, when: bucket ? timeToReset(bucket.reset_time) : "暂不可读取",
           percent, tone,
           fillAttrs: `data-quota-fill="antigravity:${esc(key)}"`,
-          timeAttrs: bucket?.reset_time ? `title="${esc(fmtDate(bucket.reset_time))}"` : "" });
+          timeAttrs: bucket?.reset_time ? `data-tip="预计 ${esc(fmtDate(bucket.reset_time))}"` : "" });
       }).join("");
       const single = group.buckets.length === 1;
       return `
       <div class="antigravity-quota-group ${hasDanger ? "slot-alert" : "slot"}">
         <div class="ag-group-head">
           <h3>${esc(group.name)}</h3>
-          ${hasDanger ? '<span class="stamp coral">额度告急</span>' : updatedAtHtml(usage?.fetched_at, tool.automatic)}
+          ${hasDanger ? '<span class="stamp coral">额度告急</span>' : ""}
         </div>
         <div class="meter-grid${single ? " meter-grid-single" : ""}">${metersHtml}</div>
       </div>`;
@@ -443,18 +474,19 @@
     const info = tool.loading ? quotaMessage("正在读取额度…")
       : (!groups && !error ? quotaMessage(tool.cli_installed ? "点击刷新额度" : "暂不可读取 · CLI 未安装") : "");
     return `<section class="surface-card block tool-card antigravity-tool" aria-labelledby="tool-antigravity">
-      <header class="block-head sky">
+      <header class="block-head">
         ${toolHeading("tool-antigravity", tool.icon_url, "ANTIGRAVITY", "",
           statusHtml(tool.id ? (tool.running ? "运行中" : "未运行") : "未安装", tool.running ? "running" : ""),
-          `${usage?.plan ? `<span class="stamp">${esc(usage.plan)}</span>` : ""}
-           ${usage?.email ? `<span class="tool-identity-email mono">${esc(usage.email)}</span>` : ""}`)}
+          usage?.plan ? `<span class="stamp">${esc(usage.plan)}</span>` : "")}
         <div class="tool-actions">
-          <button class="btn btn-flat btn-sm${tool.loading ? " is-spinning" : ""}" data-act="refreshAntigravity"
+          ${updatedAtHtml(usage?.fetched_at, tool.automatic)}
+          <button class="btn btn-paper btn-sm${tool.loading ? " is-spinning" : ""}" data-act="refreshAntigravity"
             aria-busy="${!!tool.loading}" aria-label="刷新 Antigravity 额度" ${tool.loading || !tool.cli_installed ? "disabled" : ""}>${ICONS.refresh} 刷新</button>
           ${desktopActions(tool, "Antigravity", "launchTool", "stopTool")}
         </div>
       </header>
       <div class="tool-card-body ag-body">
+        ${usage?.email ? `<div class="ag-account-strip"><span class="mono">${esc(usage.email)}</span><span>${esc(usage?.plan || "Account")}</span></div>` : ""}
         ${error}${info}
         ${groups ? `<div class="antigravity-quota-grid">${groups}</div>` : ""}
       </div>
@@ -479,57 +511,82 @@
   function renderNetwork(proxy) {
     const network = appState.network || {};
     const state = proxy.running ? (network.state === "stopped" ? "unknown" : network.state) : "stopped";
-    const down = ["stopped", "timeout", "unavailable"].includes(state);
-    const label = state === "reachable" ? "网络正常" : (down ? "网络异常" : (state === "controller" ? "状态未知" : "网络待检测"));
-    const tone = state === "reachable" ? "is-ok" : (down ? "is-danger" : "");
+    const isDegraded = proxy.running && (state === "timeout" || state === "unavailable");
+    const isSwitching = !!networkBusy;
+    const capCls = isDegraded ? "is-degraded" : (!proxy.running ? "" : (state === "reachable" ? "is-ok" : "is-warn"));
+    const dotCls = isDegraded ? "is-danger" : (!proxy.running ? "" : (state === "reachable" ? "is-ok" : ""));
+    const label = isSwitching ? "切换/测速中" : (!proxy.running ? "代理已关闭" : (isDegraded ? "节点超时" : (state === "reachable" ? "网络正常" : "网络待检测")));
+
     const delayTone = networkDelayTone(state, network.delay);
-    const latency = !proxy.running ? "—" : state === "timeout" ? "超时" : state === "unavailable" ? "不可用"
+    const latency = !proxy.running ? "—" : state === "timeout" ? "TIMEOUT" : state === "unavailable" ? "不可用"
       : (network.delay != null && !network.delay_stale ? network.delay + " ms" : "—");
     const lastDelay = proxy.running && network.delay_stale ? " · 上次 " + network.delay + " ms" : "";
     const mode = ({ rule: "规则路由", global: "全局代理", direct: "直连" })[network.mode];
     const policy = proxy.running ? network.group || mode : "";
-    const node = proxy.running ? network.node || "节点未知" : "代理未启动";
+    const node = proxy.running ? network.node || "节点未知" : "本地代理未启动";
     const subscription = network.subscription;
     const traffic = subscription ? "剩余 " + formatTraffic(subscription.total_bytes - subscription.used_bytes) : "流量待获取";
     const trafficDetails = subscription
       ? ["NIVA Network", "已用 " + formatTraffic(subscription.used_bytes), "总量 " + formatTraffic(subscription.total_bytes),
-        subscription.expires_at ? "到期 " + fmtDate(subscription.expires_at) : ""].filter(Boolean).join("\n")
+        subscription.expires_at ? "到期 " + fmtDate(subscription.expires_at) : ""].filter(Boolean).join(" · ")
       : "NIVA Network";
+
+    const canInlinePick = proxy.running && network.can_select && appState.network_japan_picker && !networkBusy;
     const refreshLabel = networkBusy === "refresh" ? "刷新中…" : "刷新网络状态";
-    const tools = [
-      iconButton("refreshNetwork", refreshLabel, ICONS.refresh, { disabled: !proxy.running || !appState.network_status_refresh || !!networkBusy, spinning: networkBusy === "refresh" }),
-      iconButton("openNetworkPicker", "切换节点", ICONS.switch, { disabled: !proxy.running || !network.can_select || !appState.network_japan_picker || !!networkBusy }),
-      iconButton("proxyOpen", "打开 Clash Verge", ICONS.ext, { disabled: !proxy.installed && !proxy.running })
-    ];
-    const danger = [
-      iconButton("proxyRestart", "重启代理", ICONS.sync, { danger: true, disabled: !proxy.running || !!networkBusy }),
-      iconButton("proxyStop", "关闭代理", ICONS.power, { danger: true, disabled: !proxy.running || !!networkBusy, attrs: 'data-critical="true"' })
-    ];
+
+    let cellsHtml = "";
+    let actionsHtml = "";
+    if (isSwitching) {
+      cellsHtml = `<span class="net-cell"><span class="dot-loader" aria-hidden="true"><span></span><span></span><span></span></span><span>正在探测并应用网络状态…</span></span>`;
+      actionsHtml = `<button type="button" class="btn btn-flat btn-sm" disabled>处理中</button>`;
+    } else if (!proxy.running) {
+      cellsHtml = `<span class="net-cell" style="color:var(--text-muted)">本地 Clash Verge 未启动，点击右侧拉起</span>`;
+      actionsHtml = `<button type="button" class="btn btn-dark btn-sm" data-act="proxyOpen" ${!proxy.installed ? "disabled" : ""}>${ICONS.play} 启动代理</button>`;
+    } else if (isDegraded) {
+      cellsHtml = `
+        ${policy ? `<span class="net-cell"><span class="net-k">策略</span><strong>${esc(policy)}</strong></span>` : ""}
+        <span class="net-cell net-node"><button type="button" class="net-node-btn mono" data-act="toggleInlineNodeCombo" aria-expanded="false" ${canInlinePick ? "" : "disabled"}><span>${esc(node)}</span>${canInlinePick ? ICONS.chevronDown : ""}</button></span>
+        <span class="net-cell"><span class="stamp coral mono">${esc(latency)}</span></span>`;
+      actionsHtml = `
+        <button type="button" class="btn btn-dark btn-sm" data-act="rescueFastestNode">${ICONS.bolt} 一键换最快节点</button>
+        <span class="net-sep" aria-hidden="true"></span>
+        ${iconButton("proxyRestart", "重启代理", ICONS.sync, { danger: true })}
+        ${iconButton("proxyStop", "关闭代理", ICONS.power, { danger: true, attrs: 'data-critical="true"' })}`;
+    } else {
+      cellsHtml = `
+        ${policy ? `<span class="net-cell"><span class="net-k">策略</span><strong>${esc(policy)}</strong></span>` : ""}
+        <span class="net-cell net-node" data-tip="点击就地切换节点">${canInlinePick
+          ? `<button type="button" class="net-node-btn mono" data-act="toggleInlineNodeCombo" aria-expanded="false"><span>${esc(node)}</span>${ICONS.chevronDown}</button>`
+          : `<strong class="mono">${esc(node)}</strong>`}</span>
+        <span class="net-cell" data-tip="当前节点延迟${esc(lastDelay)}"><span class="net-latency ${delayTone} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}</span>
+        <span class="net-cell mono" data-tip="${esc(trafficDetails)}">${esc(traffic)}</span>`;
+      actionsHtml = `
+        ${iconButton("refreshNetwork", refreshLabel, ICONS.refresh, { disabled: !appState.network_status_refresh })}
+        ${iconButton("openNetworkPicker", "打开完整节点选择器", ICONS.node, { disabled: !canInlinePick })}
+        ${iconButton("proxyOpen", "打开 Clash Verge", ICONS.ext)}
+        <span class="net-sep" aria-hidden="true"></span>
+        ${iconButton("proxyRestart", "重启代理", ICONS.sync, { danger: true })}
+        ${iconButton("proxyStop", "关闭代理", ICONS.power, { danger: true, attrs: 'data-critical="true"' })}`;
+    }
 
     return `
       <section class="surface-card net-bar" aria-label="网络状态">
-        <div class="net-cap ${tone}"><span class="status-dot ${tone}"></span>${label}</div>
-        <div class="net-cells">
-          ${policy ? `<span class="net-cell"><span class="net-k">策略</span><strong>${esc(policy)}</strong></span>` : ""}
-          <span class="net-cell net-node" title="${esc(node)}"><span class="net-k">节点</span><strong class="mono">${esc(node)}</strong></span>
-          <span class="net-cell" title="当前节点延迟${esc(lastDelay)}"><span class="net-latency ${delayTone} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}</span>
-          <span class="net-cell mono" title="${esc(trafficDetails)}">${esc(traffic)}</span>
-        </div>
-        <div class="net-actions" role="group" aria-label="网络工具栏">
-          ${tools.join("")}
-          <span class="net-sep" aria-hidden="true"></span>
-          ${danger.join("")}
-        </div>
+        <div class="net-cap ${capCls}"><span class="status-dot ${dotCls}"></span>${label}</div>
+        <div class="net-cells">${cellsHtml}</div>
+        <div class="net-actions" role="group" aria-label="网络工具栏">${actionsHtml}</div>
       </section>`;
   }
 
   function renderCodex(accounts) {
     const loading = accounts.some((account) => account.usage_loading);
+    const latestTs = accounts.map((a) => a.usage?.fetched_at).filter(Boolean).sort().at(-1);
+    const anyAuto = accounts.some((a) => a.usage?.automatic);
     return `<section class="surface-card block tool-card codex-tool" aria-labelledby="codex-tool-title">
-      <header class="block-head sand">
+      <header class="block-head">
         ${toolHeading("codex-tool-title", "https://icons.aihub.local/chatgpt.png", "CODEX", "", `<span class="stamp mono">${accounts.length} 账号</span>`)}
         <div class="tool-actions">
-          <button class="btn btn-flat btn-sm${loading ? " is-spinning" : ""}" data-act="refreshAllUsage" aria-busy="${loading}" title="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
+          ${updatedAtHtml(latestTs, anyAuto)}
+          <button class="btn btn-paper btn-sm${loading ? " is-spinning" : ""}" data-act="refreshAllUsage" aria-busy="${loading}" data-tip="刷新所有 Codex 账号的额度">${ICONS.refresh} 刷新额度</button>
           <button class="btn btn-dark btn-sm" data-act="openAddAccount">${ICONS.plus} 添加账号</button>
         </div>
       </header>
@@ -556,7 +613,8 @@
       const percent = Math.max(0, Math.min(100, Number(w.left_percent) || 0));
       return renderQuotaMeter({ title: String(w.label).replace("限额", "额度"), value: percent + "%",
         when: w.reset_text || "重置时间未知", percent, tone: quotaTone(percent),
-        valueAttrs: `aria-label="剩余 ${percent}%"`, fillAttrs: `data-quota-fill="codex:${esc(acc.id)}:${slot}"` });
+        valueAttrs: `aria-label="剩余 ${percent}%"`, fillAttrs: `data-quota-fill="codex:${esc(acc.id)}:${slot}"`,
+        timeAttrs: w.reset_at ? `data-tip="预计 ${esc(fmtDate(w.reset_at))}"` : "" });
     });
     const officialEnd = new Date(auth.subscription_until || "").getTime();
     const recycleEnd = new Date(acc.recycle_at || "").getTime();
@@ -566,12 +624,16 @@
       title: recycleStatus(cd), value: cd.meterValue, when: "截止 " + cd.targetShort,
       percent: cd.pct, tone: cd.level,
       labelAttrs: `data-cd-status="${esc(acc.id)}"`,
-      valueAttrs: `data-cd-clock="${esc(acc.id)}" title="${esc(cd.compact)}"`,
+      valueAttrs: `data-cd-clock="${esc(acc.id)}" data-tip="${esc(cd.compact)}"`,
       fillAttrs: `data-cd-fill="${esc(acc.id)}"`,
-      timeAttrs: `title="${esc(fmtDate(acc.recycle_at))}"`,
+      timeAttrs: `data-tip="回收截止 ${esc(fmtDate(acc.recycle_at))}"`,
       action: needsCalibration
-        ? `<button class="btn btn-flat meter-calibrate" data-act="openEditAccount" data-id="${esc(acc.id)}" title="当前回收时间与到期前 5 天相差超过 6 小时">校准时间</button>` : ""
+        ? `<button class="btn btn-flat meter-calibrate" data-act="openEditAccount" data-id="${esc(acc.id)}" data-tip="当前回收时间与到期前 5 天相差超过 6 小时">校准时间</button>` : ""
     }));
+
+    const cdDaysTag = cd
+      ? `<span class="stamp ${cd.level === "danger" ? "coral" : (cd.level === "warn" ? "sand" : "stone")} mono">${cd.expired ? "已超期" : `剩 ${cd.meterValue.split(" ")[0]}`}</span>`
+      : "";
 
     return `<article class="codex-account">
       <header class="account-top">
@@ -581,8 +643,9 @@
             <h3 class="app-name account-name">${esc(name)}</h3>
             ${acc.is_default ? '<span class="stamp stone">默认</span>' : ""}
             ${planTagHtml(auth)}
+            ${cdDaysTag}
           </div>
-          <div class="app-sub account-email mono">${esc(email)}${usage?.fetched_at ? " · " : ""}${updatedAtHtml(usage?.fetched_at, usage?.automatic)}</div>
+          <div class="app-sub account-email mono">${esc(email)}</div>
         </div>
         <div class="account-actions">
           ${desktopActions(acc, name, "launchAccount", "stopAccount")}
@@ -600,15 +663,18 @@
     const accounts = appState.accounts || [];
     const chromes = appState.chrome_profiles || [];
     const design = findOpenDesign();
+    const network = appState.network || {};
     const running = Number(accounts.some((acc) => acc.running)) + Number(!!appState.antigravity?.running) + Number(!!design?.running);
+    const proxyTxt = proxy.running
+      ? ((network.state === "timeout" || network.state === "unavailable") ? "代理超时" : "代理已连")
+      : "代理未连";
     $("#view-title").textContent = "工作台";
     $("#view-sub").innerHTML = running
-      ? `<span class="header-sub-dot" aria-hidden="true"></span><span>${running} 运行中</span>`
-      : "全部就绪";
+      ? `<span class="header-sub-dot" aria-hidden="true"></span><span>${running} 应用运行中 · ${proxyTxt}</span>`
+      : `<span>全部就绪 · ${proxyTxt}</span>`;
 
     const view = $("#view-content");
     if (view.querySelector("[data-web-identity]:focus")) return;
-    const network = appState.network || {};
     const key = JSON.stringify([
       proxy.running, proxy.installed, networkBusy, appState.network_status_refresh, appState.network_japan_picker,
       network.state, network.delay, network.delay_stale, network.mode, network.group, network.node, network.can_select,
@@ -1636,14 +1702,162 @@
     pop.style.top = `${top}px`;
   }
 
+  function openWebIdentityMenu(anchor, toolId) {
+    const profiles = appState?.chrome_profiles || [];
+    const current = webIdentity(toolId, profiles);
+    const pop = $("#popover-menu");
+    pop.innerHTML = profiles.length
+      ? profiles.map((p) => `<button type="button" class="pop-item" data-act="setWebIdentityMenu" data-id="${esc(toolId)}" data-dir="${esc(p.dir)}">
+          <span class="dot-ok-sq" style="${p.dir === current?.dir ? "" : "opacity:0.15;"}"></span>
+          <span>${esc(p.name)}</span>
+        </button>`).join("")
+      : `<div class="pop-item" style="color:var(--text-muted);cursor:default;">暂无可用 Chrome 身份</div>`;
+    positionPopover(pop, anchor);
+  }
+
+  let activeComboEl = null;
+  function closeInlineNodeCombo() {
+    if (activeComboEl) {
+      activeComboEl.remove();
+      activeComboEl = null;
+    }
+    const trigger = document.querySelector('[data-act="toggleInlineNodeCombo"]');
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  }
+
+  async function openInlineNodeCombo(anchorBtn) {
+    if (activeComboEl) {
+      closeInlineNodeCombo();
+      return;
+    }
+    closePopover();
+    anchorBtn.setAttribute("aria-expanded", "true");
+    const box = document.createElement("div");
+    box.className = "combo-popover";
+    box.innerHTML = `
+      <input type="text" class="combo-search" placeholder="输入关键字筛选节点..." aria-label="筛选节点" />
+      <div class="combo-list"><div style="padding:10px;font-size:12px;color:var(--text-muted);text-align:center;">正在读取节点…</div></div>
+      <div class="combo-foot"><span>↑/↓ 选择 · Enter 切换</span><button type="button" class="btn btn-flat btn-xs" data-act="openNetworkPickerFromCombo">完整面板</button></div>`;
+    document.body.appendChild(box);
+    activeComboEl = box;
+
+    const r = anchorBtn.getBoundingClientRect();
+    box.style.left = Math.max(10, Math.min(window.innerWidth - 320, r.left)) + "px";
+    box.style.top = (r.bottom + 5) + "px";
+
+    const searchInp = box.querySelector(".combo-search");
+    const listEl = box.querySelector(".combo-list");
+    let nodes = [];
+    let groupName = "";
+    let hiIdx = 0;
+
+    function renderList() {
+      const kw = searchInp.value.trim().toLowerCase();
+      const filtered = nodes.filter((n) => !kw || n.name.toLowerCase().includes(kw) || String(n.delay ?? "").includes(kw));
+      if (hiIdx >= filtered.length) hiIdx = Math.max(0, filtered.length - 1);
+      listEl.innerHTML = filtered.length ? filtered.map((n, pos) => {
+        const dotCls = n.delay == null ? "" : (n.delay < 100 ? "is-ok" : (n.delay <= 180 ? "is-warning" : "is-danger"));
+        const dotColor = dotCls === "is-ok" ? "var(--ok-fill)" : (dotCls === "is-warning" ? "var(--warn-fill)" : (dotCls === "is-danger" ? "var(--danger)" : "#9C988F"));
+        const delayTxt = n.delay != null ? `${n.delay} ms` : (n.state === "timeout" ? "超时" : "未测");
+        return `<button type="button" class="combo-opt${n.active ? " is-selected" : ""}${pos === hiIdx ? " is-hi" : ""}" data-combo-node="${esc(n.name)}">
+          <span style="display:flex;align-items:center;gap:7px;min-width:0;">
+            <span style="width:6px;height:6px;background:${dotColor};flex-shrink:0;"></span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.name)}</span>
+          </span>
+          <span class="mono" style="font-size:11px;color:${dotCls === "is-ok" ? "var(--ok)" : (dotCls === "is-warning" ? "var(--warn)" : "var(--text-muted)")};flex-shrink:0;">${esc(delayTxt)}</span>
+        </button>`;
+      }).join("") : `<div style="padding:10px;font-size:12px;color:var(--text-muted);text-align:center;">无匹配节点</div>`;
+    }
+
+    async function pickNode(nodeName) {
+      closeInlineNodeCombo();
+      networkBusy = "switch";
+      renderAll();
+      try {
+        await callHost("switchNetworkNode", { group: groupName, node: nodeName });
+        showToast("已切换到 " + nodeName);
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        networkBusy = "";
+        renderAll();
+      }
+    }
+
+    searchInp.addEventListener("input", () => { hiIdx = 0; renderList(); });
+    searchInp.addEventListener("keydown", (ev) => {
+      const opts = listEl.querySelectorAll("[data-combo-node]");
+      if (ev.key === "ArrowDown") { ev.preventDefault(); hiIdx = Math.min(opts.length - 1, hiIdx + 1); renderList(); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); hiIdx = Math.max(0, hiIdx - 1); renderList(); }
+      else if (ev.key === "Enter" && opts[hiIdx]) { ev.preventDefault(); pickNode(opts[hiIdx].dataset.comboNode); }
+      else if (ev.key === "Escape") { closeInlineNodeCombo(); anchorBtn.focus(); }
+    });
+    listEl.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-combo-node]");
+      if (btn) pickNode(btn.dataset.comboNode);
+    });
+    box.querySelector('[data-act="openNetworkPickerFromCombo"]').addEventListener("click", () => {
+      closeInlineNodeCombo();
+      openNetworkPicker();
+    });
+    searchInp.focus();
+
+    try {
+      const res = await callHost("listNetworkNodes", { group: "" });
+      if (!activeComboEl || activeComboEl !== box) return;
+      groupName = res.group || "";
+      nodes = (res.nodes || []).slice().sort((a, b) => (a.delay ?? Infinity) - (b.delay ?? Infinity) || a.name.localeCompare(b.name, "zh-CN"));
+      renderList();
+    } catch (err) {
+      if (activeComboEl === box) listEl.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--danger-hover);text-align:center;">${esc(err.message)}</div>`;
+    }
+  }
+
+  async function rescueFastestNode() {
+    if (networkBusy) return;
+    networkBusy = "switch";
+    renderAll();
+    try {
+      const res = await callHost("listNetworkNodes", { group: "" });
+      const group = res.group || "";
+      let candidates = (res.nodes || []).filter((n) => n.delay != null && n.state === "reachable");
+      if (!candidates.length && (res.nodes || []).length) {
+        const measured = await callHost("measureNetworkGroup", { group });
+        const list = measured?.nodes || res.nodes || [];
+        candidates = list.filter((n) => n.delay != null && n.state === "reachable");
+      }
+      candidates.sort((a, b) => a.delay - b.delay);
+      const best = candidates[0];
+      if (!best) {
+        networkBusy = "";
+        renderAll();
+        showToast("未找到可用低延迟节点，已打开节点选择器", true);
+        openNetworkPicker();
+        return;
+      }
+      await callHost("switchNetworkNode", { group, node: best.name });
+      showToast(`已自动切至 ${best.name} (${best.delay} ms)`);
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      networkBusy = "";
+      renderAll();
+    }
+  }
+
+  let lastModalTrigger = null;
   function openModal(html, size = false) {
     closePopover();
+    closeInlineNodeCombo();
     closeModal();
+    lastModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dlg = $("#modal-dialog");
     const extra = size === "changelog" ? " modal-changelog" : size ? " modal-wide" : "";
     dlg.className = "modal-dialog" + extra;
     dlg.innerHTML = html;
     showLayer($("#modal-backdrop"));
+    const firstFocusable = dlg.querySelector('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])');
+    firstFocusable?.focus();
   }
 
   function closeModal() {
@@ -1651,6 +1865,11 @@
     onNetworkPickerClose = null;
     cancelPicker?.();
     dismissLayer($("#modal-backdrop"));
+    if (lastModalTrigger && lastModalTrigger.isConnected) {
+      const restore = lastModalTrigger;
+      lastModalTrigger = null;
+      setTimeout(() => restore.focus(), 0);
+    }
   }
 
   async function refreshNetwork() {
@@ -2091,20 +2310,24 @@
         <div id="batch-exit-options" class="exit-checklist">
           ${rows.length ? rows.join("") : `<div class="exit-empty">当前没有正在运行的受管应用或代理。</div>`}
           <div class="exit-hub-divider">
-            <label class="exit-check-item exit-hub-item"><span class="exit-check-main"><input type="checkbox" id="be-hub" /><span>同时退出 AI Hub</span></span><span class="exit-check-cat">主程序</span></label>
+            <label class="exit-check-item exit-hub-item"><span class="exit-check-main"><input type="checkbox" id="be-hub" /><span>同时退出 AI BASE</span></span><span class="exit-check-cat">主程序</span></label>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-soft" data-close-modal>取消</button>
-        <button type="button" id="be-ok" class="btn btn-danger" ${total === 0 ? "disabled" : ""}>确认全部退出</button>
+        <button type="button" id="be-ok" class="btn btn-danger" ${total === 0 ? "disabled" : ""}>${total > 0 ? `确认退出 (${total})` : "确认退出"}</button>
       </div>
     `);
 
     const options = $("#batch-exit-options");
     const confirm = $("#be-ok");
     const checks = [...options.querySelectorAll("input[type=checkbox]")];
-    const syncConfirm = () => { confirm.disabled = !checks.some((input) => input.checked); };
+    const syncConfirm = () => {
+      const count = checks.filter((input) => input.checked).length;
+      confirm.disabled = count === 0;
+      confirm.textContent = count > 0 ? `确认退出 (${count})` : "确认退出";
+    };
     options.addEventListener("change", syncConfirm);
     confirm.addEventListener("click", async () => {
       confirm.disabled = true;
@@ -2250,10 +2473,54 @@
 
   $("#btn-batch-exit").addEventListener("click", openBatchExitModal);
 
+  // 240ms Debounced Global 0px Tooltip
+  const tipBubble = $("#tip-bubble");
+  let tipTimer = null;
+  document.addEventListener("mouseover", (e) => {
+    const target = e.target.closest("[data-tip]");
+    if (!target || !target.dataset.tip) return;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => {
+      if (!target.isConnected) return;
+      tipBubble.textContent = target.dataset.tip;
+      tipBubble.classList.add("is-show");
+      const r = target.getBoundingClientRect();
+      const left = Math.max(8, Math.min(window.innerWidth - tipBubble.offsetWidth - 8, r.left + r.width / 2 - tipBubble.offsetWidth / 2));
+      const top = r.top - tipBubble.offsetHeight - 7 >= 8 ? r.top - tipBubble.offsetHeight - 7 : r.bottom + 7;
+      tipBubble.style.left = `${left}px`;
+      tipBubble.style.top = `${top}px`;
+    }, 240);
+  });
+  document.addEventListener("mouseout", (e) => {
+    if (e.target.closest("[data-tip]")) {
+      clearTimeout(tipTimer);
+      tipBubble.classList.remove("is-show");
+    }
+  });
+
   document.addEventListener("keydown", (e) => {
+    const modalOpen = layerIsOpen($("#modal-backdrop"));
     if (e.key === "Escape") {
+      if (activeComboEl) { closeInlineNodeCombo(); return; }
       closeModal();
       closePopover();
+      return;
+    }
+    if (modalOpen && e.key === "Tab") {
+      const dlg = $("#modal-dialog");
+      const focusables = [...dlg.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+      if (!focusables.length) return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      return;
+    }
+    if (!modalOpen && e.ctrlKey && !e.shiftKey && !e.altKey) {
+      const tabMap = { "1": "workspace", "2": "projects", "3": "backlog", "4": "manage" };
+      if (tabMap[e.key]) {
+        e.preventDefault();
+        switchTab(tabMap[e.key]);
+      }
     }
   });
 
@@ -2270,7 +2537,8 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"]')) closePopover();
+    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"]')) closePopover();
+    if (activeComboEl && !e.target.closest('.combo-popover, [data-act="toggleInlineNodeCombo"]')) closeInlineNodeCombo();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
 
     const actBtn = e.target.closest("[data-act]");
@@ -2279,16 +2547,26 @@
     const id = actBtn.dataset.id;
     if (appState && !appState.safe_profile_actions && ["syncConfig", "openWipe", "openAddAccount"].includes(act)) {
       closePopover();
-      showToast("请重新启动 AI Hub，再执行此账号操作。", true);
+      showToast("请重新启动 AI BASE，再执行此账号操作。", true);
       return;
     }
 
     if (act === "applyLocalUpdate") postAction("applyLocalUpdate");
     else if (act === "refresh") postAction("refresh", { toast: "1" });
+    else if (act === "refreshAllQuotas") { postAction("refreshAllUsage"); postAction("refreshAntigravity"); }
     else if (act === "refreshAllUsage") postAction("refreshAllUsage");
     else if (act === "refreshUsage") postAction("refreshUsage", { id });
     else if (act === "refreshNetwork") refreshNetwork();
     else if (act === "openNetworkPicker") openNetworkPicker();
+    else if (act === "toggleInlineNodeCombo") openInlineNodeCombo(actBtn);
+    else if (act === "rescueFastestNode") rescueFastestNode();
+    else if (act === "openWebIdentityMenu") openWebIdentityMenu(actBtn, id);
+    else if (act === "setWebIdentityMenu") {
+      const dir = actBtn.dataset.dir || "";
+      setWebIdentity(id, dir);
+      closePopover();
+      renderAll();
+    }
     else if (act === "refreshAntigravity") { closePopover(); postAction("refreshAntigravity"); }
     else if (["proxyOpen", "proxyRestart", "proxyStop"].includes(act)) {
       closePopover();

@@ -59,6 +59,7 @@ namespace CodexLauncher
                 {
                     _antigravityRefresh = null;
                     PushFullState();
+                    SyncTrayStatus();
                 }
             }
         }
@@ -232,6 +233,7 @@ namespace CodexLauncher
                     }
                     else if (!automatic) _usageErrors[id] = snap.ErrorMessage ?? "额度查询失败";
                     PushFullState();
+                    SyncTrayStatus();
                     if (!silent)
                         SendToastToJs(snap.Success ? ("已刷新「" + current.Record.name + "」额度") : ("额度查询失败：" + snap.ErrorMessage), !snap.Success);
                 }));

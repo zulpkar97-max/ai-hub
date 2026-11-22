@@ -47,7 +47,7 @@ namespace CodexLauncher
             stack.Children.Add(batchBtn);
 
             stack.Children.Add(MakeSep());
-            var quitBtn = UiHelpers.MakeMenuRowButton("退出 AI Hub", null, "danger", false);
+            var quitBtn = UiHelpers.MakeMenuRowButton("退出 AI BASE", null, "danger", false);
             quitBtn.Click += (s, e) => { Close(); onQuit(); };
             stack.Children.Add(quitBtn);
 
@@ -207,9 +207,9 @@ namespace CodexLauncher
             }
             brandRow.Children.Add(new TextBlock
             {
-                Text = "AI HUB",
+                Text = "AI BASE",
                 FontFamily = UiHelpers.MainFont,
-                FontSize = 10.5,
+                FontSize = 11,
                 FontWeight = FontWeights.Bold,
                 Foreground = UiHelpers.TextSecondary,
                 VerticalAlignment = VerticalAlignment.Center
@@ -236,9 +236,9 @@ namespace CodexLauncher
             var body = new StackPanel { Margin = new Thickness(11, 9, 12, 11) };
             body.Children.Add(new TextBlock
             {
-                Text = title ?? "AI Hub",
+                Text = title ?? "AI BASE",
                 FontFamily = UiHelpers.MainFont,
-                FontSize = 12.5,
+                FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = UiHelpers.TextPrimary,
                 TextWrapping = TextWrapping.Wrap

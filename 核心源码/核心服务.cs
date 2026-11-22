@@ -18,8 +18,8 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.3";
-        private const string BrandIconFile = "aihub-v5.png";
+        public const string AppVersion = "v5.9.4";
+        private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
         private static readonly object StoreLock = new object();
@@ -40,7 +40,7 @@ namespace CodexLauncher
         public static readonly string WebViewCacheDir = Path.Combine(DataDir, "webview2-cache");
         public static readonly string AccountsFile = Path.Combine(DataDir, "accounts.json");
 
-        public static readonly string PermanentIcon = Path.Combine(DataDir, "aihub-v5.ico");
+        public static readonly string PermanentIcon = Path.Combine(DataDir, "aibase-v1.ico");
         public static readonly string PermanentPng256 = Path.Combine(DataDir, BrandIconFile);
         public static readonly string BundledIcon = Path.Combine(BaseDir, "资源", "aihub.ico");
         public static readonly string BundledPng256 = Path.Combine(BaseDir, "资源", "aihub-256.png");
