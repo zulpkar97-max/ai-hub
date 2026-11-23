@@ -362,7 +362,11 @@ namespace CodexLauncher
                             var tool = FindToolById(AuthParser.GetStr(data, "id"));
                             if (tool == null) break;
                             await Task.Run(() => CoreService.StopToolItem(tool));
-                            if (CoreService.IsToolRunning(tool)) throw new InvalidOperationException(tool.name + " 仍在运行。");
+                            if (CoreService.IsToolRunning(tool))
+                            {
+                                RefreshAsync(false);
+                                throw new InvalidOperationException(tool.name + " 仍在运行。");
+                            }
                             SendToastToJs("已关闭「" + tool.name + "」", false);
                             RefreshAsync(false);
                             break;

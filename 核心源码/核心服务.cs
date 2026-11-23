@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.11";
+        public const string AppVersion = "v5.9.12";
         private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -848,18 +848,92 @@ namespace CodexLauncher
             if (string.IsNullOrEmpty(pname)) return 0;
 
             int killed = 0;
-            try
+            // First ask windowed main processes to close cleanly so Electron/Chromium tears down its own workers.
+            ForEachNamedProcess(pname, true, p =>
             {
-                foreach (var p in Process.GetProcessesByName(pname))
-                    using (p)
+                try
+                {
+                    if (p.MainWindowHandle != IntPtr.Zero) p.CloseMainWindow();
+                }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { }
+            });
+
+            if (WaitForProcessesExit(pname, 5, 120)) return killed;
+
+            // Kill remaining processes in tight batches (main/windowed first) so helpers cannot respawn between waits.
+            for (int round = 0; round < 3; round++)
+            {
+                var batch = new List<Process>();
+                try
+                {
+                    foreach (var p in Process.GetProcessesByName(pname).OrderByDescending(IsMainWindowProcess))
+                        batch.Add(p);
+                }
+                catch { }
+
+                if (batch.Count == 0) break;
+
+                try
+                {
+                    foreach (var p in batch)
                     {
-                        try { p.Kill(); if (p.WaitForExit(1500)) killed++; }
+                        try { p.Kill(); }
                         catch (InvalidOperationException) { }
                         catch (System.ComponentModel.Win32Exception) { }
                     }
+                    foreach (var p in batch)
+                    {
+                        try { if (p.WaitForExit(1500)) killed++; }
+                        catch (InvalidOperationException) { killed++; }
+                        catch (System.ComponentModel.Win32Exception) { }
+                    }
+                }
+                finally
+                {
+                    foreach (var p in batch) p.Dispose();
+                }
+
+                if (WaitForProcessesExit(pname, 6, 150)) break;
+            }
+            return killed;
+        }
+
+        private static bool IsMainWindowProcess(Process p)
+        {
+            try { return p != null && p.MainWindowHandle != IntPtr.Zero; }
+            catch { return false; }
+        }
+
+        private static void ForEachNamedProcess(string pname, bool mainWindowFirst, Action<Process> action)
+        {
+            try
+            {
+                var list = Process.GetProcessesByName(pname);
+                var ordered = mainWindowFirst ? list.OrderByDescending(IsMainWindowProcess).ToArray() : list;
+                foreach (var p in ordered)
+                {
+                    using (p) action(p);
+                }
             }
             catch { }
-            return killed;
+        }
+
+        private static bool WaitForProcessesExit(string pname, int checks, int intervalMs)
+        {
+            for (int i = 0; i < checks; i++)
+            {
+                try
+                {
+                    var remaining = Process.GetProcessesByName(pname);
+                    int count = remaining.Length;
+                    foreach (var p in remaining) p.Dispose();
+                    if (count == 0) return true;
+                }
+                catch { return true; }
+                Thread.Sleep(intervalMs);
+            }
+            return false;
         }
 
         public static string UninstallSoftware(ToolItem item)
