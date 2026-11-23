@@ -2545,21 +2545,21 @@ namespace CodexLauncher
             if (item.Tool == DrawTool.Stamp)
             {
                 double boxSize = StampBoxSize(item) * item.UiScale;
-                double w = boxSize + 2;
-                double h = boxSize + 2;
+                double w = boxSize + 2 * item.UiScale;
+                double h = boxSize + 2 * item.UiScale;
                 var fe = item.CachedVisual as FrameworkElement;
                 if (fe != null)
                 {
-                    if (fe.ActualWidth <= 0) fe.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-                    w = Math.Max(w, fe.ActualWidth > 0 ? fe.ActualWidth : fe.DesiredSize.Width);
-                    h = Math.Max(h, fe.ActualHeight > 0 ? fe.ActualHeight : fe.DesiredSize.Height);
+                    if (!fe.IsMeasureValid) fe.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+                    w = Math.Max(w, fe.DesiredSize.Width);
+                    h = Math.Max(h, fe.DesiredSize.Height);
                 }
                 else if (!string.IsNullOrWhiteSpace(item.Text))
                 {
                     w += 18 + item.Text.Length * 13;
                 }
                 var r = new WpfRect(item.Start.X - boxSize / 2.0, item.Start.Y - boxSize / 2.0, w, h);
-                r.Inflate(4, 4);
+                r.Inflate(2 * item.UiScale, 2 * item.UiScale);
                 return r;
             }
             return WpfRect.Empty;
@@ -2614,7 +2614,7 @@ namespace CodexLauncher
         private void UpdateSelectedAnnotationOutline()
         {
             if (_annotSelBox == null) return;
-            if (_selectedAnnot == null || !_annotations.Contains(_selectedAnnot) || !_hasSelection)
+            if (_editingAnnot != null || _selectedAnnot == null || !_annotations.Contains(_selectedAnnot) || !_hasSelection)
             {
                 _annotSelBox.Visibility = Visibility.Collapsed;
                 return;
@@ -2715,6 +2715,7 @@ namespace CodexLauncher
             if (item == null) return;
             CommitActiveTextBox();
             _editingAnnot = item;
+            UpdateSelectedAnnotationOutline();
             double scale = item.UiScale;
             double boxSize = StampBoxSize(item) * scale;
             double fontSize = item.FontSize > 0

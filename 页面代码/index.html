@@ -423,6 +423,9 @@
       </header>
 
       <main id="view-content" class="view-content"></main>
+      <div id="design-view" class="design-view" hidden>
+        <p id="design-loading" class="design-loading" role="status">正在加载设计系统…</p>
+      </div>
     </section>
   </div>
 
@@ -436,13 +439,23 @@
         <h3 id="settings-title">设置</h3>
         <div class="tool-actions" id="settings-actions"></div>
       </header>
-      <nav class="settings-nav" aria-label="设置分类">
-        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="all" aria-pressed="true">全部设置</button>
-        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="settings-hotkeys" aria-pressed="false">热键与提醒</button>
-        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="settings-apps" aria-pressed="false">桌面收纳与卸载</button>
-        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="settings-system" aria-pressed="false">常驻与备份</button>
-      </nav>
-      <div id="settings-content" class="settings-content"></div>
+      <div class="modal-split">
+        <nav class="modal-section-nav" aria-label="设置分类">
+          <button type="button" class="modal-section-btn is-active" data-act="settingsSection" data-id="settings-hotkeys" aria-controls="settings-content" aria-pressed="true">
+            <span class="modal-section-label">热键与提醒</span><span class="modal-section-dot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="modal-section-btn" data-act="settingsSection" data-id="settings-stash" aria-controls="settings-content" aria-pressed="false">
+            <span class="modal-section-label">桌面收纳</span><span class="modal-section-dot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="modal-section-btn" data-act="settingsSection" data-id="settings-uninstall" aria-controls="settings-content" aria-pressed="false">
+            <span class="modal-section-label">软件卸载</span><span class="modal-section-dot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="modal-section-btn" data-act="settingsSection" data-id="settings-system" aria-controls="settings-content" aria-pressed="false">
+            <span class="modal-section-label">常驻与备份</span><span class="modal-section-dot" aria-hidden="true"></span>
+          </button>
+        </nav>
+        <div id="settings-content" class="settings-content"></div>
+      </div>
     </section>
   </div>
   <div id="modal-backdrop" class="modal-backdrop hidden">

@@ -3154,7 +3154,7 @@
           </section>
 
           <!-- ==================== 09 · 实机三战役与全站通则 ==================== -->
-          <section class="page-view" data-view="09" data-title="实机布局、控件与交互通则" data-sub="AI BASE v5.9.10 · 工作台、设置、需求池与截图交互">
+          <section class="page-view" data-view="09" data-title="实机布局、控件与交互通则" data-sub="AI BASE v5.9.11 · 工作台、设置、需求池与截图交互">
             <div class="panel">
               <div class="panel-head">
                 <h2><span class="head-bar"></span>1. 全站实机 3 条铁律（从 6 张实机截图提炼的通用规范）</h2>
@@ -3172,7 +3172,7 @@
                   </div>
                   <div style="border:1px solid var(--line-struct);padding:12px;background:var(--surface-paper);">
                     <strong style="font-size:13px;">③ 异常驱动原则</strong>
-                    <p style="margin:6px 0 0;font-size:12px;color:var(--text-secondary);">默认正常态（<code>main / 干净 / Web 书签</code>）退居轻量无框，绝不乱套黑框或借用进程绿点；绿点专供本机进程，琥珀/朱砂专供未提交与告急。</p>
+                    <p style="margin:6px 0 0;font-size:12px;color:var(--text-secondary);">分支名和 Web 书签用轻量文字。Git 状态使用等宽标签，翡翠表示「干净」，琥珀表示改动。宽度按「99 处改动」预留，超过两位数显示「99+ 改动」，悬停查看实际数量。状态标签贴齐卡头右侧，直接拖动卡头或聚焦后按方向键排序。</p>
                   </div>
                 </div>
               </div>
@@ -3198,7 +3198,13 @@
                     <tr>
                       <td class="mono">战役二</td>
                       <td><strong>项目 / 需求池 / 设置 / 日志</strong></td>
-                      <td>需求池清单用分组标题控制折叠，用相邻把手排序，悬停操作预留固定位置。宽窗详情约占 38%，窄窗为抽屉。看板三条活跃列，归档展开后分「搁置」与「已完成」，拖卡显示目标占位并等待保存反馈。设置入口沿用快捷工具纸卡，位于该组下方，由虚线隔开。设置弹窗固定标题和分类栏，单列正文独立滚动。</td>
+                      <td>需求池分组用左侧细线和方点区分状态：已排期用墨色，构思中用琥珀，已搁置用灰，进行中和已完成用翡翠。已搁置默认展开，已完成（归档）默认收起，各组均可折叠和排序。悬停或聚焦显示快捷操作，搁置行可「重启」回到构思中。项目方点用翡翠标记 AI BASE，用琥珀标记 LIFE BASE。高优先级用朱砂实底，中优先级用琥珀细边。右侧属性为 2 × 2，第一排项目和状态，第二排优先级和更新。四个值同宽（96px）同高，更新时间用等宽数字和方框，状态、优先级与归属共用自绘菜单。看板归档共用外框，搁置和完成保留独立落点。收展与详情抽屉使用短过渡，遵循系统减少动效偏好。</td>
+                      <td><span class="ds-tag is-ok">已落地</span></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">弹窗</td>
+                      <td><strong>设置 / 更新日志 / 托盘菜单</strong></td>
+                      <td>设置和日志共享 820 × 550px 的上限与左侧导航样式，窗口不足时同时缩小。设置左侧精简为「热键与提醒 / 桌面收纳 / 软件卸载 / 常驻与备份」4 个一级分类并直接展开对应内容；右边独立滚动，切换分区时外框尺寸固定。托盘菜单的危险操作悬停时使用朱砂底配白字。</td>
                       <td><span class="ds-tag is-ok">已落地</span></td>
                     </tr>
                     <tr>
@@ -3214,7 +3220,7 @@
           </section>
 
           <!-- ==================== 10 · 截图与 OCR 浮层 0px 定妆 ==================== -->
-          <section class="page-view" data-view="10" data-title="截图工具栏、放大镜与 OCR 窗 0px 视觉定妆" data-sub="暖墨取景框 · 3 色精简 + 默认 1.5px 细线 · [01] 双击附加说明文字 · 单击任意标注可拖动或按 Delete 单独删除">
+          <section class="page-view" data-view="10" data-title="截图工具栏、放大镜与 OCR 窗 0px 视觉定妆" data-sub="暖墨取景框 · 3 色精简 + 默认 1.5px 细线 · [01] 双击进入内联编辑并隐去选中框 · 单击选中后可拖动或按 Delete 删除">
             <div class="panel">
               <div class="panel-head">
                 <h2><span class="head-bar"></span>1. 截图浮层定妆（暖墨取景框 · 3 色 + 默认 1.5px 细线 · 序号文字合并 · 单击选中可删）</h2>
@@ -3406,7 +3412,6 @@
       document.getElementById("prev-page").disabled = idx === 0;
       document.getElementById("next-page").disabled = idx === pages.length - 1;
       stageEl.scrollTop = 0;
-      if (isEmbedded) window.parent.postMessage({ type: "ds-page-changed", page: id }, location.origin);
     }
 
     document.getElementById("toc-nav").addEventListener("click", e => {

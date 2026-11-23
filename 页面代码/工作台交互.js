@@ -30,25 +30,28 @@
     }
   })();
   let selectedBacklogId = "";
-  const expandedSettings = new Set(["stash-details"]);
-  let settingsSection = "all";
+  let settingsSection = "settings-hotkeys";
   let settingsTrigger = null;
-  let designPage = "";
-  const defaultBacklogGroups = ["doing", "planned", "idea", "closed"];
+  let designWarmupQueued = false;
+  const defaultBacklogGroups = ["doing", "planned", "idea", "paused", "done"];
   const backlogGroupPreferences = (() => {
     try {
       const saved = JSON.parse(localStorage.getItem("aibase_backlog_groups") || "{}");
+      const order = Array.isArray(saved.order) ? saved.order : [];
+      const collapsed = Array.isArray(saved.collapsed) ? saved.collapsed : ["done"];
       return {
-        order: [...new Set([...(Array.isArray(saved.order) ? saved.order : []).filter((id) => defaultBacklogGroups.includes(id)), ...defaultBacklogGroups])],
-        collapsed: new Set(Array.isArray(saved.collapsed) ? saved.collapsed : ["closed"])
+        order: [...new Set([...order.flatMap((id) => id === "closed" ? ["paused", "done"] : [id]), ...defaultBacklogGroups])]
+          .filter((id) => defaultBacklogGroups.includes(id)),
+        collapsed: new Set(collapsed.map((id) => id === "closed" ? "done" : id))
       };
     } catch (_) {
-      return { order: [...defaultBacklogGroups], collapsed: new Set(["closed"]) };
+      return { order: [...defaultBacklogGroups], collapsed: new Set(["done"]) };
     }
   })();
   let backlogDrag = null;
   const searchCollapsedGroups = new Set();
   let archiveRailOpen = false;
+  let archiveRailOverride = null;
   let backlogDrawerId = "";
   let backlogDrawerKey = "";
   const backlogMoves = new Map();
@@ -255,22 +258,40 @@
     });
 
     const view = $("#view-content");
-    view.classList.toggle("is-design-view", activeTab === "design");
+    view.hidden = activeTab === "design";
+    $("#design-view").hidden = activeTab !== "design";
 
     if (activeTab === "workspace") renderUnifiedWorkspace();
     else if (activeTab === "projects") renderProjects();
     else if (activeTab === "backlog") renderBacklog();
     else if (activeTab === "design") renderDesignSystem();
+    if (!designWarmupQueued && activeTab !== "design") {
+      designWarmupQueued = true;
+      window.requestIdleCallback(mountDesignSystem, { timeout: 1200 });
+    }
     if (layerIsOpen($("#settings-backdrop"))) renderManage();
   }
 
   function renderDesignSystem() {
     $("#view-title").textContent = "设计系统";
     $("#view-sub").textContent = "v1.2 松烟暖墨 · 0px 建筑线稿规范 (01–10)";
-    const view = $("#view-content");
-    if (view.dataset.page === "design" && view.querySelector("#design-sys-frame")) return;
-    view.dataset.page = "design";
-    view.innerHTML = `<iframe id="design-sys-frame" class="design-sys-frame" src="/%E8%AE%BE%E8%AE%A1%E7%B3%BB%E7%BB%9F.html?embed=1${designPage ? `&page=${designPage}` : ""}" title="AI BASE & LIFE BASE 设计系统"></iframe>`;
+    mountDesignSystem();
+  }
+
+  function mountDesignSystem() {
+    const view = $("#design-view");
+    if (view.querySelector("#design-sys-frame")) return;
+    const frame = document.createElement("iframe");
+    frame.id = "design-sys-frame";
+    frame.className = "design-sys-frame";
+    frame.title = "AI BASE & LIFE BASE 设计系统";
+    frame.src = "/%E8%AE%BE%E8%AE%A1%E7%B3%BB%E7%BB%9F.html?embed=1";
+    frame.hidden = true;
+    frame.addEventListener("load", () => {
+      $("#design-loading").hidden = true;
+      frame.hidden = false;
+    }, { once: true });
+    view.append(frame);
   }
 
   function switchTab(tab) {
@@ -704,9 +725,9 @@
     if (!focus.id && !data.length) return () => {};
     return () => {
       const target = focus.id ? document.getElementById(focus.id)
-        : [...container.querySelectorAll("button, input, select")].find((candidate) =>
+        : [...container.querySelectorAll("button, input, select, [tabindex]")].find((candidate) =>
           data.every(([key, value]) => candidate.dataset[key] === value));
-      if (target && container.contains(target)) target.focus({ preventScroll: true });
+      if (target && container.contains(target) && !target.closest("[inert]")) target.focus({ preventScroll: true });
     };
   }
 
@@ -793,19 +814,6 @@
       <input type="checkbox" data-setting="${key}" aria-label="${esc(label)}" ${checked ? "checked" : ""} />
       <span class="toggle-track"></span><span class="toggle-thumb"></span>
     </label>`;
-  }
-
-  function settingsDisclosure(id, label) {
-    const open = expandedSettings.has(id);
-    const expandedLabel = label.replace("展开", "收起");
-    return `<button type="button" class="btn btn-soft btn-sm btn-w-row settings-disclosure" data-act="toggleSettingsDetails" data-id="${id}"
-      data-collapsed-label="${label}" data-expanded-label="${expandedLabel}" aria-controls="${id}" aria-expanded="${open}"><span>${open ? expandedLabel : label}</span>${ICONS.chevronDown}</button>`;
-  }
-
-  function disclosurePanel(id, open, content) {
-    return `<div id="${id}" class="disclosure-panel${open ? " is-expanded" : ""}" ${open ? "" : "inert"}>
-      <div class="disclosure-content">${content}</div>
-    </div>`;
   }
 
   function toggleDisclosure(button) {
@@ -896,19 +904,22 @@
       const theme = projectVisualTheme(item);
       const displayName = normBrandText(item.name);
       const isDefaultBranch = item.branch === "main" || item.branch === "master";
+      let branch = "";
       let statusMeta = "";
       if (!item.exists) {
-        statusMeta = `<span class="stamp coral">路径缺失</span>`;
+        statusMeta = `<span class="stamp project-git-status coral">路径缺失</span>`;
       } else if (item.is_git) {
         if (item.dirty_count > 0) {
-          statusMeta = `<span class="stamp semantic-warn"><span class="dot-warn-sq"></span>${item.dirty_count} 处改动</span>`;
-        } else if (!isDefaultBranch && item.branch) {
-          statusMeta = `<span class="stamp mono">${esc(item.branch)}</span><span class="project-clean-meta">· 干净</span>`;
+          const count = Number(item.dirty_count);
+          const label = count > 99 ? "99+ 改动" : `${count} 处改动`;
+          statusMeta = `<span class="stamp project-git-status semantic-warn" title="${count} 处改动"><span class="dot-warn-sq" aria-hidden="true"></span>${label}</span>`;
         } else {
-          statusMeta = `<span class="project-clean-meta mono">${esc(item.branch || "main")} · 干净</span>`;
+          const branchClass = !isDefaultBranch && item.branch ? "stamp mono" : "project-clean-meta mono";
+          branch = `<span class="${branchClass}">${esc(item.branch || "main")}</span>`;
+          statusMeta = `<span class="stamp project-git-status semantic-ok"><span class="dot-ok-sq" aria-hidden="true"></span>干净</span>`;
         }
       } else {
-        statusMeta = `<span class="project-clean-meta">本地目录</span>`;
+        statusMeta = `<span class="stamp project-git-status">本地目录</span>`;
       }
 
       const descText = normBrandText(item.notes || (item.is_git ? "本地 Git 仓库，可快速复制路径指给 AI 助手处理。" : "本地工作目录，支持快速复制路径与打开目录。"));
@@ -925,19 +936,17 @@
       const agGlyph = agIcon ? `<img class="project-tool-icon" src="${esc(agIcon)}" alt="" />` : '<span class="project-tool-letter" aria-hidden="true">A</span>';
 
       return `<article class="project-card block" data-project-id="${esc(item.id)}" tabindex="-1">
-        <header class="project-card-head block-head" title="按住卡头可拖动排序">
+        <header class="project-card-head block-head" tabindex="0" role="group" aria-label="${esc(displayName)}" aria-description="使用方向键调整顺序" title="拖动卡头排序，也可按方向键调整">
           <div class="project-card-lead">
             <div class="project-emblem">${theme.svg}</div>
             <div class="project-head-meta">
               <div class="project-name-row">
                 <span class="project-name" title="${esc(displayName)}">${esc(displayName)}</span>
-                ${statusMeta}
+                ${branch}
               </div>
             </div>
           </div>
-          <div class="project-head-actions">
-            <button type="button" class="project-grip" data-project-grip aria-label="调整 ${esc(displayName)} 的顺序" data-tip="拖动或方向键排序">${ICONS.grip}</button>
-          </div>
+          ${statusMeta}
         </header>
 
         <div class="project-card-body">
@@ -1017,7 +1026,7 @@
       if (activeTab === "projects") {
         renderProjects();
         if (focusId) [...$$(".project-card")].find(card => card.dataset.projectId === focusId)
-          ?.querySelector("[data-project-grip]")?.focus({ preventScroll: true });
+          ?.querySelector(".project-card-head")?.focus({ preventScroll: true });
       }
     }
   }
@@ -1094,13 +1103,12 @@
   }
 
   document.addEventListener("pointerdown", event => {
-    const head = event.target.closest("[data-project-grip], .project-card-head");
+    const head = event.target.closest(".project-card-head");
     if (!head || event.button !== 0 || !event.isPrimary || projectDrag || projectDrop || savingProjectOrder) return;
-    if (event.target.closest("button:not([data-project-grip]), a, input, select")) return;
+    if (event.target.closest("button, a, input, select")) return;
     const card = head.closest(".project-card"), grid = card?.parentElement;
     if (!card || !grid || grid.childElementCount < 2) return;
-    const grip = card.querySelector("[data-project-grip]");
-    if (grip && event.target.closest("[data-project-grip]")) grip.focus({ preventScroll: true });
+    head.focus({ preventScroll: true });
     grid.setPointerCapture(event.pointerId);
     projectDrag = { card, grid, before: [...grid.children], pointer: event.pointerId, frame: 0,
       startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY };
@@ -1131,9 +1139,9 @@
   window.addEventListener("blur", () => { if (projectDrag) finishProjectDrag(false); });
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && projectDrag) { finishProjectDrag(false); return; }
-    const grip = event.target.closest("[data-project-grip]");
-    if (!grip || projectDrag || projectDrop || savingProjectOrder || !event.key.startsWith("Arrow")) return;
-    const card = grip.closest(".project-card"), grid = card.parentElement;
+    const head = event.target.closest(".project-card-head");
+    if (!head || projectDrag || projectDrop || savingProjectOrder || !event.key.startsWith("Arrow")) return;
+    const card = head.closest(".project-card"), grid = card.parentElement;
     const cards = [...grid.children], index = cards.indexOf(card);
     const columns = cards.filter(peer => peer.offsetTop === cards[0].offsetTop).length;
     const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns }[event.key];
@@ -1221,15 +1229,15 @@
 
   const BACKLOG_PROJECTS = ["AI BASE", "LIFE BASE", "通用"];
   const BACKLOG_STATUSES = [
-    { id: "idea", label: "构思中", tone: "sand" },
-    { id: "planned", label: "已排期", tone: "sky" },
-    { id: "doing", label: "进行中", tone: "mint" },
-    { id: "done", label: "已完成", tone: "stone" },
-    { id: "paused", label: "搁置", tone: "stone" },
+    { id: "idea", label: "构思中", next: "planned", nextLabel: "→ 排期" },
+    { id: "planned", label: "已排期", next: "doing", nextLabel: "→ 进行中" },
+    { id: "doing", label: "进行中", next: "done", nextLabel: "✓ 完成" },
+    { id: "done", label: "已完成" },
+    { id: "paused", label: "已搁置", next: "idea", nextLabel: "→ 重启" },
   ];
   const BACKLOG_PRIORITIES = {
-    high: { label: "高", cls: "semantic-danger", rank: 0 },
-    medium: { label: "中", cls: "semantic-warn", rank: 1 },
+    high: { label: "高", cls: "backlog-priority-high", rank: 0 },
+    medium: { label: "中", cls: "backlog-priority-medium", rank: 1 },
     low: { label: "低", cls: "stone", rank: 2 },
   };
   const BACKLOG_STATUS_RANK = { doing: 0, planned: 1, idea: 2, paused: 3, done: 4 };
@@ -1243,6 +1251,18 @@
 
   function backlogStatusMeta(id) {
     return BACKLOG_STATUSES.find((s) => s.id === id) || BACKLOG_STATUSES[0];
+  }
+
+  function backlogStatusLabel(status) {
+    return `<span class="kv-pill-lead"><span class="backlog-status-dot" data-status="${status.id}" aria-hidden="true"></span>${status.label}</span>`;
+  }
+
+  function backlogProjectTag(project, bare = false) {
+    const style = project === "AI BASE" ? "ai" : project === "LIFE BASE" ? "life" : "general";
+    if (bare) {
+      return `<span class="backlog-project-dot is-${style}" aria-hidden="true"></span><span class="backlog-project-text">${esc(project)}</span>`;
+    }
+    return `<span class="stamp backlog-project-tag is-${style}">${esc(project)}</span>`;
   }
 
   function filterBacklogItems(items) {
@@ -1310,15 +1330,12 @@
     if (filtered.length === 0) {
       return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
     }
-    const byStatus = [
-      { id: "doing", title: "进行中", dot: "var(--ok-fill)", list: filtered.filter((it) => it.status === "doing"), merged: false },
-      { id: "planned", title: "已排期", dot: "#2B5F8F", list: filtered.filter((it) => it.status === "planned"), merged: false },
-      { id: "idea", title: "构思中", dot: "var(--warn-fill)", list: filtered.filter((it) => it.status === "idea"), merged: false },
-      { id: "closed", title: "已归档", dot: "#9C988F", list: filtered.filter((it) => it.status === "paused" || it.status === "done"), merged: true },
-    ];
     const reveal = backlogStatus !== "all" || !!backlogQuery.trim();
-    const groups = backlogGroupPreferences.order.map((id) => byStatus.find((group) => group.id === id))
-      .filter((group) => group.list.length);
+    const groups = backlogGroupPreferences.order.map((id) => ({
+      id,
+      title: id === "done" ? "已完成（归档）" : backlogStatusMeta(id).label,
+      list: filtered.filter((item) => item.status === id)
+    })).filter((group) => group.list.length);
     const isCollapsed = (id) => (reveal ? searchCollapsedGroups : backlogGroupPreferences.collapsed).has(id);
     const visibleItems = groups.filter((group) => !isCollapsed(group.id)).flatMap((group) => group.list);
     const sel = visibleItems.find((it) => it.id === selectedBacklogId) || visibleItems[0];
@@ -1335,40 +1352,35 @@
             <section class="cp-group" data-backlog-group="${g.id}">
             <div class="cp-group-header">
               <button type="button" class="cp-grp-hdr" data-act="toggleBacklogGroup" data-id="${g.id}" aria-expanded="${!isCollapsed(g.id)}" aria-controls="backlog-group-${g.id}">
-              <span class="cp-grp-lead"><span style="width:6px;height:6px;background:${g.dot};display:inline-block;"></span><span>${g.title}</span></span>
-              <span class="mono">${g.merged ? `搁置 ${g.list.filter((it) => it.status === "paused").length} · 已完成 ${g.list.filter((it) => it.status === "done").length}` : g.list.length}</span>
+              ${backlogStatusLabel({ id: g.id, label: g.title })}
+              <span class="stamp mono">${g.list.length}</span>
               ${ICONS.chevronDown}
               </button>
               <button type="button" class="backlog-grip" data-backlog-grip="group" data-id="${g.id}" aria-label="拖动或用上下方向键调整${g.title}的位置">${ICONS.grip}</button>
             </div>
-            <div id="backlog-group-${g.id}" ${isCollapsed(g.id) ? "hidden" : ""}>
-            ${(g.merged ? ["paused", "done"].flatMap((status) => {
-              const rows = g.list.filter((item) => item.status === status);
-              return rows.length ? [backlogStatusMeta(status).label, ...rows] : [];
-            }) : g.list).map((it) => {
-              if (typeof it === "string") return `<div class="cp-archive-subhead">${it}</div>`;
+            <div id="backlog-group-${g.id}" class="disclosure-panel${isCollapsed(g.id) ? "" : " is-expanded"}" ${isCollapsed(g.id) ? "inert" : ""}><div class="disclosure-content">
+            ${g.list.map((it) => {
               const pr = BACKLOG_PRIORITIES[it.priority] || BACKLOG_PRIORITIES.medium;
               const st = backlogStatusMeta(it.status);
               const proj = normBacklogProject(it.project);
               const title = normBrandText(it.title);
               const dateShort = it.updated_at ? fmtDate(it.updated_at, true).split(" ")[0] : "";
-              const advNext = it.status === "idea" ? "planned" : (it.status === "planned" ? "doing" : (it.status === "doing" ? "done" : ""));
-              const advLabel = advNext === "planned" ? "→ 排期" : (advNext === "doing" ? "→ 进行中" : (advNext === "done" ? "✓ 完成" : ""));
+              const { next, nextLabel } = st;
               const progress = renderBacklogNotesHtml(it).progressBadge;
               return `<div class="cp-row${it.id === sel?.id ? " selected" : ""}${it.status === "done" ? " is-done" : ""}" data-act="selectBacklogItem" data-id="${esc(it.id)}" tabindex="0">
                 <div class="cp-row-main">
                   <span class="stamp ${pr.cls}">${pr.label}</span>
-                  <span class="stamp stone">${esc(proj)}</span>
+                  ${backlogProjectTag(proj)}
                   <span class="cp-row-title" title="${esc(title)}">${esc(title)}</span>
                   ${progress}
                 </div>
                 <div class="cp-row-right">
-                  ${g.merged ? `<span class="stamp ${st.tone}">${st.label}</span>` : `<span class="cp-row-date mono${advNext ? " can-hide" : ""}">${esc(dateShort)}</span>`}
-                  ${advNext ? `<button type="button" class="cp-quick-adv" data-act="quickAdvanceBacklog" data-id="${esc(it.id)}" data-next="${advNext}">${advLabel}</button>` : ""}
+                  <span class="cp-row-date mono${next ? " can-hide" : ""}">${esc(dateShort)}</span>
+                  ${next ? `<button type="button" class="cp-quick-adv" data-act="quickAdvanceBacklog" data-id="${esc(it.id)}" data-next="${next}" aria-label="${nextLabel.slice(2)}「${esc(title)}」">${nextLabel}</button>` : ""}
                 </div>
               </div>`;
             }).join("")}
-            </div>
+            </div></div>
             </section>
           `).join("")}
         </div>
@@ -1383,9 +1395,7 @@
     const selTitle = normBrandText(sel.title);
     const selPrioKey = BACKLOG_PRIORITIES[sel.priority] ? sel.priority : "medium";
     const selPrio = BACKLOG_PRIORITIES[selPrioKey];
-    const statusOpts = BACKLOG_STATUSES.map((st) =>
-      `<option value="${st.id}"${sel.status === st.id ? " selected" : ""}>${st.label}</option>`
-    ).join("");
+    const property = (key, label, value, tone = "") => `<button type="button" class="stamp kv-pill-btn ${tone}" data-act="openBacklogProperty" data-property="${key}" data-id="${esc(sel.id)}" aria-label="${label}" aria-haspopup="menu" aria-controls="popover-menu" aria-expanded="false">${value}</button>`;
     const notesRendered = renderBacklogNotesHtml(sel);
     return `
         <div class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
@@ -1399,27 +1409,24 @@
         </div>
         <div class="cp-detail-body">
           <h2 class="cp-detail-title">${esc(selTitle)}</h2>
-          <div class="cp-detail-kv cp-property-rows">
+          <div class="cp-detail-kv cp-property-grid">
             <div>
-              <div class="cp-kv-label">当前状态</div>
-              <select class="sel" data-backlog-status="${esc(sel.id)}" aria-label="修改状态">${statusOpts}</select>
+              <div class="cp-kv-label">项目
+                <button type="button" class="kv-jump-btn" data-act="jumpToProject" data-project="${esc(selProj)}" aria-label="跳转到项目页" data-tip="跳转到项目页">${ICONS.ext}</button>
+              </div>
+              ${property("project", "修改归属项目", backlogProjectTag(selProj, true), "backlog-project-pill")}
+            </div>
+            <div>
+              <div class="cp-kv-label">状态</div>
+              ${property("status", "修改状态", backlogStatusLabel(backlogStatusMeta(sel.status)))}
             </div>
             <div>
               <div class="cp-kv-label">优先级</div>
-              <button type="button" class="kv-pill-btn" data-act="openBacklogPriorityMenu" data-id="${esc(sel.id)}" data-tip="点击快速切换优先级">
-                <span class="kv-pill-lead"><span class="prio-dot ${selPrioKey}" aria-hidden="true"></span><span>${selPrio.label}优先级</span></span>${ICONS.chevronDown}
-              </button>
+              ${property("priority", "修改优先级", `${selPrio.label}优先级`, selPrio.cls)}
             </div>
             <div>
-              <div class="cp-kv-label">归属项目</div>
-              <div style="display:flex;align-items:center;gap:5px;">
-                <button type="button" class="kv-pill-btn" data-act="openBacklogProjectMenu" data-id="${esc(sel.id)}" data-tip="点击切换归属项目"><span>${esc(selProj)}</span>${ICONS.chevronDown}</button>
-                <button type="button" class="kv-jump-btn" data-act="jumpToProject" data-project="${esc(selProj)}" data-tip="跳转到项目页">${ICONS.ext}</button>
-              </div>
-            </div>
-            <div>
-              <div class="cp-kv-label">最近更新</div>
-              <span class="mono cp-kv-time" data-tip="创建 ${esc(fmtDate(sel.created_at))}">${esc(fmtDate(sel.updated_at, true))}</span>
+              <div class="cp-kv-label">更新</div>
+              <span class="stamp mono cp-kv-time" data-tip="创建 ${esc(fmtDate(sel.created_at))}">${esc(fmtDate(sel.updated_at, true))}</span>
             </div>
           </div>
           <div class="cp-detail-sec" style="display:flex;align-items:center;gap:8px;"><span>详细说明</span>${notesRendered.progressBadge}</div>
@@ -1451,12 +1458,12 @@
   }
 
   function renderBacklogKanbanHtml(filtered) {
-    const lane = (status) => {
+    const lane = (status, archive = false) => {
       const title = backlogStatusMeta(status).label;
       const items = filtered.filter((item) => item.status === status);
-      return `<section class="block kanban-col" data-kanban-status="${status}">
+      return `<section class="${archive ? "kanban-archive-section" : "block "}kanban-col" data-kanban-status="${status}">
         <header class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
-          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>${title}</span></span>
+          ${backlogStatusLabel({ id: status, label: title })}
           <span class="stamp mono">${items.length}</span>
         </header>
         <div class="kanban-cards">
@@ -1472,7 +1479,7 @@
                   <div class="kcard-top">
                     <div class="kcard-tags">
                       <span class="stamp ${prio.cls}">${prio.label}</span>
-                      <span class="stamp stone">${esc(proj)}</span>
+                      ${backlogProjectTag(proj)}
                     </div>
                     <button type="button" class="backlog-grip" data-backlog-grip="card" data-id="${esc(item.id)}" aria-label="拖动需求">${ICONS.grip}</button>
                   </div>
@@ -1491,15 +1498,15 @@
       </section>`;
     };
     const archived = filtered.filter((item) => item.status === "done" || item.status === "paused");
-    const showArchive = archiveRailOpen || ["done", "paused"].includes(backlogStatus) ||
-      (!!backlogQuery.trim() && archived.length > 0);
+    const autoArchive = ["done", "paused"].includes(backlogStatus) || (!!backlogQuery.trim() && archived.length > 0);
+    const showArchive = archiveRailOverride !== null ? archiveRailOverride : (archiveRailOpen || autoArchive);
     return `<div class="kanban-board">
-      ${["doing", "planned", "idea"].map(lane).join("")}
-      <div class="kanban-archive${showArchive ? " is-open" : ""}">
-        <button type="button" class="block kanban-archive-toggle" data-act="toggleKanbanArchive" aria-expanded="${showArchive}">
+      ${["doing", "planned", "idea"].map((status) => lane(status)).join("")}
+      <div class="block kanban-archive${showArchive ? " is-open" : ""}">
+        <button type="button" class="kanban-archive-toggle" data-act="toggleKanbanArchive" aria-controls="kanban-archive-lanes" aria-expanded="${showArchive}">
           <span>归档</span><span class="stamp mono">${archived.length}</span>${ICONS.chevronDown}
         </button>
-        ${showArchive ? `<div class="kanban-archive-lanes">${["paused", "done"].map(lane).join("")}</div>` : ""}
+        <div id="kanban-archive-lanes" class="kanban-archive-lanes disclosure-panel${showArchive ? " is-expanded" : ""}" ${showArchive ? "" : "inert"}><div class="disclosure-content kanban-archive-sections">${["paused", "done"].map((status) => lane(status, true)).join("")}</div></div>
       </div>
     </div>`;
   }
@@ -1520,7 +1527,7 @@
     const view = $("#view-content");
     const filtered = filterBacklogItems(items);
     const key = JSON.stringify([items, backlogProject, backlogStatus, backlogQuery, backlogViewMode, selectedBacklogId,
-      [...pendingBacklogChecks], backlogGroupPreferences.order, [...backlogGroupPreferences.collapsed], [...searchCollapsedGroups], archiveRailOpen]);
+      [...pendingBacklogChecks], backlogGroupPreferences.order, [...backlogGroupPreferences.collapsed], [...searchCollapsedGroups], archiveRailOpen, archiveRailOverride]);
     const restoreFocus = rememberFocus(view);
 
     if (forceListOnly && view.dataset.page === "backlog") {
@@ -1735,115 +1742,109 @@
       </div>`).join("");
 
     view.innerHTML = `<div class="settings-page">
-      <div class="settings-col">
-        <section class="settings-group" aria-labelledby="settings-hotkeys">
-          <h2 id="settings-hotkeys" class="settings-heading">快捷键与通知</h2>
-          <div class="settings-comic-card block">
-            <header class="settings-card-banner block-head">
-              <div class="settings-banner-lead">
-                <div class="settings-emblem">${ICONS.key}</div>
-                <h3 class="settings-banner-title">热键与状态提醒</h3>
-              </div>
-              <span id="settings-hotkey-status" class="stamp"></span>
-            </header>
-            <div class="setting-row">
-              <div class="setting-label">全局截图快捷键</div>
-              <div class="setting-actions">
-                <div class="hotkey-pills">${hotkeyPills}</div>
-                <span class="v-sep" aria-hidden="true"></span>
-                ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
-              </div>
+      <section class="settings-group" data-settings-section="settings-hotkeys" aria-label="热键与提醒">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem">${ICONS.key}</div>
+              <h3 class="settings-banner-title">热键与状态提醒</h3>
             </div>
-            <div id="settings-hotkey-alert" class="hotkey-alert" hidden>
-              <span></span><button class="btn btn-flat btn-sm" data-act="reregisterHotkey">重新注册</button>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">额度自动刷新与回满提醒</div>
-              ${settingSwitch("quota_auto_refresh", "额度自动刷新与回满提醒", settings.quota_auto_refresh !== false)}
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">周期回收号不足 48 小时提醒</div>
-              ${settingSwitch("expiry_balloon_alert", "周期回收号不足 48 小时提醒", settings.expiry_balloon_alert)}
-            </div>
-            <div class="setting-row">
-              <div><div class="setting-label">额度提醒免打扰</div><div class="group-sub">按本机时间暂停桌面额度及回收提醒，额度继续刷新。</div></div>
-              <div class="setting-actions">
-                <input type="time" class="sel" value="22:00" data-quiet-time="quiet_quota_start" aria-label="免打扰开始时间">
-                <span>至</span>
-                <input type="time" class="sel" value="08:00" data-quiet-time="quiet_quota_end" aria-label="免打扰结束时间">
-                ${settingSwitch("quiet_quota_alerts", "启用额度提醒免打扰", settings.quiet_quota_alerts)}
-              </div>
+            <span id="settings-hotkey-status" class="stamp"></span>
+          </header>
+          <div class="setting-row setting-hotkey-row">
+            <div class="setting-label">全局截图快捷键</div>
+            <div class="setting-actions">
+              <div class="hotkey-pills">${hotkeyPills}</div>
+              <span class="v-sep" aria-hidden="true"></span>
+              ${settingSwitch("screenshot_enabled", "启用全局截图快捷键", shot.enabled)}
             </div>
           </div>
-        </section>
+          <div id="settings-hotkey-alert" class="hotkey-alert" hidden>
+            <span></span><button class="btn btn-flat btn-sm" data-act="reregisterHotkey">重新注册</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">额度自动刷新与回满提醒</div>
+            ${settingSwitch("quota_auto_refresh", "额度自动刷新与回满提醒", settings.quota_auto_refresh !== false)}
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">周期回收号不足 48 小时提醒</div>
+            ${settingSwitch("expiry_balloon_alert", "周期回收号不足 48 小时提醒", settings.expiry_balloon_alert)}
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">额度提醒免打扰</div><div class="group-sub">按本机时间暂停桌面额度及回收提醒，额度继续刷新。</div></div>
+            <div class="setting-actions">
+              <input type="time" class="sel" value="22:00" data-quiet-time="quiet_quota_start" aria-label="免打扰开始时间">
+              <span>至</span>
+              <input type="time" class="sel" value="08:00" data-quiet-time="quiet_quota_end" aria-label="免打扰结束时间">
+              ${settingSwitch("quiet_quota_alerts", "启用额度提醒免打扰", settings.quiet_quota_alerts)}
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <section class="settings-group" aria-labelledby="settings-system">
-          <h2 id="settings-system" class="settings-heading">系统与窗口</h2>
-          <div class="settings-comic-card block">
-            <header class="settings-card-banner block-head">
-              <div class="settings-banner-lead">
-                <div class="settings-emblem">${ICONS.monitor}</div>
-                <h3 class="settings-banner-title">常驻、自启与备份</h3>
-              </div>
-            </header>
-            <div class="setting-row">
-              <div><div class="setting-label">开机静默启动到托盘</div>
-                <div class="group-sub">开机后直接后台常驻系统托盘，随时响应全局截图与快速唤起。</div></div>
-              ${settingSwitch("auto_start_silent", "开机静默启动到托盘", settings.auto_start_silent)}
+      <section class="settings-group" data-settings-section="settings-stash" aria-label="桌面收纳">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem">${ICONS.folder}</div>
+              <h3 class="settings-banner-title">桌面图标收纳</h3>
+              <span id="stash-count" class="stamp"></span>
             </div>
-            <div class="setting-row">
-              <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
-                <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
-              ${settingSwitch("minimize_to_tray", "关闭窗口时缩到系统托盘", settings.minimize_to_tray)}
+            <div class="setting-actions">
+              <button type="button" class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键收纳 AI 图标</button>
+              <button type="button" class="btn btn-flat btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
             </div>
-            <div class="setting-row">
-              <div><div class="setting-label">配置与需求池本地备份</div>
-                <div class="group-sub">导出或恢复设置与需求池记录（不含账号登录态与密钥）。</div></div>
-              <div class="setting-actions">
-                <button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="exportBackupJson">导出备份</button>
-                <button type="button" class="btn btn-flat btn-sm btn-w-pair" data-act="importBackupJson">导入恢复</button>
-              </div>
-            </div>
+          </header>
+          <div>
+            ${stashRows || '<div class="setting-row">未检测到可收纳的快捷方式</div>'}
+            ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
-      <div class="settings-col">
-        <section class="settings-group" aria-labelledby="settings-apps">
-          <h2 id="settings-apps" class="settings-heading">应用与桌面</h2>
-          <div class="settings-comic-card block">
-            <header class="settings-card-banner block-head">
-              <div class="settings-banner-lead">
-                <div class="settings-emblem">${ICONS.folder}</div>
-                <h3 class="settings-banner-title">桌面图标收纳</h3>
-                <span id="stash-count" class="stamp"></span>
-              </div>
-              <div class="setting-actions">
-                <button type="button" class="btn btn-flat btn-sm" data-act="hideAllAiShortcuts">一键收纳 AI 图标</button>
-                <button type="button" class="btn btn-flat btn-sm" data-act="restoreAllShortcuts">全部恢复</button>
-                ${settingsDisclosure("stash-details", "展开明细")}
-              </div>
-            </header>
-            ${disclosurePanel("stash-details", expandedSettings.has("stash-details"), `
-              ${stashRows || '<div class="setting-row">未检测到可收纳的快捷方式</div>'}
-              ${shortcuts.some((sc) => sc.requires_admin) ? '<div class="setting-row group-sub">更改公共桌面快捷方式时，Windows 会要求管理员确认。</div>' : ""}
-            `)}
+      <section class="settings-group" data-settings-section="settings-uninstall" aria-label="软件卸载">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem">${ICONS.trash}</div>
+              <h3 class="settings-banner-title">软件卸载</h3>
+              <span class="stamp">已检测 ${apps.length} 个</span>
+            </div>
+          </header>
+          <div>
+            ${uninstallRows || '<div class="setting-row">未检测到支持卸载的桌面应用</div>'}
           </div>
-          <div class="settings-comic-card block">
-            <header class="settings-card-banner block-head">
-              <div class="settings-banner-lead">
-                <div class="settings-emblem">${ICONS.trash}</div>
-                <h3 class="settings-banner-title">软件卸载</h3>
-                <span class="stamp">已检测 ${apps.length} 个</span>
-              </div>
-              ${settingsDisclosure("uninstall-details", "展开列表")}
-            </header>
-            ${disclosurePanel("uninstall-details", expandedSettings.has("uninstall-details"), `
-              ${uninstallRows || '<div class="setting-row">未检测到支持卸载的桌面应用</div>'}
-            `)}
+        </div>
+      </section>
+
+      <section class="settings-group" data-settings-section="settings-system" aria-label="常驻与备份">
+        <div class="settings-comic-card block">
+          <header class="settings-card-banner block-head">
+            <div class="settings-banner-lead">
+              <div class="settings-emblem">${ICONS.monitor}</div>
+              <h3 class="settings-banner-title">常驻、自启与备份</h3>
+            </div>
+          </header>
+          <div class="setting-row">
+            <div><div class="setting-label">开机静默启动到托盘</div>
+              <div class="group-sub">开机后直接后台常驻系统托盘，随时响应全局截图与快速唤起。</div></div>
+            ${settingSwitch("auto_start_silent", "开机静默启动到托盘", settings.auto_start_silent)}
           </div>
-        </section>
-      </div>
+          <div class="setting-row">
+            <div><div class="setting-label">关闭窗口时缩到系统托盘</div>
+              <div class="group-sub">隐藏后休眠界面以降低占用，托盘图标始终常驻。</div></div>
+            ${settingSwitch("minimize_to_tray", "关闭窗口时缩到系统托盘", settings.minimize_to_tray)}
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">配置与需求池本地备份</div>
+              <div class="group-sub">导出或恢复设置与需求池记录（不含账号登录态与密钥）。</div></div>
+            <div class="setting-actions">
+              <button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="exportBackupJson">导出备份</button>
+              <button type="button" class="btn btn-flat btn-sm btn-w-pair" data-act="importBackupJson">导入恢复</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>`;
     syncSettingsFields(view, settings, shot, shortcuts);
     applySettingsSection();
@@ -1853,10 +1854,12 @@
 
   function applySettingsSection() {
     $$("#settings-content .settings-group").forEach((group) => {
-      group.hidden = settingsSection !== "all" && group.getAttribute("aria-labelledby") !== settingsSection;
+      group.hidden = group.dataset.settingsSection !== settingsSection;
     });
     $$("#settings-dialog [data-act='settingsSection']").forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.id === settingsSection));
+      const selected = button.dataset.id === settingsSection;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", String(selected));
     });
   }
 
@@ -1865,7 +1868,6 @@
     closePopover();
     closeInlineNodeCombo();
     settingsTrigger = document.activeElement;
-    $("#settings-backdrop").style.setProperty("--settings-left", `${$("#view-content").getBoundingClientRect().left}px`);
     $("#settings-actions").innerHTML = `
       <button type="button" class="btn btn-paper btn-sm" data-act="openDataDir">${ICONS.folder} <span>打开数据目录</span></button>
       ${appState.version ? `<button type="button" class="btn btn-ghost btn-sm mono" data-act="openChangelog" data-tip="查看更新日志">${esc(appState.version)}</button>` : ""}
@@ -1934,6 +1936,8 @@
   function closePopover() {
     const pop = $("#popover-menu");
     if (!layerIsOpen(pop)) return;
+    backlogPropertyAnchor?.setAttribute("aria-expanded", "false");
+    backlogPropertyAnchor = null;
     dismissLayer(pop);
     syncWorkspaceAfterInteraction();
   }
@@ -1950,20 +1954,57 @@
     positionPopover(pop, anchor);
   }
 
-  function positionPopover(pop, anchorBtn) {
+  let backlogPropertyAnchor = null;
+
+  function positionPopover(pop, anchorBtn, alignStart = false) {
+    pop.classList.toggle("backlog-property-menu", alignStart);
+    pop.style.minWidth = alignStart ? `${Math.ceil(anchorBtn.getBoundingClientRect().width)}px` : "";
+    if (!alignStart) {
+      pop.removeAttribute("role");
+      pop.removeAttribute("aria-label");
+    }
     showLayer(pop);
 
     const rect = anchorBtn.getBoundingClientRect();
     const popW = pop.offsetWidth;
     const popH = pop.offsetHeight || 160;
-    let left = rect.right - popW;
+    let left = alignStart ? rect.left : rect.right - popW;
     let top = rect.bottom + 6;
-    if (left < 10) left = 10;
+    left = Math.max(10, Math.min(left, window.innerWidth - popW - 10));
     const opensUp = top + popH > window.innerHeight - 10;
     if (opensUp) top = Math.max(10, rect.top - popH - 6);
     pop.dataset.direction = opensUp ? "up" : "down";
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
+  }
+
+  function openBacklogProperty(anchor) {
+    if (backlogPropertyAnchor === anchor && layerIsOpen($("#popover-menu"))) {
+      closePopover();
+      return;
+    }
+    closePopover();
+    const item = (appState.backlog_items || []).find((entry) => entry.id === anchor.dataset.id);
+    if (!item) return;
+    clearTimeout(tipTimer);
+    tipBubble.classList.remove("is-show");
+    const field = anchor.dataset.property;
+    let options;
+    if (field === "status") options = BACKLOG_STATUSES.map((status) => [status.id, backlogStatusLabel(status)]);
+    else if (field === "priority") options = Object.entries(BACKLOG_PRIORITIES).map(([key, value]) =>
+      [key, `<span class="stamp ${value.cls}">${value.label}</span><span>${value.label}优先级</span>`]);
+    else options = BACKLOG_PROJECTS.map((project) => [project, backlogProjectTag(project)]);
+
+    const selected = field === "project" ? normBacklogProject(item.project) : item[field];
+    const pop = $("#popover-menu");
+    pop.setAttribute("role", "menu");
+    pop.setAttribute("aria-label", anchor.getAttribute("aria-label"));
+    pop.innerHTML = options.map(([value, content]) =>
+      `<button type="button" class="pop-item" role="menuitemradio" aria-checked="${value === selected}" data-act="setBacklogProperty" data-id="${esc(item.id)}" data-property="${field}" data-value="${esc(value)}">${content}</button>`).join("");
+    backlogPropertyAnchor = anchor;
+    anchor.setAttribute("aria-expanded", "true");
+    positionPopover(pop, anchor, true);
+    (pop.querySelector('[aria-checked="true"]') || pop.firstElementChild)?.focus({ preventScroll: true });
   }
 
   function openWebIdentityMenu(anchor, toolId) {
@@ -2710,6 +2751,7 @@
     try { dates = changelogDates(await callHost("getChangelog")); } catch (_) { dates = []; }
     const categories = { 新增: "added", 改进: "improved", 修复: "fixed", 调整: "changed" };
     const summaries = {
+      "2026-11-23": "重构工作台、项目卡、需求池与设置弹窗，内置设计系统预加载，并完善截图标注交互。",
       "2026-11-22": "落地暖墨线稿设计，更新截图工具，收紧工作台和项目卡，并修正需求池保存与撤销。",
       "2026-11-21": "工作台、网络、Codex 和截图完成集中升级，新增 Antigravity 实时额度。",
       "2026-11-20": "AI Hub 初版到工作台合并，加入截图、提字与桌面图标收纳。"
@@ -2759,17 +2801,17 @@
         </div>
         ${iconButton("", "关闭更新日志", ICONS.close, { attrs: "data-close-modal" })}
       </div>
-      ${dates.length ? `<div class="changelog-split">
-        <nav id="changelog-nav" class="changelog-nav" aria-label="日志日期">
+      ${dates.length ? `<div class="modal-split">
+        <nav id="changelog-nav" class="modal-section-nav" aria-label="日志日期">
           ${dates.map((day, index) => {
             const newest = day.versions[0], oldest = day.versions.at(-1);
             const range = oldest === newest ? newest : `${oldest} → ${newest}`;
-            return `<button type="button" class="changelog-date-btn${index === 0 ? " is-active" : ""}" data-changelog-idx="${index}">
-              <span class="changelog-date-meta">
-                <span class="changelog-date-label">${formatDay(day.date)}</span>
+            return `<button type="button" class="modal-section-btn${index === 0 ? " is-active" : ""}" data-changelog-idx="${index}" aria-pressed="${index === 0}">
+              <span class="modal-section-meta">
+                <span class="modal-section-label">${formatDay(day.date)}</span>
                 <span class="changelog-date-range">${esc(range)}</span>
               </span>
-              <span class="changelog-date-dot" aria-hidden="true"></span>
+              <span class="modal-section-dot" aria-hidden="true"></span>
             </button>`;
           }).join("")}
         </nav>
@@ -2786,7 +2828,10 @@
         curIdx = Number(btn.dataset.changelogIdx);
         const day = dates[curIdx];
         if (!day) return;
-        nav.querySelectorAll(".changelog-date-btn").forEach((el, i) => el.classList.toggle("is-active", i === curIdx));
+        nav.querySelectorAll(".modal-section-btn").forEach((el, i) => {
+          el.classList.toggle("is-active", i === curIdx);
+          el.setAttribute("aria-pressed", String(i === curIdx));
+        });
         pane.innerHTML = renderDayPane(day);
         pane.scrollTop = 0;
       });
@@ -2961,6 +3006,22 @@
     const primaryModal = layerIsOpen($("#modal-backdrop"));
     const settingsOpen = layerIsOpen($("#settings-backdrop"));
     const modalOpen = primaryModal || settingsOpen;
+    if (backlogPropertyAnchor && layerIsOpen($("#popover-menu"))) {
+      const anchor = backlogPropertyAnchor;
+      if (["Escape", "Tab"].includes(e.key)) {
+        closePopover();
+        anchor.focus({ preventScroll: true });
+        if (e.key === "Escape") { e.preventDefault(); return; }
+      } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+        e.preventDefault();
+        const options = $$("#popover-menu [role='menuitemradio']");
+        const index = options.indexOf(document.activeElement);
+        const next = e.key === "Home" ? 0 : e.key === "End" ? options.length - 1 :
+          (index + options.length + (e.key === "ArrowDown" ? 1 : -1)) % options.length;
+        options[next]?.focus({ preventScroll: true });
+        return;
+      }
+    }
     if (e.key === "Escape") {
       if (activeComboEl) { closeInlineNodeCombo(); return; }
       if (primaryModal) closeModal();
@@ -3008,7 +3069,7 @@
         return;
       }
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && backlogViewMode === "split") {
-        const rows = $$(".cp-row[data-id]").filter((row) => !row.closest("[hidden]"));
+        const rows = $$(".cp-row[data-id]").filter((row) => !row.closest("[inert]"));
         if (!rows.length) return;
         e.preventDefault();
         const curIdx = rows.findIndex((r) => r.dataset.id === selectedBacklogId);
@@ -3035,7 +3096,7 @@
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"], [data-act="openBacklogPriorityMenu"], [data-act="openBacklogProjectMenu"], [data-act="openProjectMoreMenu"], [data-act="openDesignCopyMenu"]')) closePopover();
+    if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"], [data-act="openBacklogProperty"], [data-act="openProjectMoreMenu"], [data-act="openDesignCopyMenu"]')) closePopover();
     if (activeComboEl && !e.target.closest('.combo-popover, [data-act="toggleInlineNodeCombo"]')) closeInlineNodeCombo();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
     if (e.target === $("#settings-backdrop")) return closeSettings();
@@ -3054,10 +3115,15 @@
     if (act === "openSettings") openSettings();
     else if (act === "closeSettings") closeSettings();
     else if (act === "settingsSection") {
+      if (settingsSection === id) return;
       cancelHotkeyRecord();
       settingsSection = id;
       applySettingsSection();
-      $("#settings-content").scrollTop = 0;
+      const content = $("#settings-content");
+      content.scrollTop = 0;
+      content.classList.remove("is-changing");
+      void content.offsetWidth;
+      content.classList.add("is-changing");
     }
     else if (act === "applyLocalUpdate") postAction("applyLocalUpdate");
     else if (act === "refresh") postAction("refresh", { toast: "1" });
@@ -3090,13 +3156,6 @@
     else if (act === "startVoiceRecorder") postAction("startVoiceRecorder");
     else if (act === "openLedgerForm") postAction("openLedgerForm", { id });
     else if (act === "toggleChangelogDay") toggleDisclosure(actBtn);
-    else if (act === "toggleSettingsDetails") {
-      const expanded = toggleDisclosure(actBtn);
-      if (expanded === null) return;
-      if (expanded) expandedSettings.add(id);
-      else expandedSettings.delete(id);
-      actBtn.querySelector("span").textContent = expanded ? (actBtn.dataset.expandedLabel || "收起") : actBtn.dataset.collapsedLabel;
-    }
     else if (act === "openDesignCopyMenu") {
       const pop = $("#popover-menu");
       pop.innerHTML = `
@@ -3202,10 +3261,23 @@
       if (collapsed.has(id)) collapsed.delete(id);
       else collapsed.add(id);
       if (!transient) saveBacklogGroupPreferences();
-      renderBacklog(true);
+      toggleDisclosure(actBtn);
+      const rows = $$(".cp-row").filter((row) => !row.closest("[inert]"));
+      if (!rows.some((row) => row.dataset.id === selectedBacklogId)) {
+        selectedBacklogId = rows[0]?.dataset.id || "";
+        $$(".cp-row").forEach((row) => row.classList.toggle("selected", row.dataset.id === selectedBacklogId));
+        const selected = (appState.backlog_items || []).find((item) => item.id === selectedBacklogId);
+        $(".cp-split-detail").innerHTML = selected ? renderBacklogDetail(selected) : '<div class="backlog-empty-card">展开分组后选择一条需求</div>';
+      }
     } else if (act === "toggleKanbanArchive") {
-      archiveRailOpen = !archiveRailOpen;
-      renderBacklog(true);
+      const open = !!toggleDisclosure(actBtn);
+      actBtn.closest(".kanban-archive").classList.toggle("is-open", open);
+      const hasAuto = ["done", "paused"].includes(backlogStatus) || !!backlogQuery.trim();
+      if (hasAuto) archiveRailOverride = open;
+      else {
+        archiveRailOpen = open;
+        archiveRailOverride = null;
+      }
     } else if (act === "openBacklogDrawer") {
       openBacklogDrawer(id);
     } else if (act === "selectBacklogItem") {
@@ -3228,24 +3300,16 @@
     } else if (act === "copyBacklogPrompt") {
       const item = (appState.backlog_items || []).find((it) => it.id === id);
       copyBacklogPrompt(item);
-    } else if (act === "openBacklogPriorityMenu") {
-      const pop = $("#popover-menu");
-      pop.innerHTML = Object.entries(BACKLOG_PRIORITIES).map(([k, v]) =>
-        `<button type="button" class="pop-item" data-act="setBacklogPriority" data-id="${esc(id)}" data-prio="${k}">
-          <span class="stamp ${v.cls}">${v.label}</span><span>${v.label}优先级</span>
-        </button>`).join("");
-      positionPopover(pop, actBtn);
-    } else if (act === "setBacklogPriority") {
+    } else if (act === "openBacklogProperty") {
+      openBacklogProperty(actBtn);
+    } else if (act === "setBacklogProperty") {
+      const anchor = backlogPropertyAnchor;
       closePopover();
-      callHost("setBacklogMetadata", { id, field: "priority", value: actBtn.dataset.prio }).catch((err) => showToast(err.message, true));
-    } else if (act === "openBacklogProjectMenu") {
-      const pop = $("#popover-menu");
-      pop.innerHTML = BACKLOG_PROJECTS.map((p) =>
-        `<button type="button" class="pop-item" data-act="setBacklogProject" data-id="${esc(id)}" data-project="${esc(p)}">${esc(p)}</button>`).join("");
-      positionPopover(pop, actBtn);
-    } else if (act === "setBacklogProject") {
-      closePopover();
-      callHost("setBacklogMetadata", { id, field: "project", value: actBtn.dataset.project }).catch((err) => showToast(err.message, true));
+      anchor?.focus({ preventScroll: true });
+      if (actBtn.getAttribute("aria-checked") === "true") return;
+      const { property: field, value } = actBtn.dataset;
+      if (field === "status") moveBacklogCard(id, value);
+      else callHost("setBacklogMetadata", { id, field, value }).catch((err) => showToast(err.message, true));
     } else if (act === "jumpToProject") {
       const path = resolveBacklogRepoPath(actBtn.dataset.project);
       const item = (appState.projects || []).find((project) => !project.hidden && project.path === path);
@@ -3293,6 +3357,7 @@
   document.addEventListener("input", (e) => {
     if (e.target && e.target.id === "backlog-search") {
       searchCollapsedGroups.clear();
+      archiveRailOverride = null;
       backlogQuery = e.target.value;
       renderBacklog(true);
     }
@@ -3301,6 +3366,7 @@
   document.addEventListener("change", (e) => {
     if (e.target && e.target.id === "backlog-filter-status") {
       searchCollapsedGroups.clear();
+      archiveRailOverride = null;
       backlogStatus = e.target.value || "all";
       renderBacklog(true);
       return;
@@ -3324,11 +3390,6 @@
             if (activeTab === "backlog") renderBacklog(true);
           });
       }
-      return;
-    }
-    const blStatus = e.target.closest("[data-backlog-status]");
-    if (blStatus) {
-      moveBacklogCard(blStatus.dataset.backlogStatus, blStatus.value);
       return;
     }
     const stashInp = e.target.closest("[data-stash-id]");
@@ -3478,7 +3539,6 @@
     const frame = $("#design-sys-frame");
     if (ev.origin !== location.origin || ev.source !== frame?.contentWindow) return;
     const msg = ev.data;
-    if (msg?.type === "ds-page-changed" && /^(0[1-9]|10)$/.test(msg.page)) designPage = msg.page;
     if (msg && typeof msg === "object" && msg.type === "ds-copy-html" && msg.html) {
       callHost("copyText", { text: msg.html })
         .then(() => showToast(`已复制「${msg.label || "设计系统 HTML"}」（${Math.round(msg.html.length / 1024)} KB）`))

@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -236,7 +237,6 @@ namespace CodexLauncher
             var btn = new Button
             {
                 Content = row,
-                Foreground = textBrush,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Background = Brushes.Transparent,
                 BorderBrush = Brushes.Transparent,
@@ -245,6 +245,11 @@ namespace CodexLauncher
                 Cursor = System.Windows.Input.Cursors.Hand,
                 FocusVisualStyle = null
             };
+
+            var style = new Style(typeof(Button));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, textBrush));
+            btn.Style = style;
+            tb.SetBinding(TextBlock.ForegroundProperty, new Binding { Path = new PropertyPath(Control.ForegroundProperty), Source = btn });
 
             var tpl = new ControlTemplate(typeof(Button));
             var bd = new FrameworkElementFactory(typeof(Border));

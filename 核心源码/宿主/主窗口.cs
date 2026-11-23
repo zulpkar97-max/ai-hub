@@ -290,7 +290,7 @@ namespace CodexLauncher
 
                 string uiDir = Path.Combine(CoreService.BaseDir, "页面代码");
                 _uiAssets = LoadUiAssets(uiDir);
-                core.AddWebResourceRequestedFilter("https://aihub.local/*", CoreWebView2WebResourceContext.All);
+                core.AddWebResourceRequestedFilter("https://aihub.local/*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.Document);
                 core.WebResourceRequested += (s2, e2) => ServeUiAsset(core, e2);
                 core.SetVirtualHostNameToFolderMapping("icons.aihub.local", CoreService.AppIconsCacheDir, CoreWebView2HostResourceAccessKind.Allow);
 
