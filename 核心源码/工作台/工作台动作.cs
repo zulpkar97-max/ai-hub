@@ -445,6 +445,9 @@ namespace CodexLauncher
                                 if (data.ContainsKey("minimize_to_tray")) settings.minimize_to_tray = Convert.ToBoolean(data["minimize_to_tray"]);
                                 if (data.ContainsKey("expiry_balloon_alert")) settings.expiry_balloon_alert = Convert.ToBoolean(data["expiry_balloon_alert"]);
                                 if (data.ContainsKey("quota_auto_refresh")) settings.quota_auto_refresh = Convert.ToBoolean(data["quota_auto_refresh"]);
+                                if (data.ContainsKey("quiet_quota_alerts")) settings.quiet_quota_alerts = Convert.ToBoolean(data["quiet_quota_alerts"]);
+                                if (data.ContainsKey("quiet_quota_start")) settings.quiet_quota_start = ParseQuietTime(data["quiet_quota_start"]);
+                                if (data.ContainsKey("quiet_quota_end")) settings.quiet_quota_end = ParseQuietTime(data["quiet_quota_end"]);
                                 if (data.ContainsKey("screenshot_enabled")) settings.screenshot_enabled = Convert.ToBoolean(data["screenshot_enabled"]);
                                 if (hotkey.Length > 0) settings.screenshot_hotkey = hotkey;
                             });
@@ -751,6 +754,7 @@ namespace CodexLauncher
                             break;
                         }
 
+                    case "reopenProjectPreview":
                     case "launchProjectPreview":
                     case "stopProjectPreview":
                         {
@@ -759,6 +763,8 @@ namespace CodexLauncher
                             if (project == null) throw new InvalidOperationException("未找到该项目，请刷新项目列表。");
                             string path = project.path;
                             var preview = ProjectPreview.For(path);
+                            if (action == "reopenProjectPreview" && (preview == null || _projectPreviews.State(preview.Port) != "running"))
+                                throw new InvalidOperationException("项目预览已停止，请重新启动。");
                             if (preview != null)
                             {
                                 if (action == "stopProjectPreview")
@@ -829,9 +835,13 @@ namespace CodexLauncher
                                 throw new InvalidOperationException("本地目录不存在：" + path);
                             if (tool == "codex")
                             {
+                                string accountId = AuthParser.GetStr(data, "accountId");
+                                var account = string.IsNullOrEmpty(accountId)
+                                    ? _accounts.FirstOrDefault(a => a.IsDefault) ?? _accounts.FirstOrDefault()
+                                    : _accounts.FirstOrDefault(a => a.Record.id == accountId);
+                                if (account == null) throw new InvalidOperationException("未找到所选 Codex 账号。");
+                                CoreService.LaunchProfile(account.Record.id, path);
                                 Clipboard.SetDataObject(path, true);
-                                var defAcc = _accounts.FirstOrDefault(a => a.IsDefault) ?? _accounts.FirstOrDefault();
-                                if (defAcc != null) CoreService.LaunchProfile(defAcc.Record.id);
                                 SendToastToJs("已打开 Codex 并复制项目路径", false);
                             }
                             else
@@ -863,7 +873,7 @@ namespace CodexLauncher
                         {
                             using (var dlg = new System.Windows.Forms.SaveFileDialog())
                             {
-                                dlg.Title = "导出 AI BASE 配置与需求池备份";
+                                dlg.Title = "导出 AI BASE 设置、需求和项目备份";
                                 dlg.Filter = "JSON 备份文件 (*.json)|*.json";
                                 dlg.FileName = "aibase-backup-" + DateTime.Now.ToString("yyyyMMdd") + ".json";
                                 if (dlg.ShowDialog(new WindowInteropWin32Owner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK)
@@ -873,7 +883,8 @@ namespace CodexLauncher
                                         { "exported_at", DateTimeOffset.Now.ToString("o") },
                                         { "version", CoreService.AppVersion },
                                         { "settings", _store.settings },
-                                        { "backlog_items", _backlogItems }
+                                        { "backlog_items", _backlogItems },
+                                        { "projects", ProjectStorage.ReadBackup() }
                                     };
                                     CoreService.WriteTextAtomically(dlg.FileName, Json.Serialize(payload), true);
                                     SendToastToJs("已导出本地备份", false);
@@ -894,33 +905,29 @@ namespace CodexLauncher
                                     string raw = File.ReadAllText(dlg.FileName, System.Text.Encoding.UTF8);
                                     var parsed = Json.Deserialize<Dictionary<string, object>>(raw);
                                     if (parsed == null) throw new InvalidOperationException("备份文件格式无效。");
-                                    object settingsObj;
-                                    if (parsed.TryGetValue("settings", out settingsObj) && settingsObj is Dictionary<string, object>)
+                                    var sd = AuthParser.GetDict(parsed, "settings");
+                                    object blObj, projectsObj;
+                                    var blList = parsed.TryGetValue("backlog_items", out blObj) && blObj != null
+                                        ? Json.ConvertToType<List<BacklogItem>>(blObj) : null;
+                                    var projects = parsed.TryGetValue("projects", out projectsObj) && projectsObj != null
+                                        ? Json.ConvertToType<ProjectConfigStore>(projectsObj) : null;
+                                    var scopes = new List<string>();
+                                    if (sd != null) scopes.Add("设置（仅覆盖文件中的设置项）");
+                                    if (blList != null) scopes.Add("需求池（" + blList.Count + " 条）");
+                                    if (projects != null) scopes.Add("手动导入项目、扫描目录和卡片顺序");
+                                    if (scopes.Count == 0) throw new InvalidOperationException("备份中没有可以恢复的数据。");
+                                    string message = "将用备份中的内容覆盖本机以下数据：\n\n" + string.Join("\n", scopes) +
+                                        "\n\n备份不含账号登录态或密钥。是否继续？";
+                                    if (MessageBox.Show(this, message, "确认恢复 AI BASE 备份",
+                                        MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
                                     {
-                                        var sd = (Dictionary<string, object>)settingsObj;
-                                        _store.settings = CoreService.UpdateLauncherSettings(s =>
-                                        {
-                                            if (sd.ContainsKey("minimize_to_tray")) s.minimize_to_tray = Convert.ToBoolean(sd["minimize_to_tray"]);
-                                            if (sd.ContainsKey("expiry_balloon_alert")) s.expiry_balloon_alert = Convert.ToBoolean(sd["expiry_balloon_alert"]);
-                                            if (sd.ContainsKey("quota_auto_refresh")) s.quota_auto_refresh = Convert.ToBoolean(sd["quota_auto_refresh"]);
-                                            if (sd.ContainsKey("screenshot_enabled")) s.screenshot_enabled = Convert.ToBoolean(sd["screenshot_enabled"]);
-                                            if (sd.ContainsKey("screenshot_hotkey") && sd["screenshot_hotkey"] != null) s.screenshot_hotkey = Convert.ToString(sd["screenshot_hotkey"]);
-                                        });
-                                        SyncScreenshotHotkey();
+                                        ReplyJs(reqId, true, null, null);
+                                        break;
                                     }
-                                    object blObj;
-                                    if (parsed.TryGetValue("backlog_items", out blObj) && blObj != null)
-                                    {
-                                        var blList = Json.ConvertToType<List<BacklogItem>>(blObj);
-                                        if (blList != null)
-                                        {
-                                            _backlogItems = BacklogStorage.ReplaceItems(blList);
-                                            _backlogRevision++;
-                                        }
-                                    }
+                                    ApplyLocalBackup(sd, blList, projects);
                                     PushFullState();
-                                    RefreshAsync(true);
-                                    SendToastToJs("已从备份恢复配置与需求池", false);
+                                    if (projects != null) RefreshProjectsAsync();
+                                    SendToastToJs("已恢复备份中的" + string.Join("、", scopes), false);
                                 }
                             }
                             ReplyJs(reqId, true, null, null);
@@ -948,10 +955,63 @@ namespace CodexLauncher
             catch (Exception ex)
             {
                 ReplyJs(reqId, false, null, ex.Message);
-                if (action != "setBacklogCheck" && action != "setBacklogMetadata"
+                if (action != "setBacklogCheck" && action != "setBacklogMetadata" && action != "setBacklogStatus"
                     && action != "deleteBacklogItem" && action != "restoreBacklogItem")
                     SendToastToJs(ex.Message, true);
             }
+        }
+
+        private static string ParseQuietTime(object value)
+        {
+            TimeSpan time;
+            if (!TimeSpan.TryParseExact(Convert.ToString(value), @"hh\:mm", System.Globalization.CultureInfo.InvariantCulture, out time))
+                throw new InvalidOperationException("请选择有效的免打扰时间。");
+            return time.ToString(@"hh\:mm");
+        }
+
+        private void ApplyLocalBackup(Dictionary<string, object> settings, List<BacklogItem> backlog, ProjectConfigStore projects)
+        {
+            var previousBacklog = backlog == null ? null : BacklogStorage.LoadItems();
+            var previousProjects = projects == null ? null : ProjectStorage.ReadBackup();
+            bool restoredBacklog = false, restoredProjects = false;
+            try
+            {
+                if (projects != null)
+                {
+                    ProjectStorage.RestoreBackup(projects);
+                    restoredProjects = true;
+                }
+                if (backlog != null)
+                {
+                    _backlogItems = BacklogStorage.ReplaceItems(backlog);
+                    _backlogRevision++;
+                    restoredBacklog = true;
+                }
+                if (settings != null)
+                {
+                    _store.settings = CoreService.UpdateLauncherSettings(s =>
+                    {
+                        if (settings.ContainsKey("minimize_to_tray")) s.minimize_to_tray = Convert.ToBoolean(settings["minimize_to_tray"]);
+                        if (settings.ContainsKey("expiry_balloon_alert")) s.expiry_balloon_alert = Convert.ToBoolean(settings["expiry_balloon_alert"]);
+                        if (settings.ContainsKey("quota_auto_refresh")) s.quota_auto_refresh = Convert.ToBoolean(settings["quota_auto_refresh"]);
+                        if (settings.ContainsKey("quiet_quota_alerts")) s.quiet_quota_alerts = Convert.ToBoolean(settings["quiet_quota_alerts"]);
+                        if (settings.ContainsKey("quiet_quota_start")) s.quiet_quota_start = ParseQuietTime(settings["quiet_quota_start"]);
+                        if (settings.ContainsKey("quiet_quota_end")) s.quiet_quota_end = ParseQuietTime(settings["quiet_quota_end"]);
+                        if (settings.ContainsKey("screenshot_enabled")) s.screenshot_enabled = Convert.ToBoolean(settings["screenshot_enabled"]);
+                        string hotkey = AuthParser.GetStr(settings, "screenshot_hotkey");
+                        if (!string.IsNullOrWhiteSpace(hotkey)) s.screenshot_hotkey = hotkey;
+                    });
+                    _settingsRevision++;
+                    _quotaAutoRefreshEnabled = _store.settings.quota_auto_refresh;
+                }
+            }
+            catch
+            {
+                if (restoredBacklog) _backlogItems = BacklogStorage.ReplaceItems(previousBacklog);
+                if (restoredProjects) ProjectStorage.RestoreBackup(previousProjects);
+                throw;
+            }
+            if (settings != null) SyncScreenshotHotkey();
         }
 
         private ToolItem FindToolById(string id)

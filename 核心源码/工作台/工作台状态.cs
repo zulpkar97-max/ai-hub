@@ -262,7 +262,7 @@ namespace CodexLauncher
 
         private void CheckExpiryBalloon()
         {
-            if (_balloonShownThisSession || _trayIcon == null) return;
+            if (_balloonShownThisSession || _trayIcon == null || IsQuietQuotaTime()) return;
             if (_store == null || _store.settings == null || !_store.settings.expiry_balloon_alert) return;
 
             foreach (var vm in _accounts)
@@ -421,6 +421,9 @@ namespace CodexLauncher
                         { "minimize_to_tray", _store.settings.minimize_to_tray },
                         { "expiry_balloon_alert", _store.settings.expiry_balloon_alert },
                         { "quota_auto_refresh", _store.settings.quota_auto_refresh },
+                        { "quiet_quota_alerts", _store.settings.quiet_quota_alerts },
+                        { "quiet_quota_start", _store.settings.quiet_quota_start },
+                        { "quiet_quota_end", _store.settings.quiet_quota_end },
                         { "screenshot_enabled", _store.settings.screenshot_enabled },
                         { "screenshot_hotkey", _store.settings.screenshot_hotkey ?? "Ctrl+Shift+A" },
                         { "auto_start_silent", CoreService.IsAutoStartSilentEnabled() }

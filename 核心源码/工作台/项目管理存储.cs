@@ -84,6 +84,21 @@ namespace CodexLauncher
             }
         }
 
+        internal static ProjectConfigStore ReadBackup()
+        {
+            lock (SyncLock) return ReadStore();
+        }
+
+        internal static void RestoreBackup(ProjectConfigStore backup)
+        {
+            if (backup == null || backup.items == null || backup.order == null || backup.scan_roots == null ||
+                backup.items.Any(item => item == null || string.IsNullOrWhiteSpace(item.id) ||
+                    string.IsNullOrWhiteSpace(item.path) || !Path.IsPathRooted(item.path)) ||
+                backup.items.Select(item => item.id).Distinct(StringComparer.Ordinal).Count() != backup.items.Count)
+                throw new InvalidDataException("备份中的项目配置无效。");
+            lock (SyncLock) WriteStore(backup);
+        }
+
         internal static List<ProjectViewModel> BuildViewModels()
         {
             ProjectConfigStore store;

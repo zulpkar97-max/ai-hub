@@ -113,11 +113,11 @@ namespace CodexLauncher
         private readonly DispatcherTimer _dismissTimer;
         private bool _closing;
 
-        public static void ShowToast(string title, string message, string tone, int durationMs, Action onClick)
+        public static void ShowToast(string title, string message, string tone, int durationMs, Action onClick, bool compact = false)
         {
             try
             {
-                var toast = new DesktopToastWindow(title, message, tone, durationMs, onClick);
+                var toast = new DesktopToastWindow(title, message, tone, durationMs, onClick, compact);
                 ActiveToasts.Add(toast);
                 toast.Show();
             }
@@ -134,7 +134,7 @@ namespace CodexLauncher
             }
         }
 
-        private DesktopToastWindow(string title, string message, string tone, int durationMs, Action onClick)
+        private DesktopToastWindow(string title, string message, string tone, int durationMs, Action onClick, bool compact)
         {
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
@@ -234,10 +234,18 @@ namespace CodexLauncher
             Grid.SetColumn(closeBtn, 1);
             headGrid.Children.Add(closeBtn);
             headBorder.Child = headGrid;
-            contentStack.Children.Add(headBorder);
+            if (!compact) contentStack.Children.Add(headBorder);
 
             // Body
-            var body = new StackPanel { Margin = new Thickness(11, 8, 12, 10) };
+            var body = new DockPanel { Margin = new Thickness(11, 8, 12, 10) };
+            if (compact)
+            {
+                body.Children.Add(new Rectangle
+                {
+                    Width = 6, Height = 6, Fill = accent,
+                    Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center
+                });
+            }
             body.Children.Add(new TextBlock
             {
                 Text = !string.IsNullOrWhiteSpace(message) ? message : headerTitle,
@@ -249,6 +257,14 @@ namespace CodexLauncher
                 LineHeight = 18
             });
             contentStack.Children.Add(body);
+            var scale = new ScaleTransform(1, 1);
+            var progress = new Border
+            {
+                Height = 3,
+                Background = accent == UiHelpers.OkAccent ? UiHelpers.BorderStrong : accent,
+                RenderTransform = scale
+            };
+            contentStack.Children.Add(new Border { Background = UiHelpers.Hairline, Child = progress });
             rootGrid.Children.Add(contentStack);
             outer.Child = rootGrid;
             Content = outerWrap;
@@ -260,14 +276,26 @@ namespace CodexLauncher
                 if (onClick != null) onClick();
             };
 
-            _dismissTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(1500, durationMs)) };
-            _dismissTimer.Tick += (s, e) => { _dismissTimer.Stop(); Dismiss(); };
-
-            MouseEnter += (s, e) => _dismissTimer.Stop();
+            double duration = Math.Max(1500, durationMs);
+            var clock = new System.Diagnostics.Stopwatch();
+            _dismissTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation ? 30 : 250)
+            };
+            _dismissTimer.Tick += (s, e) =>
+            {
+                scale.ScaleX = Math.Max(0, 1 - clock.Elapsed.TotalMilliseconds / duration);
+                if (scale.ScaleX == 0) Dismiss();
+            };
+            MouseEnter += (s, e) =>
+            {
+                clock.Stop();
+                _dismissTimer.Stop();
+            };
             MouseLeave += (s, e) =>
             {
                 if (_closing) return;
-                _dismissTimer.Interval = TimeSpan.FromMilliseconds(1800);
+                clock.Start();
                 _dismissTimer.Start();
             };
 
@@ -283,7 +311,11 @@ namespace CodexLauncher
                     outer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
                     offset.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(14, 0, dur) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
                 }
-                _dismissTimer.Start();
+                if (!IsMouseOver)
+                {
+                    clock.Start();
+                    _dismissTimer.Start();
+                }
             };
 
             Closed += (s, e) =>

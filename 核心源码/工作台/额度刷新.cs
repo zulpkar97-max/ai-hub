@@ -167,7 +167,7 @@ namespace CodexLauncher
                     _quotaBalloonTimer.Stop();
                     string message = string.Join("\n", _quotaBalloonLabels);
                     _quotaBalloonLabels.Clear();
-                    if (_trayIcon == null || !_store.settings.quota_auto_refresh) return;
+                    if (_trayIcon == null || !_store.settings.quota_auto_refresh || IsQuietQuotaTime()) return;
                     try { ShowDesktopNotification("额度已刷新", message, "ok", 5500); }
                     catch { }
                 };

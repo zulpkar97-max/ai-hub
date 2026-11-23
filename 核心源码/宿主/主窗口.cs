@@ -56,7 +56,7 @@ namespace CodexLauncher
         private bool _hotkeyRegistered = false;
         private string _hotkeyError = "";
         private DispatcherTimer _screenshotDelayTimer;
-        private const string UiProtocol = "5";
+        private const string UiProtocol = "6";
         private static readonly Dictionary<string, string> UiContentTypes = new Dictionary<string, string>
         {
             { "/index.html", "text/html; charset=utf-8" },
@@ -241,7 +241,7 @@ namespace CodexLauncher
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         if (IsVisible && WindowState != WindowState.Minimized && _webReady) SendToastToJs(msg, isErr);
-                        else ShowDesktopNotification("AI BASE", msg, isErr ? "danger" : "ok", isErr ? 4500 : 1800);
+                        else ShowDesktopNotification("AI BASE", msg, isErr ? "danger" : "ok", isErr ? 4500 : 3800, compact: true);
                     }));
                 });
             };
@@ -370,12 +370,23 @@ namespace CodexLauncher
             catch { }
         }
 
-        private void ShowDesktopNotification(string title, string message, string tone = "ok", int durationMs = 5000)
+        private void ShowDesktopNotification(string title, string message, string tone = "ok", int durationMs = 5000, bool compact = false)
         {
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                DesktopToastWindow.ShowToast(title, message, tone, durationMs, RestoreFromTray);
+                DesktopToastWindow.ShowToast(title, message, tone, durationMs, RestoreFromTray, compact);
             }));
+        }
+
+        private bool IsQuietQuotaTime()
+        {
+            var settings = _store == null ? null : _store.settings;
+            if (settings == null || !settings.quiet_quota_alerts) return false;
+            TimeSpan start, end;
+            if (!TimeSpan.TryParse(settings.quiet_quota_start, out start) ||
+                !TimeSpan.TryParse(settings.quiet_quota_end, out end) || start == end) return false;
+            var now = DateTime.Now.TimeOfDay;
+            return start < end ? now >= start && now < end : now >= start || now < end;
         }
 
         private void ShowModernTrayMenu()

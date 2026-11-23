@@ -202,6 +202,12 @@ namespace CodexLauncher
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        internal static DisplayMonitor MonitorAt(int x, int y)
+        {
+            var monitors = GetAllMonitors();
+            return monitors.FirstOrDefault(m => x >= m.Bounds.Left && x < m.Bounds.Right && y >= m.Bounds.Top && y < m.Bounds.Bottom);
+        }
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetTopWindow(IntPtr hWnd);
 
@@ -607,6 +613,7 @@ namespace CodexLauncher
         public List<WpfPoint> Points;
         public string Text;
         public double FontSize;
+        public double UiScale = 1;
         public int StampNumber;
         public int MosaicBlockSize = 10;
         public UIElement CachedVisual;
@@ -758,7 +765,15 @@ namespace CodexLauncher
         private int _mosaicBlockSize = 10;
 
         private readonly List<AnnotationItem> _annotations = new List<AnnotationItem>();
-        private readonly List<AnnotationItem> _redoStack = new List<AnnotationItem>();
+        private readonly Stack<AnnotationChange> _undoStack = new Stack<AnnotationChange>();
+        private readonly Stack<AnnotationChange> _redoStack = new Stack<AnnotationChange>();
+
+        private sealed class AnnotationChange
+        {
+            public AnnotationItem Item;
+            public int Index;
+            public bool IsDeletion;
+        }
         private AnnotationItem _currentAnnot = null;
         private AnnotationItem _selectedAnnot = null;
         private AnnotationItem _editingAnnot = null;
@@ -1475,7 +1490,7 @@ namespace CodexLauncher
                 BorderBrush = WpfBrushes.Transparent,
                 BorderThickness = new Thickness(1),
                 Cursor = Cursors.Hand,
-                ToolTip = tip,
+                ToolTip = MakeCaptureToolTip(tip),
                 FocusVisualStyle = null,
                 Content = MakeSvgIcon(svgData, UiHelpers.TextSecondary)
             };
@@ -1530,10 +1545,17 @@ namespace CodexLauncher
                 BorderBrush = primary ? UiHelpers.BorderStrong : (dangerHover ? new SolidColorBrush(WpfColor.FromRgb(0xD2, 0xCF, 0xC7)) : WpfBrushes.Transparent),
                 BorderThickness = new Thickness(1),
                 Cursor = Cursors.Hand,
-                ToolTip = tip,
+                ToolTip = MakeCaptureToolTip(tip),
                 FocusVisualStyle = null,
                 Content = sp
             };
+            if (dangerHover)
+            {
+                btn.ClearValue(Control.ForegroundProperty);
+                var style = new Style(typeof(Button));
+                style.Setters.Add(new Setter(Control.ForegroundProperty, fg));
+                btn.Style = style;
+            }
             ApplyFlatButtonTemplate(btn, primary, dangerHover);
             btn.Click += (s, e) => onClick();
             return btn;
@@ -1572,6 +1594,22 @@ namespace CodexLauncher
             }
             tmpl.Triggers.Add(hov);
             btn.Template = tmpl;
+        }
+
+        private static ToolTip MakeCaptureToolTip(string text)
+        {
+            return new ToolTip
+            {
+                Background = UiHelpers.PrimaryBg,
+                BorderBrush = UiHelpers.BorderStrong,
+                BorderThickness = new Thickness(1),
+                Foreground = WpfBrushes.White,
+                FontFamily = UiHelpers.MainFont,
+                FontSize = 11,
+                Padding = new Thickness(7, 3, 7, 3),
+                HasDropShadow = false,
+                Content = text
+            };
         }
 
         private void SelectTool(DrawTool tool)
@@ -1691,11 +1729,12 @@ namespace CodexLauncher
                     Tool = DrawTool.Stamp,
                     Color = _activeColor,
                     Thickness = _activeThickness,
+                    UiScale = _selectionUiScale,
                     Start = clamped,
                     StampNumber = nextNum
                 };
-                _redoStack.Clear();
                 _annotations.Add(stamp);
+                RecordAnnotationAddition(stamp);
                 AddAnnotationVisual(stamp);
                 SelectAnnotation(stamp);
                 return;
@@ -1705,13 +1744,13 @@ namespace CodexLauncher
             {
                 Tool = _activeTool,
                 Color = _activeColor,
-                Thickness = _activeThickness,
-                MosaicBlockSize = _mosaicBlockSize,
+                Thickness = _activeThickness * _selectionUiScale,
+                MosaicBlockSize = (int)Math.Round(_mosaicBlockSize * _selectionUiScale),
+                UiScale = _selectionUiScale,
                 Start = clamped,
                 End = clamped,
                 Points = _activeTool == DrawTool.Brush ? new List<WpfPoint> { clamped } : null
             };
-            _redoStack.Clear();
             _annotations.Add(_currentAnnot);
             _canvas.CaptureMouse();
             UpdateCurrentAnnotationVisual();
@@ -1932,6 +1971,7 @@ namespace CodexLauncher
                 }
                 else
                 {
+                    RecordAnnotationAddition(_currentAnnot);
                     UpdateCurrentAnnotationVisual();
                     SelectAnnotation(_currentAnnot);
                 }
@@ -1981,6 +2021,7 @@ namespace CodexLauncher
                 // Clear selection back to fresh capture mode (Snipaste/Feishu muscle memory!)
                 _hasSelection = false;
                 _annotations.Clear();
+                _undoStack.Clear();
                 _redoStack.Clear();
                 SelectAnnotation(null);
                 RedrawAnnotations();
@@ -2002,8 +2043,9 @@ namespace CodexLauncher
             if (!_hasSelection) return;
             if (_activeTextBox != null)
             {
-                double nextFs = Math.Max(12, Math.Min(48, _activeTextBox.FontSize + (e.Delta > 0 ? 2 : -2)));
-                _activeTextBox.FontSize = nextFs;
+                double scale = _editingAnnot == null ? _selectionUiScale : _editingAnnot.UiScale;
+                double nextFs = Math.Max(12, Math.Min(48, _activeTextBox.FontSize / scale + (e.Delta > 0 ? 2 : -2)));
+                _activeTextBox.FontSize = nextFs * scale;
                 ShowStrokeHud(string.Format("字号 {0:0}px", nextFs));
                 e.Handled = true;
                 return;
@@ -2083,7 +2125,7 @@ namespace CodexLauncher
                 return;
             }
 
-            if (_selectedAnnot != null && !ctrl && !altDown && (e.Key == Key.Delete || e.Key == Key.Back || e.Key == Key.Enter))
+            if (_selectedAnnot != null && !ctrl && !altDown && (e.Key == Key.Delete || e.Key == Key.Back))
             {
                 DeleteSelectedAnnotation();
                 e.Handled = true;
@@ -2101,9 +2143,15 @@ namespace CodexLauncher
             {
                 UpdateLoupe(PointerPosition(null));
                 string clipErr;
-                ClipboardHelper.TrySetText(_lastColorText, out clipErr);
-                _closeSession();
-                _notify("已复制色值 " + _lastColorText, false);
+                if (ClipboardHelper.TrySetText(_lastColorText, out clipErr))
+                {
+                    _closeSession();
+                    _notify("已复制色值 " + _lastColorText, false);
+                }
+                else
+                {
+                    _notify("复制色值失败：" + clipErr, true);
+                }
                 e.Handled = true;
                 return;
             }
@@ -2298,11 +2346,16 @@ namespace CodexLauncher
                     WpfRect hintMonitor = !monitor.IsEmpty ? monitor : (_monitors.Count > 0 ? ToCanvasRect(_monitors[0].Bounds) : WpfRect.Empty);
                     if (!hintMonitor.IsEmpty)
                     {
+                        var display = _monitors.FirstOrDefault(item => ToCanvasRect(item.Bounds) == hintMonitor);
+                        double scale = display.ScalePercent > 0 ? display.ScalePercent / (100.0 * ScaleX) : 1.0;
+                        var transform = _topHintBar.LayoutTransform as ScaleTransform;
+                        if (transform == null || transform.ScaleX != scale)
+                            _topHintBar.LayoutTransform = new ScaleTransform(scale, scale);
                         _topHintBar.Visibility = Visibility.Visible;
                         _topHintBar.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
                         double hw = _topHintBar.DesiredSize.Width;
                         Canvas.SetLeft(_topHintBar, hintMonitor.Left + (hintMonitor.Width - hw) / 2.0);
-                        Canvas.SetTop(_topHintBar, hintMonitor.Top + 12.0);
+                        Canvas.SetTop(_topHintBar, hintMonitor.Top + 12.0 * scale);
                     }
                 }
                 else
@@ -2491,7 +2544,7 @@ namespace CodexLauncher
             }
             if (item.Tool == DrawTool.Stamp)
             {
-                double boxSize = Math.Max(22, 18 + item.Thickness * 1.8);
+                double boxSize = StampBoxSize(item) * item.UiScale;
                 double w = boxSize + 2;
                 double h = boxSize + 2;
                 var fe = item.CachedVisual as FrameworkElement;
@@ -2521,6 +2574,16 @@ namespace CodexLauncher
                 var bounds = GetAnnotationBounds(item);
                 if (bounds.IsEmpty || !bounds.Contains(pt)) continue;
 
+                if (item.Tool == DrawTool.Rect)
+                {
+                    var inner = MakeRect(item.Start, item.End);
+                    var tolerance = Math.Max(4, item.Thickness);
+                    if (inner.Width > 2 * tolerance && inner.Height > 2 * tolerance)
+                    {
+                        inner.Inflate(-tolerance, -tolerance);
+                        if (inner.Contains(pt)) continue;
+                    }
+                }
                 if (item.Tool == DrawTool.Arrow)
                 {
                     if (DistanceToSegment(pt, item.Start, item.End) <= Math.Max(10, item.Thickness * 2.6))
@@ -2611,24 +2674,40 @@ namespace CodexLauncher
         private void DeleteSelectedAnnotation()
         {
             if (_selectedAnnot == null) return;
-            var target = _selectedAnnot;
-            _selectedAnnot = null;
-            _annotations.Remove(target);
-            if (target.CachedVisual != null)
-            {
-                _annotCanvas.Children.Remove(target.CachedVisual);
-                target.CachedVisual = null;
-            }
-            if (target.Tool == DrawTool.Stamp)
-            {
-                int num = 1;
-                foreach (var a in _annotations.Where(x => x.Tool == DrawTool.Stamp))
-                {
-                    a.StampNumber = num++;
-                    RefreshAnnotationVisual(a);
-                }
-            }
-            UpdateSelectedAnnotationOutline();
+            DeleteAnnotation(_selectedAnnot);
+        }
+
+        private static double StampBoxSize(AnnotationItem item)
+        {
+            return Math.Max(22, 18 + item.Thickness * 1.8);
+        }
+
+        private void RecordAnnotationAddition(AnnotationItem item)
+        {
+            _undoStack.Push(new AnnotationChange { Item = item, Index = _annotations.Count - 1 });
+            _redoStack.Clear();
+        }
+
+        private void DeleteAnnotation(AnnotationItem item)
+        {
+            var change = new AnnotationChange { Item = item, Index = _annotations.IndexOf(item), IsDeletion = true };
+            _undoStack.Push(change);
+            _redoStack.Clear();
+            ApplyAnnotationChange(change, false);
+        }
+
+        private void ApplyAnnotationChange(AnnotationChange change, bool undo)
+        {
+            bool insert = change.IsDeletion == undo;
+            if (insert)
+                _annotations.Insert(change.Index, change.Item);
+            else
+                _annotations.Remove(change.Item);
+            int stampNumber = 1;
+            foreach (var annotation in _annotations.Where(x => x.Tool == DrawTool.Stamp))
+                annotation.StampNumber = stampNumber++;
+            RedrawAnnotations();
+            SelectAnnotation(insert ? change.Item : null);
         }
 
         private void SpawnInlineTextBoxForAnnotation(AnnotationItem item)
@@ -2636,22 +2715,24 @@ namespace CodexLauncher
             if (item == null) return;
             CommitActiveTextBox();
             _editingAnnot = item;
-            double boxSize = Math.Max(22, 18 + item.Thickness * 1.8);
-            double fontSize = item.Tool == DrawTool.Text && item.FontSize > 0
+            double scale = item.UiScale;
+            double boxSize = StampBoxSize(item) * scale;
+            double fontSize = item.FontSize > 0
                 ? item.FontSize
-                : Math.Max(13, Math.Round(boxSize * 0.56));
+                : Math.Max(12, Math.Round(StampBoxSize(item) * 0.52)) * scale;
             double left = item.Tool == DrawTool.Stamp
-                ? item.Start.X + boxSize / 2.0 + 4
+                ? item.Start.X + boxSize / 2.0 + 4 * scale
                 : item.Start.X;
             double top = item.Tool == DrawTool.Stamp
                 ? item.Start.Y - boxSize / 2.0
                 : item.Start.Y;
-            double maxW = Math.Max(110, _selRect.Right - left - 6);
+            double maxW = Math.Max(110 * scale, _selRect.Right - left - 6 * scale);
 
             _activeTextBox = new TextBox
             {
-                MinWidth = 100,
+                MinWidth = 100 * scale,
                 MaxWidth = maxW,
+                MinHeight = boxSize,
                 Text = item.Text ?? "",
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = fontSize,
@@ -2660,8 +2741,9 @@ namespace CodexLauncher
                 Foreground = new SolidColorBrush(item.Color),
                 Background = new SolidColorBrush(WpfColor.FromArgb(0xF4, 0xFF, 0xFF, 0xFF)),
                 BorderBrush = UiHelpers.BorderStrong,
-                BorderThickness = new Thickness(1.5),
-                Padding = new Thickness(6, 2, 6, 2),
+                BorderThickness = new Thickness(1.5 * scale),
+                Padding = new Thickness(6 * scale, 2 * scale, 6 * scale, 2 * scale),
+                VerticalContentAlignment = VerticalAlignment.Center,
                 AcceptsReturn = false
             };
             Canvas.SetLeft(_activeTextBox, left);
@@ -2676,11 +2758,12 @@ namespace CodexLauncher
             CommitActiveTextBox();
             _editingAnnot = null;
             _activeTextPos = pos;
-            double fontSize = Math.Max(14, 12 + _activeThickness * 2.0);
-            double maxW = Math.Max(90, _selRect.Right - pos.X - 6);
+            double scale = _selectionUiScale;
+            double fontSize = Math.Max(14, 12 + _activeThickness * 2.0) * scale;
+            double maxW = Math.Max(90 * scale, _selRect.Right - pos.X - 6 * scale);
             _activeTextBox = new TextBox
             {
-                MinWidth = 90,
+                MinWidth = 90 * scale,
                 MaxWidth = maxW,
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = fontSize,
@@ -2689,8 +2772,8 @@ namespace CodexLauncher
                 Foreground = new SolidColorBrush(_activeColor),
                 Background = new SolidColorBrush(WpfColor.FromArgb(0xF2, 0xFF, 0xFF, 0xFF)),
                 BorderBrush = UiHelpers.BorderStrong,
-                BorderThickness = new Thickness(1.5),
-                Padding = new Thickness(5, 2, 5, 2),
+                BorderThickness = new Thickness(1.5 * scale),
+                Padding = new Thickness(5 * scale, 2 * scale, 5 * scale, 2 * scale),
                 AcceptsReturn = true
             };
             Canvas.SetLeft(_activeTextBox, pos.X);
@@ -2704,8 +2787,8 @@ namespace CodexLauncher
             if (_activeTextBox == null) return;
             string txt = (_activeTextBox.Text ?? "").Trim();
             double fs = _activeTextBox.FontSize;
-            double x = Canvas.GetLeft(_activeTextBox) + 4;
-            double y = Canvas.GetTop(_activeTextBox) + 2;
+            double x = Canvas.GetLeft(_activeTextBox) + _activeTextBox.Padding.Left;
+            double y = Canvas.GetTop(_activeTextBox) + _activeTextBox.Padding.Top;
             var editing = _editingAnnot;
             _editingAnnot = null;
             _canvas.Children.Remove(_activeTextBox);
@@ -2713,15 +2796,13 @@ namespace CodexLauncher
 
             if (editing != null)
             {
-                editing.Text = txt;
                 if (editing.Tool == DrawTool.Text && string.IsNullOrEmpty(txt))
                 {
-                    if (editing.CachedVisual != null) _annotCanvas.Children.Remove(editing.CachedVisual);
-                    _annotations.Remove(editing);
-                    SelectAnnotation(null);
+                    DeleteAnnotation(editing);
                 }
                 else
                 {
+                    editing.Text = txt;
                     editing.FontSize = fs;
                     RefreshAnnotationVisual(editing);
                     SelectAnnotation(editing);
@@ -2736,12 +2817,13 @@ namespace CodexLauncher
                     Tool = DrawTool.Text,
                     Color = _activeColor,
                     Thickness = _activeThickness,
+                    UiScale = _selectionUiScale,
                     Start = new WpfPoint(x, y),
                     Text = txt,
                     FontSize = fs
                 };
-                _redoStack.Clear();
                 _annotations.Add(item);
+                RecordAnnotationAddition(item);
                 AddAnnotationVisual(item);
                 SelectAnnotation(item);
             }
@@ -2750,31 +2832,19 @@ namespace CodexLauncher
         private void UndoLast()
         {
             CommitActiveTextBox();
-            if (_annotations.Count > 0)
-            {
-                var last = _annotations[_annotations.Count - 1];
-                _annotations.RemoveAt(_annotations.Count - 1);
-                if (last.CachedVisual != null)
-                {
-                    _annotCanvas.Children.Remove(last.CachedVisual);
-                    last.CachedVisual = null;
-                }
-                _redoStack.Add(last);
-                if (_selectedAnnot == last) SelectAnnotation(null);
-            }
+            if (_undoStack.Count == 0) return;
+            var change = _undoStack.Pop();
+            ApplyAnnotationChange(change, true);
+            _redoStack.Push(change);
         }
 
         private void RedoLast()
         {
             CommitActiveTextBox();
-            if (_redoStack.Count > 0)
-            {
-                var item = _redoStack[_redoStack.Count - 1];
-                _redoStack.RemoveAt(_redoStack.Count - 1);
-                _annotations.Add(item);
-                AddAnnotationVisual(item);
-                SelectAnnotation(item);
-            }
+            if (_redoStack.Count == 0) return;
+            var change = _redoStack.Pop();
+            ApplyAnnotationChange(change, false);
+            _undoStack.Push(change);
         }
 
         private void AddAnnotationVisual(AnnotationItem item)
@@ -2836,7 +2906,7 @@ namespace CodexLauncher
             }
             if (item.Tool == DrawTool.Arrow)
             {
-                var poly = BuildTaperedArrowPolygon(item.Start, item.End, item.Thickness);
+                var poly = BuildTaperedArrowPolygon(item.Start, item.End, item.Thickness, item.UiScale);
                 if (poly != null) poly.Fill = brush;
                 return poly;
             }
@@ -2899,7 +2969,7 @@ namespace CodexLauncher
             }
             if (item.Tool == DrawTool.Stamp)
             {
-                double boxSize = Math.Max(22, 18 + item.Thickness * 1.8);
+                double boxSize = StampBoxSize(item);
                 var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
                 var wrap = new Grid { VerticalAlignment = VerticalAlignment.Center };
@@ -2954,7 +3024,7 @@ namespace CodexLauncher
                         Child = new TextBlock
                         {
                             Text = item.Text,
-                            FontSize = Math.Max(12, Math.Round(boxSize * 0.52)),
+                            FontSize = item.FontSize > 0 ? item.FontSize / item.UiScale : Math.Max(12, Math.Round(boxSize * 0.52)),
                             FontWeight = FontWeights.Bold,
                             FontFamily = UiHelpers.MainFont,
                             Foreground = brush,
@@ -2965,14 +3035,15 @@ namespace CodexLauncher
                     row.Children.Add(labelGrid);
                 }
 
-                Canvas.SetLeft(row, item.Start.X - boxSize / 2.0);
-                Canvas.SetTop(row, item.Start.Y - boxSize / 2.0);
+                row.LayoutTransform = new ScaleTransform(item.UiScale, item.UiScale);
+                Canvas.SetLeft(row, item.Start.X - boxSize * item.UiScale / 2.0);
+                Canvas.SetTop(row, item.Start.Y - boxSize * item.UiScale / 2.0);
                 return row;
             }
             return null;
         }
 
-        private static List<WpfPoint> ComputeArrowPoints(WpfPoint start, WpfPoint end, double thickness)
+        private static List<WpfPoint> ComputeArrowPoints(WpfPoint start, WpfPoint end, double thickness, double scale)
         {
             double dx = end.X - start.X;
             double dy = end.Y - start.Y;
@@ -2984,10 +3055,10 @@ namespace CodexLauncher
             double px = -uy;
             double py = ux;
 
-            double headLen = Math.Min(len * 0.48, Math.Max(14.0, thickness * 4.2));
-            double headHalfW = Math.Max(6.5, thickness * 2.1);
-            double tailHalfW = Math.Max(1.2, thickness * 0.36);
-            double neckHalfW = Math.Max(2.2, thickness * 0.78);
+            double headLen = Math.Min(len * 0.48, Math.Max(14.0 * scale, thickness * 4.2));
+            double headHalfW = Math.Max(6.5 * scale, thickness * 2.1);
+            double tailHalfW = Math.Max(1.2 * scale, thickness * 0.36);
+            double neckHalfW = Math.Max(2.2 * scale, thickness * 0.78);
 
             WpfPoint neck = new WpfPoint(end.X - ux * headLen * 0.78, end.Y - uy * headLen * 0.78);
             WpfPoint wingBase = new WpfPoint(end.X - ux * headLen, end.Y - uy * headLen);
@@ -3004,9 +3075,9 @@ namespace CodexLauncher
             };
         }
 
-        private static Polygon BuildTaperedArrowPolygon(WpfPoint start, WpfPoint end, double thickness)
+        private static Polygon BuildTaperedArrowPolygon(WpfPoint start, WpfPoint end, double thickness, double scale)
         {
-            var pts = ComputeArrowPoints(start, end, thickness);
+            var pts = ComputeArrowPoints(start, end, thickness, scale);
             if (pts == null) return null;
             return new Polygon { Points = new PointCollection(pts) };
         }
@@ -3109,13 +3180,15 @@ namespace CodexLauncher
                 {
                     ok = ClipboardHelper.TrySetImage(finalBmp, out clipErr);
                 }
-                _closeSession();
-                if (ok) _notify("截图已复制到剪贴板，可直接 Ctrl+V 粘贴", false);
+                if (ok)
+                {
+                    _closeSession();
+                    _notify("截图已复制到剪贴板，可直接 Ctrl+V 粘贴", false);
+                }
                 else _notify("复制截图失败：" + clipErr, true);
             }
             catch (Exception ex)
             {
-                _closeSession();
                 _notify("复制截图失败：" + ex.Message, true);
             }
         }
@@ -3271,7 +3344,8 @@ namespace CodexLauncher
             _physRect = physicalScreenRect;
             _notify = notify;
 
-            double dpiScale = 1.0;
+            var monitor = NativeScreen.MonitorAt(_physRect.Left + _physRect.Width / 2, _physRect.Top + _physRect.Height / 2);
+            double dpiScale = monitor.ScalePercent > 0 ? monitor.ScalePercent / 100.0 : 1.0;
             _baseW = Math.Max(40, _physRect.Width / dpiScale);
             _baseH = Math.Max(40, _physRect.Height / dpiScale);
 
@@ -3345,7 +3419,7 @@ namespace CodexLauncher
             Width = _baseW + 6;
             Height = _baseH + 6;
 
-            SourceInitialized += (s, e) => PlaceInOriginalPosition();
+            SourceInitialized += (s, e) => PlaceInOriginalPosition(dpiScale);
 
             MouseLeftButtonDown += (s, e) =>
             {
@@ -3375,27 +3449,15 @@ namespace CodexLauncher
             };
         }
 
-        private void PlaceInOriginalPosition()
+        private void PlaceInOriginalPosition(double scale)
         {
             try
             {
-                var src = PresentationSource.FromVisual(this);
-                double dpiX = 1.0, dpiY = 1.0;
-                if (src != null && src.CompositionTarget != null)
-                {
-                    dpiX = src.CompositionTarget.TransformToDevice.M11;
-                    dpiY = src.CompositionTarget.TransformToDevice.M22;
-                }
-                _baseW = Math.Max(40, _physRect.Width / dpiX);
-                _baseH = Math.Max(40, _physRect.Height / dpiY);
-                Width = _baseW + 6;
-                Height = _baseH + 6;
-
                 var helper = new WindowInteropHelper(this);
-                int physX = _physRect.Left - (int)Math.Round(1.5 * dpiX);
-                int physY = _physRect.Top - (int)Math.Round(1.5 * dpiY);
-                int physW = (int)Math.Round(Width * dpiX);
-                int physH = (int)Math.Round(Height * dpiY);
+                int physX = _physRect.Left - (int)Math.Round(1.5 * scale);
+                int physY = _physRect.Top - (int)Math.Round(1.5 * scale);
+                int physW = (int)Math.Round(Width * scale);
+                int physH = (int)Math.Round(Height * scale);
                 NativeScreen.SetWindowPos(helper.Handle, NativeScreen.HWND_TOPMOST, physX, physY, physW, physH, NativeScreen.SWP_NOACTIVATE);
             }
             catch { }
@@ -3607,20 +3669,18 @@ namespace CodexLauncher
         public void ShowAtPhysical(int physX, int physY)
         {
             Show();
-            var src = PresentationSource.FromVisual(this);
-            double dpiX = 1.0, dpiY = 1.0;
-            if (src != null && src.CompositionTarget != null)
+            var monitor = NativeScreen.MonitorAt(physX, physY);
+            if (monitor.ScalePercent > 0)
             {
-                dpiX = src.CompositionTarget.TransformToDevice.M11;
-                dpiY = src.CompositionTarget.TransformToDevice.M22;
+                double scale = monitor.ScalePercent / 100.0;
+                int width = (int)Math.Round(ActualWidth * scale);
+                int height = (int)Math.Round(ActualHeight * scale);
+                var work = monitor.WorkingArea;
+                int x = Math.Max(work.Left, Math.Min(physX, work.Right - width - 4));
+                int y = Math.Max(work.Top, Math.Min(physY, work.Bottom - height - 4));
+                NativeScreen.SetWindowPos(new WindowInteropHelper(this).Handle, NativeScreen.HWND_TOPMOST,
+                    x, y, width, height, NativeScreen.SWP_NOACTIVATE);
             }
-            var work = SystemParameters.WorkArea;
-            double x = physX / dpiX;
-            double y = physY / dpiY;
-            if (x + ActualWidth > work.Right) x = Math.Max(work.Left, work.Right - ActualWidth - 4);
-            if (y + ActualHeight > work.Bottom) y = Math.Max(work.Top, work.Bottom - ActualHeight - 4);
-            Left = x;
-            Top = y;
             Activate();
         }
     }
@@ -3648,6 +3708,7 @@ namespace CodexLauncher
         private CancellationTokenSource _ocrCts;
         private string _preferredEngine = "auto";
         private string _rawOcrText = "";
+        private string _lastOcrPresentation = "";
         private bool _mergedMode = false;
 
         public OcrResultWindow(Bitmap bmp, Action<string, bool> notify)
@@ -3924,9 +3985,17 @@ namespace CodexLauncher
 
         private void ToggleMergeLines()
         {
+            if (_textBox.Text != _lastOcrPresentation)
+                _rawOcrText = _textBox.Text;
             _mergedMode = !_mergedMode;
-            _textBox.Text = _mergedMode ? SmartMergeLines(_rawOcrText) : _rawOcrText;
+            ShowOcrText();
             SyncButtonStates(_preferredEngine == "windows" ? "Windows" : (_preferredEngine == "paddle" ? "Paddle" : ""));
+        }
+
+        private void ShowOcrText()
+        {
+            _textBox.Text = _mergedMode ? SmartMergeLines(_rawOcrText) : _rawOcrText;
+            _lastOcrPresentation = _textBox.Text;
         }
 
         private static string SmartMergeLines(string raw)
@@ -4014,9 +4083,14 @@ namespace CodexLauncher
                         if (!IsVisible || token.IsCancellationRequested) return;
                         _loaderTimer.Stop();
                         _loaderBox.Visibility = Visibility.Collapsed;
-                        _rawOcrText = text ?? "";
-                        _textBox.Text = _mergedMode ? SmartMergeLines(_rawOcrText) : _rawOcrText;
                         SyncButtonStates(engine);
+                        if (_textBox.Text != _lastOcrPresentation)
+                        {
+                            _statusText.Text = engine + " · 已保留手动编辑的文字";
+                            return;
+                        }
+                        _rawOcrText = text ?? "";
+                        ShowOcrText();
                         if (string.IsNullOrWhiteSpace(_rawOcrText))
                         {
                             _statusText.Text = engine + " · 未在选区内识别到清晰文字";
@@ -4052,9 +4126,11 @@ namespace CodexLauncher
                 {
                     if (_notify != null) _notify("已复制识别出的文字到剪贴板", false);
                 }
-                else if (_notify != null)
+                else
                 {
-                    _notify("复制文字失败：" + err, true);
+                    _statusText.Text = "复制文字失败：" + err;
+                    if (_notify != null) _notify(_statusText.Text, true);
+                    return;
                 }
             }
             Close();

@@ -372,13 +372,6 @@
           </span>
           <span class="nav-active-dot" aria-hidden="true"></span>
         </button>
-        <button class="nav-item" data-tab="manage">
-          <span class="nav-left">
-            <svg class="ic" viewBox="0 0 16 16"><use href="#g-sliders"/></svg>
-            <span class="nav-label">设置</span>
-          </span>
-          <span class="nav-active-dot" aria-hidden="true"></span>
-        </button>
         <button class="nav-item" data-tab="design">
           <span class="nav-left">
             <svg class="ic" viewBox="0 0 16 16"><use href="#g-node"/></svg>
@@ -390,6 +383,14 @@
 
       <section id="sidebar-tools" class="sidebar-tools" aria-label="快捷工具"></section>
 
+      <div class="sidebar-settings">
+        <button type="button" id="open-settings" class="tool-tile" data-act="openSettings" aria-haspopup="dialog">
+          <span class="tool-tile-left">
+            <svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#g-sliders"/></svg>
+            <span>设置</span>
+          </span>
+        </button>
+      </div>
       <button id="btn-batch-exit" class="sidebar-action-btn sidebar-exit-btn">
         <svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#g-power"/></svg>
         <span>一键全部退出</span>
@@ -429,6 +430,21 @@
   <div id="popover-menu" class="popover-menu hidden"></div>
 
   <!-- Generic Modal Host -->
+  <div id="settings-backdrop" class="modal-backdrop settings-backdrop hidden">
+    <section id="settings-dialog" class="modal-dialog modal-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="modal-header">
+        <h3 id="settings-title">设置</h3>
+        <div class="tool-actions" id="settings-actions"></div>
+      </header>
+      <nav class="settings-nav" aria-label="设置分类">
+        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="all" aria-pressed="true">全部设置</button>
+        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="settings-hotkeys" aria-pressed="false">热键与提醒</button>
+        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="settings-apps" aria-pressed="false">桌面收纳与卸载</button>
+        <button type="button" class="btn btn-flat" data-act="settingsSection" data-id="settings-system" aria-pressed="false">常驻与备份</button>
+      </nav>
+      <div id="settings-content" class="settings-content"></div>
+    </section>
+  </div>
   <div id="modal-backdrop" class="modal-backdrop hidden">
     <div id="modal-dialog" class="modal-dialog" role="dialog" aria-modal="true"></div>
   </div>

@@ -18,7 +18,7 @@ namespace CodexLauncher
 {
     public static class CoreService
     {
-        public const string AppVersion = "v5.9.9";
+        public const string AppVersion = "v5.9.10";
         private const string BrandIconFile = "aibase-v1.png";
         public const string BrandIconUrl = "https://icons.aihub.local/" + BrandIconFile;
 
@@ -1437,9 +1437,9 @@ namespace CodexLauncher
             }
         }
 
-        public static void LaunchProfile(string profileId)
+        public static void LaunchProfile(string profileId, string projectPath = null)
         {
-            lock (ProfileLifecycleLock) LaunchProfileCore(profileId);
+            lock (ProfileLifecycleLock) LaunchProfileCore(profileId, projectPath);
         }
 
         internal static void OpenRunningProfile(string profileId)
@@ -1463,13 +1463,14 @@ namespace CodexLauncher
             }
         }
 
-        private static void LaunchProfileCore(string profileId)
+        private static void LaunchProfileCore(string profileId, string projectPath = null)
         {
             string exe = FindCodexExecutable();
             if (string.IsNullOrEmpty(exe))
                 throw new InvalidOperationException("未找到 chatgpt-desktop.exe 或已安装的 OpenAI Codex 桌面端。");
 
             var psi = new ProcessStartInfo { FileName = exe, UseShellExecute = false };
+            if (!string.IsNullOrEmpty(projectPath)) psi.WorkingDirectory = Path.GetFullPath(projectPath);
             if (profileId == "default")
             {
                 if (psi.EnvironmentVariables.ContainsKey("CODEX_HOME")) psi.EnvironmentVariables.Remove("CODEX_HOME");

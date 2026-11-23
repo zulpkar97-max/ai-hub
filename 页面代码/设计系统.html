@@ -19,7 +19,7 @@
       --p-tone-hover: #ECEAE3;
 
       --p-ink-900: #1A1917;       /* 松烟暖墨主黑 */
-      --p-ink-800: #2C2A27;       /* 主按钮悬停墨灰 */
+      --p-ink-800: #3C3934;       /* 主按钮悬停墨灰 */
       --p-ink-700: #33312D;       /* 正文深墨 */
       --p-ink-500: #57534C;       /* 次级说明 */
       --p-ink-400: #6F6B63;       /* 弱信息 (AA 对比度达标) */
@@ -192,6 +192,7 @@
     body.is-embed .toc {
       display: none;
     }
+    .toc[hidden] { display: none; }
     body.is-embed .stage-inner {
       max-width: none;
     }
@@ -202,7 +203,13 @@
       flex-wrap: wrap;
     }
     body.is-embed .embed-nav {
-      display: inline-flex;
+      display: flex;
+      position: relative;
+      z-index: 2;
+      flex: 0 0 auto;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--line-struct);
+      background: var(--surface-paper);
     }
     .embed-page-btn {
       height: 26px;
@@ -2446,18 +2453,6 @@
         <div class="topbar-left">
           <span class="topbar-num" id="tb-num">01</span>
           <span class="topbar-title" id="tb-title">品牌图标与三格铭牌定妆</span>
-          <div class="embed-nav" id="embed-nav" aria-label="分页切换">
-            <button type="button" class="embed-page-btn is-active" data-page="01">01 品牌</button>
-            <button type="button" class="embed-page-btn" data-page="02">02 色板</button>
-            <button type="button" class="embed-page-btn" data-page="03">03 图标</button>
-            <button type="button" class="embed-page-btn" data-page="04">04 按钮</button>
-            <button type="button" class="embed-page-btn" data-page="05">05 控件</button>
-            <button type="button" class="embed-page-btn" data-page="06">06 浮层</button>
-            <button type="button" class="embed-page-btn" data-page="07">07 AI BASE</button>
-            <button type="button" class="embed-page-btn" data-page="08">08 LIFE BASE</button>
-            <button type="button" class="embed-page-btn" data-page="09">09 通则</button>
-            <button type="button" class="embed-page-btn" data-page="10">10 截图</button>
-          </div>
           <span class="topbar-sub" id="tb-sub">暖白图纸卡饱满占比 · 拆前墙通透步梯 · AI BASE / LIFE BASE</span>
         </div>
         <div class="topbar-right">
@@ -2484,6 +2479,18 @@
           <span class="mono" style="font-size:11px;color:var(--text-muted);" id="tb-counter">1 / 10</span>
         </div>
       </header>
+          <div class="embed-nav" id="embed-nav" aria-label="分页切换">
+            <button type="button" class="embed-page-btn is-active" data-page="01">01 品牌</button>
+            <button type="button" class="embed-page-btn" data-page="02">02 色板</button>
+            <button type="button" class="embed-page-btn" data-page="03">03 图标</button>
+            <button type="button" class="embed-page-btn" data-page="04">04 按钮</button>
+            <button type="button" class="embed-page-btn" data-page="05">05 控件</button>
+            <button type="button" class="embed-page-btn" data-page="06">06 浮层</button>
+            <button type="button" class="embed-page-btn" data-page="07">07 AI BASE</button>
+            <button type="button" class="embed-page-btn" data-page="08">08 LIFE BASE</button>
+            <button type="button" class="embed-page-btn" data-page="09">09 通则</button>
+            <button type="button" class="embed-page-btn" data-page="10">10 截图</button>
+          </div>
 
       <main class="stage" id="stage">
         <div class="stage-inner">
@@ -2900,7 +2907,7 @@
                     <button type="button" class="ds-btn ds-btn-sm ds-btn-focus" id="t-undo">删除 + 撤销 Undo</button>
                   </div>
                   <p style="margin:0;font-size:12px;color:var(--text-secondary);">
-                    底部细白条实时反映剩余停留时长；鼠标悬停在 Toast 上时 <code>animation-play-state: paused</code> 立即冻结，移开后继续倒计时。
+                    应用内与桌面截图提示共用暖白纸底、墨线硬影、左侧语义色和方点、底部剩余时长条。悬停暂停并从剩余时间恢复，减少动态效果时分段更新。应用内带撤销的提示获得键盘焦点时也暂停。
                   </p>
                 </div>
               </div>
@@ -2958,10 +2965,8 @@
             <div class="panel">
               <div class="panel-head">
                 <h2>
-                  <span class="head-bar"></span>
                   <span>ANTIGRAVITY</span>
                   <span class="ds-tag is-ok"><span class="dot dot-ok"></span>运行中</span>
-                  <span class="ds-tag">Google AI Pro</span>
                 </h2>
                 <div style="display:flex;align-items:center;gap:8px;">
                   <button type="button" class="ds-btn ds-btn-sm ds-btn-paper ds-w-act"><svg class="svg16"><use href="#g-refresh"/></svg>刷新</button>
@@ -3149,7 +3154,7 @@
           </section>
 
           <!-- ==================== 09 · 实机三战役与全站通则 ==================== -->
-          <section class="page-view" data-view="09" data-title="实机三战役路线图 &amp; 全站架构 3 条通则" data-sub="标本封死后按「主界面换肤精修 → 业务页 UX 提效 → 截图与 OCR 重构」三大战役推进">
+          <section class="page-view" data-view="09" data-title="实机布局、控件与交互通则" data-sub="AI BASE v5.9.10 · 工作台、设置、需求池与截图交互">
             <div class="panel">
               <div class="panel-head">
                 <h2><span class="head-bar"></span>1. 全站实机 3 条铁律（从 6 张实机截图提炼的通用规范）</h2>
@@ -3187,20 +3192,20 @@
                     <tr>
                       <td class="mono">战役一</td>
                       <td><strong>全局换肤 + 品牌 + 工作台</strong></td>
-                      <td>松烟暖墨 Token、渐隐建筑十字、三格 <code>AI BASE</code> 铭牌 + 暖白卡 <code>.ico</code>/16px 动态托盘、16×16 折角 SVG、统一顶栏、对齐 Codex/Antigravity 单行卡头与大白洞消除、去重刷新时间、4 态网络条就地切节点、降噪刻度进度条</td>
-                      <td><span class="ds-tag">待启动</span></td>
+                      <td>工作台自上而下为 Codex、Antigravity、应用与网页入口。入口共用外框，宽窗横向三格，窄窗竖向三行。页内单格额度可以在同排账号卡内自然伸展。</td>
+                      <td><span class="ds-tag is-ok">已落地</span></td>
                     </tr>
                     <tr>
                       <td class="mono">战役二</td>
                       <td><strong>项目 / 需求池 / 设置 / 日志</strong></td>
-                      <td>项目卡基线拉齐 + 路径条点击复制 + 异常驱动 Dirty 高亮 + 一键 AI IDE 打开；需求池砍重复状态标签 + 3px 黑脊选中 + Checklist 勾选 + <strong>一键复制 AI Prompt</strong>；设置页修收纳语义 + 居中/备份/自定义热键/开机静默；日志按版本分组</td>
-                      <td><span class="ds-tag">待启动</span></td>
+                      <td>需求池清单用分组标题控制折叠，用相邻把手排序，悬停操作预留固定位置。宽窗详情约占 38%，窄窗为抽屉。看板三条活跃列，归档展开后分「搁置」与「已完成」，拖卡显示目标占位并等待保存反馈。设置入口沿用快捷工具纸卡，位于该组下方，由虚线隔开。设置弹窗固定标题和分类栏，单列正文独立滚动。</td>
+                      <td><span class="ds-tag is-ok">已落地</span></td>
                     </tr>
                     <tr>
                       <td class="mono">战役三</td>
                       <td><strong>截图 &amp; 离线 OCR 引擎</strong></td>
-                      <td>P0 修 7 处硬伤（Clip 失步、拖拽实时宽高+放大镜、消灭 122 次 GetPixel、马赛克缓存、WPF 直出所见即所得、剪贴板重试+后台通知、OCR 关窗杀进程+小图 2×）；P1 全 0px 视觉刷齐；P2 原地贴图+透明度+序号方章+复制临时图路径+合并换行</td>
-                      <td><span class="ds-tag">待启动</span></td>
+                      <td>标注单击选中、Delete 删除、Ctrl+Z 撤销删除、Enter 复制选区。空心矩形仅边缘命中，框内可继续绘制。OCR 保留手动编辑，复制失败时留在原窗口。</td>
+                      <td><span class="ds-tag is-ok">已落地</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -3256,7 +3261,7 @@
                     <button type="button" class="shot-tool-btn" data-tip="保存为 PNG 文件 (Ctrl+S)">保存</button>
                     <div class="v-sep" style="height:16px;"></div>
                     <button type="button" class="shot-tool-btn is-cancel" data-tip="取消截图 (Esc)"><svg class="svg16"><use href="#g-close"/></svg>取消</button>
-                    <button type="button" class="shot-tool-btn is-copy"><svg class="svg16"><use href="#g-check"/></svg>复制</button>
+                    <button type="button" class="shot-tool-btn is-copy" data-tip="复制截图（Enter / Ctrl+C）"><svg class="svg16"><use href="#g-check"/></svg>复制</button>
                   </div>
 
                   <!-- 二级属性条：默认选中最细 1.5px + 精简 3 色（红 / 黄 / 蓝） -->
@@ -3367,17 +3372,19 @@
   <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
 
   <script>
-    if (location.search.includes("embed=1")) {
+    const exportTemplate = document.documentElement.cloneNode(true);
+    const isEmbedded = window.parent !== window && new URLSearchParams(location.search).get("embed") === "1";
+    if (isEmbedded) {
       document.body.classList.add("is-embed");
     }
 
     /* ==================== 1. 分页导航 (01~10) ==================== */
-    const pages = ["01","02","03","04","05","06","07","08","09","10"];
-    let curPage = "01";
+    const pages = [...document.querySelectorAll(".page-view")].map((page) => page.dataset.view);
+    let curPage = pages[0];
     const stageEl = document.getElementById("stage");
 
     function goPage(id) {
-      if (!pages.includes(id)) id = "01";
+      if (!pages.includes(id)) id = pages[0];
       curPage = id;
       const idx = pages.indexOf(id);
       document.querySelectorAll(".toc-btn, .embed-page-btn").forEach(b => b.classList.toggle("is-active", b.dataset.page === id));
@@ -3399,6 +3406,7 @@
       document.getElementById("prev-page").disabled = idx === 0;
       document.getElementById("next-page").disabled = idx === pages.length - 1;
       stageEl.scrollTop = 0;
+      if (isEmbedded) window.parent.postMessage({ type: "ds-page-changed", page: id }, location.origin);
     }
 
     document.getElementById("toc-nav").addEventListener("click", e => {
@@ -3560,7 +3568,7 @@
       armBtn.className = "ds-btn ds-btn-paper";
       armLbl.textContent = "删除选中节点";
     }
-    armBtn.addEventListener("click", () => {
+    armBtn?.addEventListener("click", () => {
       if (armLeft > 0) {
         resetArm();
         armTag.className = "ds-tag is-danger";
@@ -3591,7 +3599,7 @@
     const faderFill = document.getElementById("fader-fill");
     const faderReadout = document.getElementById("fader-readout");
     const faderBadge = document.getElementById("fader-badge");
-    fader.addEventListener("input", () => {
+    fader?.addEventListener("input", () => {
       const v = Number(fader.value);
       faderFill.style.width = v + "%";
       faderReadout.textContent = v + "%";
@@ -3636,25 +3644,25 @@
       comboTrigger.setAttribute("aria-expanded", "false");
       showToast(`已切换至 ${n.name} (${n.ms} ms)`);
     }
-    comboTrigger.addEventListener("click", () => {
+    comboTrigger?.addEventListener("click", () => {
       const open = combo.classList.toggle("is-open");
       comboTrigger.setAttribute("aria-expanded", String(open));
       if (open) { comboSearch.value = ""; hiIdx = 0; renderCombo(); comboSearch.focus(); }
     });
-    comboSearch.addEventListener("input", () => { hiIdx = 0; renderCombo(comboSearch.value); });
-    comboSearch.addEventListener("keydown", e => {
+    comboSearch?.addEventListener("input", () => { hiIdx = 0; renderCombo(comboSearch.value); });
+    comboSearch?.addEventListener("keydown", e => {
       const opts = comboList.querySelectorAll(".combo-opt");
       if (e.key === "ArrowDown") { e.preventDefault(); hiIdx = Math.min(opts.length - 1, hiIdx + 1); renderCombo(comboSearch.value); }
       else if (e.key === "ArrowUp") { e.preventDefault(); hiIdx = Math.max(0, hiIdx - 1); renderCombo(comboSearch.value); }
       else if (e.key === "Enter" && opts[hiIdx]) { e.preventDefault(); selectNode(Number(opts[hiIdx].dataset.idx)); }
       else if (e.key === "Escape") { combo.classList.remove("is-open"); comboTrigger.focus(); }
     });
-    comboList.addEventListener("click", e => {
+    comboList?.addEventListener("click", e => {
       const o = e.target.closest(".combo-opt");
       if (o) selectNode(Number(o.dataset.idx));
     });
-    document.addEventListener("click", e => { if (!combo.contains(e.target)) combo.classList.remove("is-open"); });
-    document.getElementById("focus-helper-btn").addEventListener("click", e => e.currentTarget.focus());
+    document.addEventListener("click", e => { if (combo && !combo.contains(e.target)) combo.classList.remove("is-open"); });
+    document.getElementById("focus-helper-btn")?.addEventListener("click", e => e.currentTarget.focus());
     document.querySelectorAll("[data-demo-seg]").forEach(btn => {
       btn.addEventListener("click", () => {
         btn.parentElement.querySelectorAll("[data-demo-seg]").forEach(x => x.classList.toggle("is-active", x === btn));
@@ -3681,10 +3689,10 @@
       if (e.target.closest("[data-tip]")) { clearTimeout(tipTimer); tipEl.classList.remove("is-show"); }
     });
 
-    document.getElementById("t-ok").addEventListener("click", () => showToast("Codex 额度同步完成（100%）"));
-    document.getElementById("t-warn").addEventListener("click", () => showToast("Antigravity 凭证将在 18 小时后临期", { type: "warn" }));
-    document.getElementById("t-err").addEventListener("click", () => showToast("当前节点连接超时（TIMEOUT）", { type: "danger" }));
-    document.getElementById("t-undo").addEventListener("click", () => showToast("已归档 1 条需求记录", { undo: () => showToast("已撤销归档") }));
+    document.getElementById("t-ok")?.addEventListener("click", () => showToast("Codex 额度同步完成（100%）"));
+    document.getElementById("t-warn")?.addEventListener("click", () => showToast("Antigravity 凭证将在 18 小时后临期", { type: "warn" }));
+    document.getElementById("t-err")?.addEventListener("click", () => showToast("当前节点连接超时（TIMEOUT）", { type: "danger" }));
+    document.getElementById("t-undo")?.addEventListener("click", () => showToast("已归档 1 条需求记录", { undo: () => showToast("已撤销归档") }));
 
     const modal = document.getElementById("demo-modal");
     const openModalBtn = document.getElementById("open-modal-btn");
@@ -3698,7 +3706,7 @@
       modal.classList.remove("is-open");
       if (lastFocus) lastFocus.focus();
     }
-    openModalBtn.addEventListener("click", openModal);
+    openModalBtn?.addEventListener("click", openModal);
     document.getElementById("close-modal-x").addEventListener("click", closeModal);
     document.getElementById("close-modal-cancel").addEventListener("click", closeModal);
     document.getElementById("close-modal-ok").addEventListener("click", () => { closeModal(); showToast("已确认切换节点"); });
@@ -3749,7 +3757,7 @@
     const wsBadge = document.getElementById("ws-crit-badge");
     const wsPct = document.getElementById("ws-crit-pct");
     const wsFill = document.getElementById("ws-crit-fill");
-    wsSlider.addEventListener("input", () => {
+    wsSlider?.addEventListener("input", () => {
       const v = Number(wsSlider.value);
       wsSliderFill.style.width = v + "%";
       wsNum.textContent = v + "%";
@@ -3778,12 +3786,12 @@
     /* ==================== 9. Page 08: LIFE BASE 热力图、步进器、日历、DnD ==================== */
     const hm = document.getElementById("heatmap-28");
     const hmLevels = [3,3,1,3,1,0,3, 3,3,3,1,3,3,1, 1,3,3,3,3,1,3, 3,1,3,3,0,3,3];
-    hm.innerHTML = hmLevels.map(l => `<div class="hm-cell ${l ? "l"+l : ""}"></div>`).join("");
+    if (hm) hm.innerHTML = hmLevels.map(l => `<div class="hm-cell ${l ? "l"+l : ""}"></div>`).join("");
 
     let kcal = 2100;
     const stepVal = document.getElementById("step-val");
-    document.getElementById("step-minus").addEventListener("click", () => { kcal = Math.max(1200, kcal - 50); stepVal.textContent = kcal; });
-    document.getElementById("step-plus").addEventListener("click", () => { kcal = Math.min(3500, kcal + 50); stepVal.textContent = kcal; });
+    document.getElementById("step-minus")?.addEventListener("click", () => { kcal = Math.max(1200, kcal - 50); stepVal.textContent = kcal; });
+    document.getElementById("step-plus")?.addEventListener("click", () => { kcal = Math.min(3500, kcal + 50); stepVal.textContent = kcal; });
 
     const calGrid = document.getElementById("cal-grid");
     const calReadout = document.getElementById("cal-readout");
@@ -3796,14 +3804,14 @@
       }
       calGrid.innerHTML = h;
     }
-    calGrid.addEventListener("click", e => {
+    calGrid?.addEventListener("click", e => {
       const b = e.target.closest(".cal-day");
       if (!b) return;
       selDay = Number(b.dataset.day);
       calReadout.textContent = `2026-11-${String(selDay).padStart(2, "0")}`;
       renderCal();
     });
-    renderCal();
+    if (calGrid) renderCal();
 
     let dragEl = null;
     document.querySelectorAll(".dnd-card").forEach(c => {
@@ -3824,7 +3832,7 @@
     let stampNum = 3;
     let stampColor = "#C24840";
     const stampLayer = document.getElementById("shot-stamps-layer");
-    document.getElementById("shot-sel").addEventListener("click", e => {
+    document.getElementById("shot-sel")?.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
       const x = Math.round(e.clientX - r.left);
       const y = Math.round(e.clientY - r.top);
@@ -3837,21 +3845,21 @@
       el.textContent = String(stampNum).padStart(2, "0");
       stampLayer.appendChild(el);
     });
-    document.getElementById("shot-reset-stamps").addEventListener("click", () => {
+    document.getElementById("shot-reset-stamps")?.addEventListener("click", () => {
       stampNum = 3;
       stampLayer.innerHTML = `<div class="shot-stamp" style="left:92px;top:52px;background:${stampColor};">01</div><div class="shot-stamp" style="left:238px;top:86px;background:${stampColor};">02</div><div class="shot-stamp" style="left:368px;top:58px;background:${stampColor};">03</div>`;
     });
-    document.getElementById("shot-toolbar").addEventListener("click", e => {
+    document.getElementById("shot-toolbar")?.addEventListener("click", e => {
       const b = e.target.closest("[data-stool]");
       if (!b) return;
       document.querySelectorAll("[data-stool]").forEach(x => x.classList.toggle("is-active", x === b));
     });
-    document.getElementById("shot-widths").addEventListener("click", e => {
+    document.getElementById("shot-widths")?.addEventListener("click", e => {
       const b = e.target.closest("[data-sw]");
       if (!b) return;
       document.querySelectorAll("[data-sw]").forEach(x => x.classList.toggle("is-active", x === b));
     });
-    document.getElementById("shot-colors").addEventListener("click", e => {
+    document.getElementById("shot-colors")?.addEventListener("click", e => {
       const b = e.target.closest("[data-sc]");
       if (!b) return;
       document.querySelectorAll("[data-sc]").forEach(x => x.classList.toggle("is-active", x === b));
@@ -3865,15 +3873,15 @@
       const col = isCenter ? "#C24840" : ((i % 11 >= 4 && i % 11 <= 6 && i >= 22 && i <= 54) ? "#E0B4B0" : ((i % 2 === 0) ? "#FAF9F6" : "#F0EEE8"));
       loupeCells.push(`<span style="background:${col};"></span>`);
     }
-    loupeGrid.insertAdjacentHTML("afterbegin", loupeCells.join(""));
+    loupeGrid?.insertAdjacentHTML("afterbegin", loupeCells.join(""));
     let loupeHex = true;
-    document.getElementById("loupe-fmt-btn").addEventListener("click", () => {
+    document.getElementById("loupe-fmt-btn")?.addEventListener("click", () => {
       loupeHex = !loupeHex;
       document.getElementById("loupe-color-txt").textContent = loupeHex ? "#C24840" : "rgb(194,72,64)";
     });
 
     let ocrMerged = false;
-    document.getElementById("ocr-merge-btn").addEventListener("click", e => {
+    document.getElementById("ocr-merge-btn")?.addEventListener("click", e => {
       ocrMerged = !ocrMerged;
       e.currentTarget.textContent = ocrMerged ? "还原原始断行" : "智能合并换行";
       document.getElementById("ocr-demo-text").textContent = ocrMerged
@@ -3883,73 +3891,24 @@
 
     /* ==================== 11. 一键复制独立可运行 HTML 源码（供外部审核） ==================== */
     function buildDesignSystemExportHtml(mode) {
-      if (mode === "all") {
-        return "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-      }
-      const keepPages = mode === "current"
-        ? [curPage]
-        : (mode === "aibase" ? ["01","02","03","04","05","06","07","10"] : ["01","02","03","04","05","06","08"]);
-      const titleLabel = mode === "current"
-        ? `设计系统 · Page ${curPage} (${document.getElementById("tb-title")?.textContent || ""})`
-        : (mode === "aibase" ? "AI BASE 专属设计系统 (v1.2)" : "LIFE BASE 专属设计系统 (v1.2)");
-
-      const styleText = document.querySelector("head style")?.innerHTML || "";
-      const svgDefs = document.querySelector("body > svg")?.outerHTML || "";
-      const sectionsHtml = keepPages.map((pid, idx) => {
-        const sec = document.querySelector(`.page-view[data-view="${pid}"]`);
-        if (!sec) return "";
-        const clone = sec.cloneNode(true);
-        clone.classList.toggle("is-active", idx === 0);
-        return clone.outerHTML;
-      }).filter(Boolean).join("\n\n");
-
-      const navBtns = keepPages.map((pid, idx) => {
-        const sec = document.querySelector(`.page-view[data-view="${pid}"]`);
-        const t = (sec?.dataset.title || "").split("：")[0].slice(0, 12);
-        return `<button type="button" class="toc-btn${idx === 0 ? " is-active" : ""}" data-page="${pid}"><span>${pid} · ${t}</span></button>`;
-      }).join("\n");
-
-      return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${titleLabel}</title>
-  <style>${styleText}</style>
-</head>
-<body>
-  ${svgDefs}
-  <div class="shell" style="${keepPages.length === 1 ? "grid-template-columns:1fr;" : ""}">
-    ${keepPages.length > 1 ? `<aside class="toc"><nav class="toc-nav" id="toc-nav">${navBtns}</nav></aside>` : ""}
-    <div class="main-col">
-      <div class="canvas-bg-layer" aria-hidden="true"></div>
-      <header class="topbar">
-        <div class="topbar-left">
-          <span class="topbar-num" id="tb-num">${keepPages[0]}</span>
-          <span class="topbar-title" id="tb-title">${titleLabel}</span>
-        </div>
-      </header>
-      <main class="stage" id="stage"><div class="stage-inner">${sectionsHtml}</div></main>
-    </div>
-  </div>
-  <script>
-    document.getElementById("toc-nav")?.addEventListener("click", e => {
-      const b = e.target.closest(".toc-btn");
-      if (!b) return;
-      const id = b.dataset.page;
-      document.querySelectorAll(".toc-btn").forEach(x => x.classList.toggle("is-active", x === b));
-      document.querySelectorAll(".page-view").forEach(v => {
-        const hit = v.dataset.view === id;
-        v.classList.toggle("is-active", hit);
-        if (hit) {
-          document.getElementById("tb-num").textContent = id;
-          document.getElementById("tb-title").textContent = v.dataset.title || "";
-        }
+      const variants = {
+        current: [curPage],
+        aibase: ["01","02","03","04","05","06","07","10"],
+        lifebase: ["01","02","03","04","05","06","08"],
+        all: pages
+      };
+      const keep = new Set((variants[mode] || pages).filter((id) => pages.includes(id)));
+      if (!keep.size) keep.add(curPage);
+      const html = exportTemplate.cloneNode(true);
+      html.querySelector("body").classList.remove("is-embed");
+      html.querySelectorAll(".page-view, .toc-btn, .embed-page-btn").forEach((element) => {
+        if (!keep.has(element.dataset.view || element.dataset.page)) element.remove();
       });
-    });
-  <\/script>
-</body>
-</html>`;
+      if (keep.size === 1) {
+        html.querySelector(".shell").style.gridTemplateColumns = "minmax(0, 1fr)";
+        html.querySelector(".toc").hidden = true;
+      }
+      return "<!DOCTYPE html>\n" + html.outerHTML;
     }
 
     async function copyDesignSystemHtml(mode) {
@@ -3961,9 +3920,8 @@
         all: "设计系统全量 10 页 HTML"
       };
       const label = labelMap[mode] || "设计系统 HTML";
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: "ds-copy-html", html, label }, "*");
-        showToast(`已复制「${label}」（${Math.round(html.length / 1024)} KB）`);
+      if (isEmbedded) {
+        window.parent.postMessage({ type: "ds-copy-html", html, label }, location.origin);
         return;
       }
       try {
@@ -3974,9 +3932,10 @@
         ta.value = html;
         document.body.appendChild(ta);
         ta.select();
-        document.execCommand("copy");
+        let copied = false;
+        try { copied = document.execCommand("copy"); } catch (_) {}
         ta.remove();
-        showToast(`已复制「${label}」（${Math.round(html.length / 1024)} KB）`);
+        showToast(copied ? `已复制「${label}」（${Math.round(html.length / 1024)} KB）` : "无法写入剪贴板", { type: copied ? "ok" : "danger" });
       }
     }
 
@@ -4002,6 +3961,7 @@
       }
     });
     window.addEventListener("message", (ev) => {
+      if (!isEmbedded || ev.source !== window.parent || ev.origin !== location.origin) return;
       const msg = ev.data;
       if (!msg || typeof msg !== "object") return;
       if (msg.type === "ds-request-copy" && msg.mode) {
@@ -4011,7 +3971,7 @@
       }
     });
 
-    goPage("01");
+    goPage(new URLSearchParams(location.search).get("page") || pages[0]);
   </script>
 </body>
 </html>

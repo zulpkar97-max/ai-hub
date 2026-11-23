@@ -30,8 +30,28 @@
     }
   })();
   let selectedBacklogId = "";
-  const expandedSettings = new Set(["stash-details", "uninstall-details"]);
-  const expandedBacklog = new Set();
+  const expandedSettings = new Set(["stash-details"]);
+  let settingsSection = "all";
+  let settingsTrigger = null;
+  let designPage = "";
+  const defaultBacklogGroups = ["doing", "planned", "idea", "closed"];
+  const backlogGroupPreferences = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("aibase_backlog_groups") || "{}");
+      return {
+        order: [...new Set([...(Array.isArray(saved.order) ? saved.order : []).filter((id) => defaultBacklogGroups.includes(id)), ...defaultBacklogGroups])],
+        collapsed: new Set(Array.isArray(saved.collapsed) ? saved.collapsed : ["closed"])
+      };
+    } catch (_) {
+      return { order: [...defaultBacklogGroups], collapsed: new Set(["closed"]) };
+    }
+  })();
+  let backlogDrag = null;
+  const searchCollapsedGroups = new Set();
+  let archiveRailOpen = false;
+  let backlogDrawerId = "";
+  let backlogDrawerKey = "";
+  const backlogMoves = new Map();
   let networkBusy = "";
   let onNetworkPickerClose = null;
 
@@ -215,9 +235,6 @@
       } else if (activeTab === "backlog") {
         parts.push(`<button type="button" class="btn btn-paper btn-sm btn-w-pair" data-act="exportBacklogMd"><span>导出 MD</span></button>`);
         parts.push(`<button type="button" class="btn btn-dark btn-sm btn-w-pair" data-act="openAddBacklog">${ICONS.plus} <span>新建需求</span></button>`);
-      } else if (activeTab === "manage") {
-        parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="openDataDir">${ICONS.folder} <span>打开数据目录</span></button>`);
-        if (appState.version) parts.push(`<button type="button" class="header-version-badge mono" data-act="openChangelog" data-tip="查看更新日志">${esc(appState.version)}</button>`);
       } else if (activeTab === "design") {
         parts.push(`<button type="button" class="btn btn-paper btn-sm" data-act="openDesignCopyMenu" data-tip="一键复制可独立运行的设计系统 HTML 源码">${ICONS.copy} <span>复制代码</span> ${ICONS.chevronDown}</button>`);
         parts.push(`<button type="button" class="btn btn-dark btn-sm" data-act="openDesignSystemExternal" data-tip="在默认浏览器中全屏打开设计系统.html"><span>浏览器打开</span> ${ICONS.ext}</button>`);
@@ -244,7 +261,7 @@
     else if (activeTab === "projects") renderProjects();
     else if (activeTab === "backlog") renderBacklog();
     else if (activeTab === "design") renderDesignSystem();
-    else renderManage();
+    if (layerIsOpen($("#settings-backdrop"))) renderManage();
   }
 
   function renderDesignSystem() {
@@ -253,14 +270,16 @@
     const view = $("#view-content");
     if (view.dataset.page === "design" && view.querySelector("#design-sys-frame")) return;
     view.dataset.page = "design";
-    view.innerHTML = `<iframe id="design-sys-frame" class="design-sys-frame" src="https://aihub.local/%E8%AE%BE%E8%AE%A1%E7%B3%BB%E7%BB%9F.html?embed=1" title="AI BASE & LIFE BASE 设计系统"></iframe>`;
+    view.innerHTML = `<iframe id="design-sys-frame" class="design-sys-frame" src="/%E8%AE%BE%E8%AE%A1%E7%B3%BB%E7%BB%9F.html?embed=1${designPage ? `&page=${designPage}` : ""}" title="AI BASE & LIFE BASE 设计系统"></iframe>`;
   }
 
   function switchTab(tab) {
+    if (tab === "manage") { openSettings(); return; }
     closePopover();
     closeInlineNodeCombo();
     if (activeTab === tab) return;
     if (projectDrag) finishProjectDrag(false);
+    if (backlogDrag) finishBacklogDrag(false);
     activeTab = tab;
     try { localStorage.setItem("aihub_last_tab", tab); } catch (_) { }
     renderAll();
@@ -275,8 +294,7 @@
         card.classList.add("view-card-entering");
       });
     }
-    if (tab === "manage") postAction("refreshInstalledApps");
-    else if (tab === "projects") postAction("refreshProjects");
+    if (tab === "projects") postAction("refreshProjects");
   }
 
   function shortcutLabel(hotkey) {
@@ -587,7 +605,7 @@
           ? `<button type="button" class="net-node-btn mono" title="${esc(node)}" data-act="toggleInlineNodeCombo" aria-expanded="false"><span>${esc(node)}</span>${ICONS.chevronDown}</button>`
           : `<strong class="mono">${esc(node)}</strong>`}</span>
         <span class="net-cell" data-tip="当前节点延迟${esc(lastDelay)}">${isRefreshing ? PULSE_LOADER : `<span class="net-latency ${delayTone} mono">${esc(latency)}</span>${lastDelay ? `<small class="mono">${esc(lastDelay)}</small>` : ""}`}</span>
-        <span class="net-cell mono" data-tip="${esc(trafficDetails)}">${esc(traffic)}</span>`;
+        <span class="net-cell net-traffic mono" data-tip="${esc(trafficDetails)}">${esc(traffic)}</span>`;
       actionsHtml = `
         ${iconButton("refreshNetwork", refreshLabel, isRefreshing ? PULSE_LOADER : ICONS.refresh, { disabled: !appState.network_status_refresh || isRefreshing })}
         ${iconButton("openNetworkPicker", "打开完整节点选择器", ICONS.switch, { disabled: !canInlinePick })}
@@ -599,7 +617,7 @@
 
     return `
       <section class="surface-card net-bar" aria-label="网络状态">
-        <div class="net-cap ${capCls}"><span class="status-dot ${dotCls}"></span>${label}</div>
+        <div class="net-cap ${capCls}"${subscription ? ` title="${esc(traffic)} · ${esc(trafficDetails)}"` : ""}><span class="status-dot ${dotCls}"></span>${label}</div>
         <div class="net-cells">${cellsHtml}</div>
         <div class="net-actions" role="group" aria-label="网络工具栏">${actionsHtml}</div>
       </section>`;
@@ -737,14 +755,17 @@
     view.dataset.page = "workspace";
     view.innerHTML = `
       ${renderNetwork(proxy)}
-      <div class="ws-grid-2">
+      <div class="ws-monitoring">
         ${renderCodex(accounts)}
         ${renderAntigravity()}
       </div>
-      <div class="work-tools-grid">
-        ${webTools.map((tool) => renderWebTool(tool, chromes)).join("")}
-        ${renderOpenDesign(design)}
-      </div>`;
+      <section class="block surface-card work-launchers" aria-labelledby="work-launchers-title">
+        <header class="block-head"><h2 id="work-launchers-title">应用与网页入口</h2></header>
+        <div class="work-tools-grid">
+          ${webTools.map((tool) => renderWebTool(tool, chromes)).join("")}
+          ${renderOpenDesign(design)}
+        </div>
+      </section>`;
     restoreFocus();
     if (previousQuotas.size) animateQuotaWidths(view, previousQuotas);
   }
@@ -799,6 +820,10 @@
   function syncSettingsFields(view, settings, shot, shortcuts) {
     const values = { ...settings, screenshot_enabled: !!shot.enabled, quota_auto_refresh: settings.quota_auto_refresh !== false };
     for (const input of view.querySelectorAll("[data-setting]")) input.checked = !!values[input.dataset.setting];
+    for (const input of view.querySelectorAll("[data-quiet-time]")) {
+      if (document.activeElement !== input) input.value = settings[input.dataset.quietTime] || input.defaultValue;
+      input.disabled = !settings.quiet_quota_alerts;
+    }
     for (const button of view.querySelectorAll("[data-hk]")) {
       const active = button.dataset.hk === shot.hotkey;
       button.classList.toggle("active", active);
@@ -899,7 +924,7 @@
       const agIcon = appState.antigravity?.icon_url;
       const agGlyph = agIcon ? `<img class="project-tool-icon" src="${esc(agIcon)}" alt="" />` : '<span class="project-tool-letter" aria-hidden="true">A</span>';
 
-      return `<article class="project-card block" data-project-id="${esc(item.id)}">
+      return `<article class="project-card block" data-project-id="${esc(item.id)}" tabindex="-1">
         <header class="project-card-head block-head" title="按住卡头可拖动排序">
           <div class="project-card-lead">
             <div class="project-emblem">${theme.svg}</div>
@@ -1285,23 +1310,19 @@
     if (filtered.length === 0) {
       return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
     }
-    const sel = filtered.find((it) => it.id === selectedBacklogId) || filtered[0];
-    selectedBacklogId = sel.id;
-    const selProj = normBacklogProject(sel.project);
-    const selTitle = normBrandText(sel.title);
-    const selPrioKey = BACKLOG_PRIORITIES[sel.priority] ? sel.priority : "medium";
-    const selPrio = BACKLOG_PRIORITIES[selPrioKey];
-    const statusOpts = BACKLOG_STATUSES.map((st) =>
-      `<option value="${st.id}"${sel.status === st.id ? " selected" : ""}>${st.label}</option>`
-    ).join("");
-    const notesRendered = renderBacklogNotesHtml(sel);
-
-    const groups = [
+    const byStatus = [
       { id: "doing", title: "进行中", dot: "var(--ok-fill)", list: filtered.filter((it) => it.status === "doing"), merged: false },
-      { id: "planned", title: "已排期", dot: "var(--ink)", list: filtered.filter((it) => it.status === "planned"), merged: false },
+      { id: "planned", title: "已排期", dot: "#2B5F8F", list: filtered.filter((it) => it.status === "planned"), merged: false },
       { id: "idea", title: "构思中", dot: "var(--warn-fill)", list: filtered.filter((it) => it.status === "idea"), merged: false },
-      { id: "closed", title: "搁置 & 已完成", dot: "#9C988F", list: filtered.filter((it) => it.status === "paused" || it.status === "done"), merged: true },
+      { id: "closed", title: "已归档", dot: "#9C988F", list: filtered.filter((it) => it.status === "paused" || it.status === "done"), merged: true },
     ];
+    const reveal = backlogStatus !== "all" || !!backlogQuery.trim();
+    const groups = backlogGroupPreferences.order.map((id) => byStatus.find((group) => group.id === id))
+      .filter((group) => group.list.length);
+    const isCollapsed = (id) => (reveal ? searchCollapsedGroups : backlogGroupPreferences.collapsed).has(id);
+    const visibleItems = groups.filter((group) => !isCollapsed(group.id)).flatMap((group) => group.list);
+    const sel = visibleItems.find((it) => it.id === selectedBacklogId) || visibleItems[0];
+    selectedBacklogId = sel?.id || "";
 
     return `<div class="cp-split">
       <section class="block cp-split-list">
@@ -1310,12 +1331,22 @@
           <span class="stamp mono">${filtered.length} 条</span>
         </div>
         <div class="cp-list-scroll">
-          ${groups.filter((g) => g.list.length > 0).map((g) => `
-            <div class="cp-grp-hdr">
+          ${groups.map((g) => `
+            <section class="cp-group" data-backlog-group="${g.id}">
+            <div class="cp-group-header">
+              <button type="button" class="cp-grp-hdr" data-act="toggleBacklogGroup" data-id="${g.id}" aria-expanded="${!isCollapsed(g.id)}" aria-controls="backlog-group-${g.id}">
               <span class="cp-grp-lead"><span style="width:6px;height:6px;background:${g.dot};display:inline-block;"></span><span>${g.title}</span></span>
-              <span class="mono">${g.list.length}</span>
+              <span class="mono">${g.merged ? `搁置 ${g.list.filter((it) => it.status === "paused").length} · 已完成 ${g.list.filter((it) => it.status === "done").length}` : g.list.length}</span>
+              ${ICONS.chevronDown}
+              </button>
+              <button type="button" class="backlog-grip" data-backlog-grip="group" data-id="${g.id}" aria-label="拖动或用上下方向键调整${g.title}的位置">${ICONS.grip}</button>
             </div>
-            ${g.list.map((it) => {
+            <div id="backlog-group-${g.id}" ${isCollapsed(g.id) ? "hidden" : ""}>
+            ${(g.merged ? ["paused", "done"].flatMap((status) => {
+              const rows = g.list.filter((item) => item.status === status);
+              return rows.length ? [backlogStatusMeta(status).label, ...rows] : [];
+            }) : g.list).map((it) => {
+              if (typeof it === "string") return `<div class="cp-archive-subhead">${it}</div>`;
               const pr = BACKLOG_PRIORITIES[it.priority] || BACKLOG_PRIORITIES.medium;
               const st = backlogStatusMeta(it.status);
               const proj = normBacklogProject(it.project);
@@ -1323,11 +1354,13 @@
               const dateShort = it.updated_at ? fmtDate(it.updated_at, true).split(" ")[0] : "";
               const advNext = it.status === "idea" ? "planned" : (it.status === "planned" ? "doing" : (it.status === "doing" ? "done" : ""));
               const advLabel = advNext === "planned" ? "→ 排期" : (advNext === "doing" ? "→ 进行中" : (advNext === "done" ? "✓ 完成" : ""));
-              return `<div class="cp-row${it.id === sel.id ? " selected" : ""}${it.status === "done" ? " is-done" : ""}" data-act="selectBacklogItem" data-id="${esc(it.id)}">
+              const progress = renderBacklogNotesHtml(it).progressBadge;
+              return `<div class="cp-row${it.id === sel?.id ? " selected" : ""}${it.status === "done" ? " is-done" : ""}" data-act="selectBacklogItem" data-id="${esc(it.id)}" tabindex="0">
                 <div class="cp-row-main">
                   <span class="stamp ${pr.cls}">${pr.label}</span>
                   <span class="stamp stone">${esc(proj)}</span>
                   <span class="cp-row-title" title="${esc(title)}">${esc(title)}</span>
+                  ${progress}
                 </div>
                 <div class="cp-row-right">
                   ${g.merged ? `<span class="stamp ${st.tone}">${st.label}</span>` : `<span class="cp-row-date mono${advNext ? " can-hide" : ""}">${esc(dateShort)}</span>`}
@@ -1335,22 +1368,48 @@
                 </div>
               </div>`;
             }).join("")}
+            </div>
+            </section>
           `).join("")}
         </div>
       </section>
 
-      <aside class="block cp-split-detail">
+      <aside class="block cp-split-detail">${sel ? renderBacklogDetail(sel) : '<div class="backlog-empty-card">展开分组后选择一条需求</div>'}</aside>
+    </div>`;
+  }
+
+  function renderBacklogDetail(sel, drawer = false) {
+    const selProj = normBacklogProject(sel.project);
+    const selTitle = normBrandText(sel.title);
+    const selPrioKey = BACKLOG_PRIORITIES[sel.priority] ? sel.priority : "medium";
+    const selPrio = BACKLOG_PRIORITIES[selPrioKey];
+    const statusOpts = BACKLOG_STATUSES.map((st) =>
+      `<option value="${st.id}"${sel.status === st.id ? " selected" : ""}>${st.label}</option>`
+    ).join("");
+    const notesRendered = renderBacklogNotesHtml(sel);
+    return `
         <div class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
           <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>详情 · ${esc(selProj)}</span></span>
           <div class="cp-detail-actions">
             <button type="button" class="btn btn-primary btn-xs" data-act="copyBacklogPrompt" data-id="${esc(sel.id)}" data-tip="打包项目路径与详细说明为 AI Prompt">复制 Prompt</button>
             <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(sel.id)}">编辑</button>
             <button type="button" class="btn btn-flat danger btn-xs" data-act="armDeleteBacklog" data-id="${esc(sel.id)}">删除</button>
+            ${drawer ? iconButton("", "关闭需求详情", ICONS.close, { attrs: "data-close-modal" }) : ""}
           </div>
         </div>
         <div class="cp-detail-body">
           <h2 class="cp-detail-title">${esc(selTitle)}</h2>
-          <div class="slot cp-detail-kv">
+          <div class="cp-detail-kv cp-property-rows">
+            <div>
+              <div class="cp-kv-label">当前状态</div>
+              <select class="sel" data-backlog-status="${esc(sel.id)}" aria-label="修改状态">${statusOpts}</select>
+            </div>
+            <div>
+              <div class="cp-kv-label">优先级</div>
+              <button type="button" class="kv-pill-btn" data-act="openBacklogPriorityMenu" data-id="${esc(sel.id)}" data-tip="点击快速切换优先级">
+                <span class="kv-pill-lead"><span class="prio-dot ${selPrioKey}" aria-hidden="true"></span><span>${selPrio.label}优先级</span></span>${ICONS.chevronDown}
+              </button>
+            </div>
             <div>
               <div class="cp-kv-label">归属项目</div>
               <div style="display:flex;align-items:center;gap:5px;">
@@ -1359,76 +1418,90 @@
               </div>
             </div>
             <div>
-              <div class="cp-kv-label">当前状态（实时切换）</div>
-              <select class="sel" data-backlog-status="${esc(sel.id)}" aria-label="修改状态">${statusOpts}</select>
-            </div>
-            <div>
-              <div class="cp-kv-label">优先级（点击切换）</div>
-              <button type="button" class="kv-pill-btn" data-act="openBacklogPriorityMenu" data-id="${esc(sel.id)}" data-tip="点击快速切换优先级">
-                <span class="kv-pill-lead"><span class="prio-dot ${selPrioKey}" aria-hidden="true"></span><span>${selPrio.label}优先级</span></span>${ICONS.chevronDown}
-              </button>
-            </div>
-            <div>
-              <div class="cp-kv-label">时间记录</div>
-              <span class="mono cp-kv-time" style="display:inline-flex;align-items:center;height:28px;" data-tip="创建 ${esc(fmtDate(sel.created_at))}">更新 ${esc(fmtDate(sel.updated_at, true))}</span>
+              <div class="cp-kv-label">最近更新</div>
+              <span class="mono cp-kv-time" data-tip="创建 ${esc(fmtDate(sel.created_at))}">${esc(fmtDate(sel.updated_at, true))}</span>
             </div>
           </div>
           <div class="cp-detail-sec" style="display:flex;align-items:center;gap:8px;"><span>详细说明</span>${notesRendered.progressBadge}</div>
           ${notesRendered.bodyHtml}
-        </div>
-      </aside>
-    </div>`;
+        </div>`;
+  }
+
+  function openBacklogDrawer(id) {
+    const item = (appState.backlog_items || []).find((it) => it.id === id);
+    if (!item) return;
+    openModal(renderBacklogDetail(item, true), "backlog");
+    backlogDrawerId = id;
+    backlogDrawerKey = "";
+  }
+
+  function syncBacklogDrawer() {
+    if (!backlogDrawerId) return;
+    const item = (appState.backlog_items || []).find((it) => it.id === backlogDrawerId);
+    if (!item) { closeModal(); return; }
+    const key = JSON.stringify([item, [...pendingBacklogChecks]]);
+    if (key === backlogDrawerKey) return;
+    backlogDrawerKey = key;
+    const dialog = $("#modal-dialog");
+    const restoreFocus = rememberFocus(dialog);
+    const scroll = dialog.querySelector(".cp-detail-body").scrollTop;
+    dialog.innerHTML = renderBacklogDetail(item, true);
+    dialog.querySelector(".cp-detail-body").scrollTop = scroll;
+    restoreFocus();
   }
 
   function renderBacklogKanbanHtml(filtered) {
-    if (filtered.length === 0) {
-      return '<div class="block backlog-empty-card"><div class="backlog-empty">当前筛选条件下暂无需求，点击右上角「+ 新建需求」记录想法。</div></div>';
-    }
-    const cols = [
-      { id: "doing", title: "进行中", items: filtered.filter((it) => it.status === "doing") },
-      { id: "planned", title: "已排期", items: filtered.filter((it) => it.status === "planned") },
-      { id: "idea", title: "构思中", items: filtered.filter((it) => it.status === "idea") },
-      { id: "done", title: "搁置 & 已完成", items: filtered.filter((it) => it.status === "paused" || it.status === "done") },
-    ];
-    return `<div class="kanban-4">${cols.map((col) => `
-      <section class="block kanban-col" data-kanban-status="${col.id}">
+    const lane = (status) => {
+      const title = backlogStatusMeta(status).label;
+      const items = filtered.filter((item) => item.status === status);
+      return `<section class="block kanban-col" data-kanban-status="${status}">
         <header class="block-head" style="background:var(--surface-paper);border-bottom:1px solid var(--line-subtle);">
-          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>${col.title}</span></span>
-          <span class="stamp mono">${col.items.length}</span>
+          <span class="cp-grp-lead"><span class="head-bar" aria-hidden="true"></span><span>${title}</span></span>
+          <span class="stamp mono">${items.length}</span>
         </header>
         <div class="kanban-cards">
-          ${col.items.length === 0
+          ${items.length === 0
             ? '<div class="kanban-empty">拖入卡片到此处</div>'
-            : col.items.map((item) => {
+            : items.map((item) => {
                 const prio = BACKLOG_PRIORITIES[item.priority] || BACKLOG_PRIORITIES.medium;
                 const proj = normBacklogProject(item.project);
                 const title = normBrandText(item.title);
-                const notes = normBrandText(item.notes);
-                const statusOpts = BACKLOG_STATUSES.map((st) =>
-                  `<option value="${st.id}"${item.status === st.id ? " selected" : ""}>${st.label}</option>`
-                ).join("");
-                return `<article class="kcard${item.status === "done" ? " is-done" : ""}" draggable="true" data-backlog-id="${esc(item.id)}">
+                const notes = normBrandText(item.notes || "").split(/\r?\n/).filter((line) => !checklistLine.test(line)).join(" ").trim();
+                const progress = renderBacklogNotesHtml(item).progressBadge;
+                return `<article class="kcard${item.status === "done" ? " is-done" : ""}" data-backlog-id="${esc(item.id)}" data-priority-rank="${prio.rank}" data-act="openBacklogDrawer" data-id="${esc(item.id)}">
                   <div class="kcard-top">
                     <div class="kcard-tags">
                       <span class="stamp ${prio.cls}">${prio.label}</span>
                       <span class="stamp stone">${esc(proj)}</span>
                     </div>
-                    <select class="sel kcard-status" data-backlog-status="${esc(item.id)}" aria-label="修改状态">${statusOpts}</select>
+                    <button type="button" class="backlog-grip" data-backlog-grip="card" data-id="${esc(item.id)}" aria-label="拖动需求">${ICONS.grip}</button>
                   </div>
-                  <div class="kcard-title">${esc(title)}</div>
+                  <button type="button" class="kcard-title" data-act="openBacklogDrawer" data-id="${esc(item.id)}">${esc(title)}</button>
                   ${notes ? `<div class="kcard-desc">${esc(notes)}</div>` : ""}
                   <div class="kcard-foot">
+                    ${progress}
                     <span class="mono kcard-date">${esc(fmtDate(item.updated_at, true))}</span>
                     <div class="kcard-actions">
                       <button type="button" class="btn btn-flat btn-xs" data-act="copyBacklogPrompt" data-id="${esc(item.id)}">Prompt</button>
-                      <button type="button" class="btn btn-flat btn-xs" data-act="editBacklogItem" data-id="${esc(item.id)}">编辑</button>
-                      <button type="button" class="btn btn-flat danger btn-xs" data-act="armDeleteBacklog" data-id="${esc(item.id)}">删</button>
                     </div>
                   </div>
                 </article>`;
               }).join("")}
         </div>
-      </section>`).join("")}</div>`;
+      </section>`;
+    };
+    const archived = filtered.filter((item) => item.status === "done" || item.status === "paused");
+    const showArchive = archiveRailOpen || ["done", "paused"].includes(backlogStatus) ||
+      (!!backlogQuery.trim() && archived.length > 0);
+    return `<div class="kanban-board">
+      ${["doing", "planned", "idea"].map(lane).join("")}
+      <div class="kanban-archive${showArchive ? " is-open" : ""}">
+        <button type="button" class="block kanban-archive-toggle" data-act="toggleKanbanArchive" aria-expanded="${showArchive}">
+          <span>归档</span><span class="stamp mono">${archived.length}</span>${ICONS.chevronDown}
+        </button>
+        ${showArchive ? `<div class="kanban-archive-lanes">${["paused", "done"].map(lane).join("")}</div>` : ""}
+      </div>
+    </div>`;
   }
 
   function renderBacklogListHtml(filtered) {
@@ -1436,7 +1509,10 @@
   }
 
   function renderBacklog(forceListOnly = false) {
-    const items = appState.backlog_items || [];
+    if (backlogDrag?.clone) return;
+    syncBacklogDrawer();
+    const items = (appState.backlog_items || []).map((item) => backlogMoves.has(item.id)
+      ? { ...item, ...backlogMoves.get(item.id) } : item);
     const openCount = items.filter((it) => it.status !== "done" && it.status !== "paused").length;
     $("#view-title").textContent = "需求池";
     $("#view-sub").textContent = items.length ? `${items.length} 条 · ${openCount} 待推进` : "暂无需求";
@@ -1444,12 +1520,15 @@
     const view = $("#view-content");
     const filtered = filterBacklogItems(items);
     const key = JSON.stringify([items, backlogProject, backlogStatus, backlogQuery, backlogViewMode, selectedBacklogId,
-      [...pendingBacklogChecks]]);
+      [...pendingBacklogChecks], backlogGroupPreferences.order, [...backlogGroupPreferences.collapsed], [...searchCollapsedGroups], archiveRailOpen]);
     const restoreFocus = rememberFocus(view);
 
     if (forceListOnly && view.dataset.page === "backlog") {
       const listCard = $("#backlog-list-card");
+      const scroll = listCard?.querySelector(".cp-list-scroll")?.scrollTop || 0;
       if (listCard) listCard.innerHTML = renderBacklogListHtml(filtered);
+      const listScroll = listCard?.querySelector(".cp-list-scroll");
+      if (listScroll) listScroll.scrollTop = scroll;
       backlogRenderKey = key;
       restoreFocus();
       return;
@@ -1478,7 +1557,7 @@
         <div class="backlog-filters">
           <div class="seg" role="group" aria-label="视图切换">
             <button type="button" class="seg-btn${backlogViewMode === "split" ? " active" : ""}" data-act="setBacklogView" data-mode="split">${ICONS.changelog}<span>清单详情</span></button>
-            <button type="button" class="seg-btn${backlogViewMode === "kanban" ? " active" : ""}" data-act="setBacklogView" data-mode="kanban">${ICONS.workspace}<span>四列看板</span></button>
+            <button type="button" class="seg-btn${backlogViewMode === "kanban" ? " active" : ""}" data-act="setBacklogView" data-mode="kanban">${ICONS.workspace}<span>专业看板</span></button>
           </div>
           <div class="seg" role="group" aria-label="项目筛选">${pillTabs}</div>
         </div>
@@ -1616,16 +1695,16 @@
     const shot = appState.screenshot || {};
     const shortcuts = appState.desktop_shortcuts || [];
     const apps = appState.installed_apps || [];
-    const view = $("#view-content");
-    $("#view-title").textContent = "设置";
-    $("#view-sub").textContent = "全局热键 · 桌面收纳 · 常驻与备份";
+    const view = $("#settings-content");
     const key = JSON.stringify([shortcuts.map(({ id, name, requires_admin }) => [id, name, requires_admin]), apps]);
-    if (key === settingsRenderKey && view.dataset.page === "manage") {
+    if (key === settingsRenderKey) {
       syncSettingsFields(view, settings, shot, shortcuts);
       return;
     }
     settingsRenderKey = key;
-    view.dataset.page = "manage";
+    const restoreFocus = rememberFocus(view);
+    const scrollTop = view.scrollTop;
+    cancelHotkeyRecord();
 
     const hotkeyPresets = ["Ctrl+Shift+A", "Alt+A", "Ctrl+Alt+A", "F1"];
     const isPresetHk = hotkeyPresets.includes(shot.hotkey);
@@ -1685,6 +1764,15 @@
             <div class="setting-row">
               <div class="setting-label">周期回收号不足 48 小时提醒</div>
               ${settingSwitch("expiry_balloon_alert", "周期回收号不足 48 小时提醒", settings.expiry_balloon_alert)}
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">额度提醒免打扰</div><div class="group-sub">按本机时间暂停桌面额度及回收提醒，额度继续刷新。</div></div>
+              <div class="setting-actions">
+                <input type="time" class="sel" value="22:00" data-quiet-time="quiet_quota_start" aria-label="免打扰开始时间">
+                <span>至</span>
+                <input type="time" class="sel" value="08:00" data-quiet-time="quiet_quota_end" aria-label="免打扰结束时间">
+                ${settingSwitch("quiet_quota_alerts", "启用额度提醒免打扰", settings.quiet_quota_alerts)}
+              </div>
             </div>
           </div>
         </section>
@@ -1758,6 +1846,52 @@
       </div>
     </div>`;
     syncSettingsFields(view, settings, shot, shortcuts);
+    applySettingsSection();
+    view.scrollTop = scrollTop;
+    restoreFocus();
+  }
+
+  function applySettingsSection() {
+    $$("#settings-content .settings-group").forEach((group) => {
+      group.hidden = settingsSection !== "all" && group.getAttribute("aria-labelledby") !== settingsSection;
+    });
+    $$("#settings-dialog [data-act='settingsSection']").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.id === settingsSection));
+    });
+  }
+
+  function openSettings() {
+    if (!appState || layerIsOpen($("#settings-backdrop"))) return;
+    closePopover();
+    closeInlineNodeCombo();
+    settingsTrigger = document.activeElement;
+    $("#settings-backdrop").style.setProperty("--settings-left", `${$("#view-content").getBoundingClientRect().left}px`);
+    $("#settings-actions").innerHTML = `
+      <button type="button" class="btn btn-paper btn-sm" data-act="openDataDir">${ICONS.folder} <span>打开数据目录</span></button>
+      ${appState.version ? `<button type="button" class="btn btn-ghost btn-sm mono" data-act="openChangelog" data-tip="查看更新日志">${esc(appState.version)}</button>` : ""}
+      ${iconButton("closeSettings", "关闭设置", ICONS.close)}`;
+    showLayer($("#settings-backdrop"));
+    renderManage();
+    $("#settings-dialog [aria-pressed='true']")?.focus({ preventScroll: true });
+    postAction("refreshInstalledApps");
+  }
+
+  function closeSettings() {
+    cancelHotkeyRecord();
+    dismissLayer($("#settings-backdrop"));
+    const trigger = settingsTrigger;
+    settingsTrigger = null;
+    trigger?.focus({ preventScroll: true });
+  }
+
+  function cancelHotkeyRecord() {
+    if (!recordingHotkeyBtn) return;
+    const button = recordingHotkeyBtn;
+    const presets = ["Ctrl+Shift+A", "Alt+A", "Ctrl+Alt+A", "F1"];
+    const hotkey = appState?.screenshot?.hotkey;
+    recordingHotkeyBtn = null;
+    button.classList.remove("is-recording");
+    button.textContent = hotkey && !presets.includes(hotkey) ? hotkey : "自定义…";
   }
 
   // ==================== POPOVER & MODALS ====================
@@ -1983,7 +2117,7 @@
     closeModal();
     lastModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dlg = $("#modal-dialog");
-    const extra = size === "changelog" ? " modal-changelog" : size ? " modal-wide" : "";
+    const extra = size === "changelog" ? " modal-changelog" : size === "backlog" ? " modal-backlog" : size ? " modal-wide" : "";
     dlg.className = "modal-dialog" + extra;
     dlg.innerHTML = html;
     showLayer($("#modal-backdrop"));
@@ -1992,6 +2126,7 @@
   }
 
   function closeModal() {
+    backlogDrawerId = "";
     const cancelPicker = onNetworkPickerClose;
     onNetworkPickerClose = null;
     cancelPicker?.();
@@ -2003,6 +2138,36 @@
         restore.focus({ preventScroll: true });
         syncWorkspaceAfterInteraction();
       }, 0);
+    }
+  }
+
+  function saveBacklogGroupPreferences() {
+    const { order, collapsed } = backlogGroupPreferences;
+    try { localStorage.setItem("aibase_backlog_groups", JSON.stringify({ order, collapsed: [...collapsed] })); } catch (_) {}
+  }
+
+  function moveBacklogGroup(id, target, after) {
+    const order = backlogGroupPreferences.order.filter((group) => group !== id);
+    order.splice(order.indexOf(target) + (after ? 1 : 0), 0, id);
+    backlogGroupPreferences.order = order;
+    saveBacklogGroupPreferences();
+    renderBacklog(true);
+    $(`[data-backlog-grip="group"][data-id="${id}"]`)?.focus({ preventScroll: true });
+  }
+
+  async function moveBacklogCard(id, status) {
+    const item = (appState.backlog_items || []).find((entry) => entry.id === id);
+    if (!item || item.status === status || backlogMoves.has(id)) return;
+    backlogMoves.set(id, { status, updated_at: toIsoWithOffset(new Date()) });
+    if (activeTab === "backlog") renderBacklog(true);
+    try {
+      await callHost("setBacklogStatus", { id, status });
+      showToast(`已移至「${backlogStatusMeta(status).label}」`);
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      backlogMoves.delete(id);
+      if (activeTab === "backlog") renderBacklog(true);
     }
   }
 
@@ -2654,7 +2819,56 @@
   $("#win-max").addEventListener("click", () => postAction("toggleMaximize"));
   $("#win-close").addEventListener("click", () => postAction("close"));
 
-  $$(".nav-item").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
+  const sidebarNav = $(".nav-list");
+  const sidebarNavItems = $$(".nav-item");
+  let draggedNavItem = null;
+  try {
+    const order = JSON.parse(localStorage.getItem("aibase_sidebar_order") || "[]");
+    if (Array.isArray(order)) {
+      const byId = new Map(sidebarNavItems.map((item) => [item.dataset.tab, item]));
+      for (const id of new Set([...order, ...byId.keys()])) {
+        if (byId.has(id)) sidebarNav.append(byId.get(id));
+      }
+    }
+  } catch (_) {}
+  for (const button of sidebarNavItems) {
+    button.draggable = true;
+    button.title = "拖动排序 · Alt + ↑/↓";
+    button.addEventListener("click", () => switchTab(button.dataset.tab));
+    button.addEventListener("keydown", (event) => {
+      if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      const after = event.key === "ArrowDown";
+      const target = after ? button.nextElementSibling : button.previousElementSibling;
+      if (target) moveSidebarItem(button, target, after);
+    });
+  }
+  function moveSidebarItem(item, target, after) {
+    if (item === target) return;
+    sidebarNav.insertBefore(item, after ? target.nextElementSibling : target);
+    try {
+      localStorage.setItem("aibase_sidebar_order", JSON.stringify([...sidebarNav.children].map((button) => button.dataset.tab)));
+    } catch (_) {}
+    item.focus({ preventScroll: true });
+  }
+  sidebarNav.addEventListener("dragstart", (event) => {
+    draggedNavItem = event.target.closest(".nav-item");
+    if (draggedNavItem) event.dataTransfer.setData("text/plain", draggedNavItem.dataset.tab);
+  });
+  sidebarNav.addEventListener("dragover", (event) => {
+    if (!draggedNavItem || !event.target.closest(".nav-item")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  });
+  sidebarNav.addEventListener("drop", (event) => {
+    const target = event.target.closest(".nav-item");
+    if (!draggedNavItem || !target) return;
+    event.preventDefault();
+    const bounds = target.getBoundingClientRect();
+    moveSidebarItem(draggedNavItem, target, event.clientY >= bounds.top + bounds.height / 2);
+    draggedNavItem = null;
+  });
+  sidebarNav.addEventListener("dragend", () => { draggedNavItem = null; });
 
   $("#view-content").addEventListener("animationend", (event) => {
     if (event.animationName === "viewEnter") event.target.classList.remove("view-entering");
@@ -2712,7 +2926,6 @@
       showToast(err.message, true);
     }
   }
-  let dragBacklogId = "";
 
   function formatCapturedHotkey(e) {
     if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return "";
@@ -2735,29 +2948,29 @@
       e.preventDefault();
       e.stopPropagation();
       if (e.key === "Escape") {
-        recordingHotkeyBtn.classList.remove("is-recording");
-        recordingHotkeyBtn = null;
-        renderManage();
+        cancelHotkeyRecord();
         return;
       }
       const spec = formatCapturedHotkey(e);
       if (!spec) return;
-      recordingHotkeyBtn.classList.remove("is-recording");
-      recordingHotkeyBtn = null;
+      cancelHotkeyRecord();
       postAction("updateSettings", { screenshot_enabled: true, screenshot_hotkey: spec });
       return;
     }
 
-    const modalOpen = layerIsOpen($("#modal-backdrop"));
+    const primaryModal = layerIsOpen($("#modal-backdrop"));
+    const settingsOpen = layerIsOpen($("#settings-backdrop"));
+    const modalOpen = primaryModal || settingsOpen;
     if (e.key === "Escape") {
       if (activeComboEl) { closeInlineNodeCombo(); return; }
-      closeModal();
+      if (primaryModal) closeModal();
+      else if (settingsOpen) closeSettings();
       closePopover();
       return;
     }
     if (modalOpen && e.key === "Tab") {
-      const dlg = $("#modal-dialog");
-      const focusables = [...dlg.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+      const dlg = $(primaryModal ? "#modal-dialog" : "#settings-dialog");
+      const focusables = [...dlg.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')].filter((el) => el.getClientRects().length);
       if (!focusables.length) return;
       const first = focusables[0], last = focusables[focusables.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -2774,13 +2987,28 @@
     }
     const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
     if (!modalOpen && !inInput && activeTab === "backlog") {
+      const groupGrip = e.target.closest('[data-backlog-grip="group"]');
+      if (groupGrip && ["ArrowUp", "ArrowDown"].includes(e.key)) {
+        e.preventDefault();
+        const groups = $$(".cp-group");
+        const group = groupGrip.closest(".cp-group");
+        const after = e.key === "ArrowDown";
+        const peer = groups[groups.indexOf(group) + (after ? 1 : -1)];
+        if (peer) moveBacklogGroup(groupGrip.dataset.id, peer.dataset.backlogGroup, after);
+        return;
+      }
+      if (e.target.matches('.cp-row') && ["Enter", " "].includes(e.key)) {
+        e.preventDefault();
+        e.target.click();
+        return;
+      }
       if (e.key === "/") {
         e.preventDefault();
         $("#backlog-search")?.focus();
         return;
       }
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && backlogViewMode === "split") {
-        const rows = $$(".cp-row[data-id]");
+        const rows = $$(".cp-row[data-id]").filter((row) => !row.closest("[hidden]"));
         if (!rows.length) return;
         e.preventDefault();
         const curIdx = rows.findIndex((r) => r.dataset.id === selectedBacklogId);
@@ -2810,6 +3038,8 @@
     if (!e.target.closest('#popover-menu, [data-act="openMoreMenu"], [data-act="openWebIdentityMenu"], [data-act="openBacklogPriorityMenu"], [data-act="openBacklogProjectMenu"], [data-act="openProjectMoreMenu"], [data-act="openDesignCopyMenu"]')) closePopover();
     if (activeComboEl && !e.target.closest('.combo-popover, [data-act="toggleInlineNodeCombo"]')) closeInlineNodeCombo();
     if (e.target === $("#modal-backdrop") || e.target.closest("[data-close-modal]")) return closeModal();
+    if (e.target === $("#settings-backdrop")) return closeSettings();
+    if (e.target.closest("[data-backlog-grip]")) return;
 
     const actBtn = e.target.closest("[data-act]");
     if (!actBtn) return;
@@ -2821,7 +3051,15 @@
       return;
     }
 
-    if (act === "applyLocalUpdate") postAction("applyLocalUpdate");
+    if (act === "openSettings") openSettings();
+    else if (act === "closeSettings") closeSettings();
+    else if (act === "settingsSection") {
+      cancelHotkeyRecord();
+      settingsSection = id;
+      applySettingsSection();
+      $("#settings-content").scrollTop = 0;
+    }
+    else if (act === "applyLocalUpdate") postAction("applyLocalUpdate");
     else if (act === "refresh") postAction("refresh", { toast: "1" });
     else if (act === "refreshAllQuotas" && actBtn.getAttribute("aria-disabled") !== "true") { postAction("refreshAllUsage"); postAction("refreshAntigravity"); }
     else if (act === "refreshAllUsage") postAction("refreshAllUsage");
@@ -2873,7 +3111,7 @@
       closePopover();
       const mode = actBtn.dataset.mode || "current";
       const frame = $("#design-sys-frame");
-      frame?.contentWindow?.postMessage({ type: "ds-request-copy", mode }, "*");
+      frame?.contentWindow?.postMessage({ type: "ds-request-copy", mode }, location.origin);
     }
     else if (act === "openDesignSystemExternal") {
       postAction("openDesignSystemExternal");
@@ -2925,14 +3163,19 @@
     } else if (act === "openProjectTerminal") {
       postAction("openProjectTerminal", { path: actBtn.dataset.path || "" });
     } else if (act === "openProjectInAi") {
-      postAction("openProjectInAi", { path: actBtn.dataset.path || "", tool: actBtn.dataset.tool || "antigravity" });
-    } else if (act === "launchProjectPreview" || act === "stopProjectPreview") {
+      closePopover();
+      postAction("openProjectInAi", { path: actBtn.dataset.path || "", tool: actBtn.dataset.tool || "antigravity", accountId: actBtn.dataset.accountId || "" });
+    } else if (act === "launchProjectPreview" || act === "stopProjectPreview" || act === "reopenProjectPreview") {
+      closePopover();
       postAction(act, { id });
     } else if (act === "openProjectMoreMenu") {
       const item = (appState.projects || []).find((it) => it.id === id);
       if (!item) return;
       const pop = $("#popover-menu");
-      pop.innerHTML = `${item.remote_url ? `<button type="button" class="pop-item" data-act="openProjectRemote" data-url="${esc(item.remote_url)}">${ICONS.ext} 打开 GitHub 仓库</button>` : ""}
+      pop.innerHTML = `${appState.project_previews?.[id] === "running" ? `<button type="button" class="pop-item" data-act="reopenProjectPreview" data-id="${esc(id)}">${ICONS.ext} 重新打开预览网页</button>` : ""}
+        ${(appState.accounts || []).filter(() => item.exists).map((acc) => `
+          <button type="button" class="pop-item" data-act="openProjectInAi" data-tool="codex" data-path="${esc(item.path)}" data-account-id="${esc(acc.id)}">打开 Codex · ${esc(acc.is_default ? "主账号" : acc.name)}</button>`).join("")}
+        ${item.remote_url ? `<button type="button" class="pop-item" data-act="openProjectRemote" data-url="${esc(item.remote_url)}">${ICONS.ext} 打开 GitHub 仓库</button>` : ""}
         <button type="button" class="pop-item" data-act="editProjectItem" data-id="${esc(id)}">${ICONS.edit} 编辑项目</button>`;
       positionPopover(pop, actBtn);
       pop.querySelector("button")?.focus({ preventScroll: true });
@@ -2953,23 +3196,35 @@
         try { localStorage.setItem("aihub_backlog_view", mode); } catch (_) { }
         renderBacklog();
       }
+    } else if (act === "toggleBacklogGroup") {
+      const transient = backlogStatus !== "all" || !!backlogQuery.trim();
+      const collapsed = transient ? searchCollapsedGroups : backlogGroupPreferences.collapsed;
+      if (collapsed.has(id)) collapsed.delete(id);
+      else collapsed.add(id);
+      if (!transient) saveBacklogGroupPreferences();
+      renderBacklog(true);
+    } else if (act === "toggleKanbanArchive") {
+      archiveRailOpen = !archiveRailOpen;
+      renderBacklog(true);
+    } else if (act === "openBacklogDrawer") {
+      openBacklogDrawer(id);
     } else if (act === "selectBacklogItem") {
       if (id && id !== selectedBacklogId) {
         selectedBacklogId = id;
         renderBacklog(true);
       }
+      if (id && window.matchMedia("(max-width: 980px)").matches) {
+        $(`.cp-row[data-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+        openBacklogDrawer(id);
+      }
     } else if (act === "quickAdvanceBacklog") {
       e.stopPropagation();
       const next = actBtn.dataset.next || "";
-      if (id && next) postAction("setBacklogStatus", { id, status: next });
+      if (id && next) moveBacklogCard(id, next);
     } else if (act === "openAddBacklog") {
       openBacklogModal(null);
     } else if (act === "exportBacklogMd") {
       exportBacklogMarkdown();
-    } else if (act === "toggleBacklogDetail") {
-      if (expandedBacklog.has(id)) expandedBacklog.delete(id);
-      else expandedBacklog.add(id);
-      renderBacklog(true);
     } else if (act === "copyBacklogPrompt") {
       const item = (appState.backlog_items || []).find((it) => it.id === id);
       copyBacklogPrompt(item);
@@ -2992,7 +3247,16 @@
       closePopover();
       callHost("setBacklogMetadata", { id, field: "project", value: actBtn.dataset.project }).catch((err) => showToast(err.message, true));
     } else if (act === "jumpToProject") {
+      const path = resolveBacklogRepoPath(actBtn.dataset.project);
+      const item = (appState.projects || []).find((project) => !project.hidden && project.path === path);
+      if (!item) { showToast("未找到已显示的对应项目卡", true); return; }
+      if (backlogDrawerId) closeModal();
       switchTab("projects");
+      requestAnimationFrame(() => {
+        const card = $(`.project-card[data-project-id="${CSS.escape(item.id)}"]`);
+        card?.scrollIntoView({ block: "nearest" });
+        card?.focus({ preventScroll: true });
+      });
     } else if (act === "editBacklogItem") {
       const item = (appState.backlog_items || []).find((it) => it.id === id);
       if (item) openBacklogModal(item);
@@ -3028,6 +3292,7 @@
 
   document.addEventListener("input", (e) => {
     if (e.target && e.target.id === "backlog-search") {
+      searchCollapsedGroups.clear();
       backlogQuery = e.target.value;
       renderBacklog(true);
     }
@@ -3035,6 +3300,7 @@
 
   document.addEventListener("change", (e) => {
     if (e.target && e.target.id === "backlog-filter-status") {
+      searchCollapsedGroups.clear();
       backlogStatus = e.target.value || "all";
       renderBacklog(true);
       return;
@@ -3062,7 +3328,7 @@
     }
     const blStatus = e.target.closest("[data-backlog-status]");
     if (blStatus) {
-      postAction("setBacklogStatus", { id: blStatus.dataset.backlogStatus, status: blStatus.value });
+      moveBacklogCard(blStatus.dataset.backlogStatus, blStatus.value);
       return;
     }
     const stashInp = e.target.closest("[data-stash-id]");
@@ -3071,44 +3337,123 @@
       return;
     }
     const inp = e.target.closest("[data-setting]");
+    const quietTime = e.target.closest("[data-quiet-time]");
+    if (quietTime?.value) {
+      postAction("updateSettings", { [quietTime.dataset.quietTime]: quietTime.value });
+      return;
+    }
     if (!inp) return;
     postAction("updateSettings", { [inp.dataset.setting]: inp.checked });
   });
 
-  // Kanban HTML5 Drag & Drop
-  document.addEventListener("dragstart", (e) => {
-    const card = e.target.closest(".kcard[data-backlog-id]");
-    if (!card) return;
-    dragBacklogId = card.dataset.backlogId || "";
-    e.dataTransfer?.setData("text/plain", dragBacklogId);
+  document.addEventListener("pointerdown", (event) => {
+    const grip = event.target.closest("[data-backlog-grip]");
+    if (!grip || !event.isPrimary || event.button !== 0 || backlogDrag || backlogMoves.has(grip.dataset.id)) return;
+    const group = grip.dataset.backlogGrip === "group";
+    const source = grip.closest(group ? ".cp-group" : ".kcard");
+    const bounds = source.getBoundingClientRect();
+    backlogDrag = { grip, source, bounds, group, pointer: event.pointerId, startX: event.clientX, startY: event.clientY,
+      x: event.clientX, y: event.clientY, scroll: group ? source.closest(".cp-list-scroll") : $("#view-content") };
+    grip.setPointerCapture(event.pointerId);
   });
-  document.addEventListener("dragend", () => {
-    dragBacklogId = "";
-    $$(".kanban-col.is-drag-over").forEach((c) => c.classList.remove("is-drag-over"));
-  });
-  document.addEventListener("dragover", (e) => {
-    const col = e.target.closest(".kanban-col[data-kanban-status]");
-    if (!col || !dragBacklogId) return;
-    e.preventDefault();
-    col.classList.add("is-drag-over");
-  });
-  document.addEventListener("dragleave", (e) => {
-    const col = e.target.closest(".kanban-col[data-kanban-status]");
-    if (col && !col.contains(e.relatedTarget)) col.classList.remove("is-drag-over");
-  });
-  document.addEventListener("drop", (e) => {
-    const col = e.target.closest(".kanban-col[data-kanban-status]");
-    if (!col || !dragBacklogId) return;
-    e.preventDefault();
-    col.classList.remove("is-drag-over");
-    const targetStatus = col.dataset.kanbanStatus;
-    const item = (appState.backlog_items || []).find((it) => it.id === dragBacklogId);
-    const id = dragBacklogId;
-    dragBacklogId = "";
-    if (item && targetStatus && item.status !== targetStatus) {
-      postAction("setBacklogStatus", { id, status: targetStatus });
-      showToast(`已移至「${backlogStatusMeta(targetStatus).label}」`);
+
+  function updateBacklogDrag() {
+    const drag = backlogDrag;
+    if (!drag) return;
+    drag.frame = 0;
+    const dx = drag.x - drag.startX, dy = drag.y - drag.startY;
+    if (!drag.clone) {
+      if (Math.hypot(dx, dy) < 5) return;
+      drag.clone = drag.source.cloneNode(true);
+      drag.clone.removeAttribute("id");
+      drag.clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+      drag.clone.inert = true;
+      drag.clone.classList.add("backlog-drag-clone");
+      Object.assign(drag.clone.style, { width: `${drag.bounds.width}px`, left: `${drag.bounds.left}px`, top: `${drag.bounds.top}px` });
+      document.body.append(drag.clone);
+      drag.source.classList.add("backlog-drag-source");
     }
+    drag.clone.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    const hit = document.elementFromPoint(drag.x, drag.y);
+    const target = hit?.closest(drag.group ? ".cp-group" : "[data-kanban-status]");
+    const previousTarget = drag.target;
+    previousTarget?.classList.remove("backlog-drop-before", "backlog-drop-after", "is-drag-over");
+    drag.target = target && target !== drag.source ? target : null;
+    if (drag.target) {
+      const bounds = drag.target.getBoundingClientRect();
+      drag.after = drag.y >= bounds.top + bounds.height / 2;
+      drag.target.classList.add(drag.group ? (drag.after ? "backlog-drop-after" : "backlog-drop-before") : "is-drag-over");
+    }
+    if (!drag.group && previousTarget !== drag.target) {
+      drag.placeholder?.remove();
+      drag.placeholder = null;
+      const cards = drag.target?.querySelector(".kanban-cards");
+      if (cards && !cards.contains(drag.source)) {
+        const item = (appState.backlog_items || []).find((entry) => entry.id === drag.grip.dataset.id);
+        const rank = BACKLOG_PRIORITIES[item?.priority]?.rank ?? 9;
+        const next = [...cards.querySelectorAll(".kcard")].find((card) => Number(card.dataset.priorityRank) >= rank);
+        drag.placeholder = document.createElement("div");
+        drag.placeholder.className = "backlog-drop-slot";
+        drag.placeholder.style.blockSize = `${Math.min(drag.bounds.height, 112)}px`;
+        cards.insertBefore(drag.placeholder, next || cards.querySelector(".kanban-empty"));
+      }
+    }
+    const scrollBounds = drag.scroll.getBoundingClientRect();
+    if (drag.y < scrollBounds.top + 40 || drag.y > scrollBounds.bottom - 40) {
+      const previous = drag.scroll.scrollTop;
+      drag.scroll.scrollTop += drag.y < scrollBounds.top + 40 ? -8 : 8;
+      if (drag.scroll.scrollTop !== previous) drag.frame = requestAnimationFrame(updateBacklogDrag);
+    }
+  }
+
+  function finishBacklogDrag(accept) {
+    const drag = backlogDrag;
+    if (!drag) return;
+    backlogDrag = null;
+    cancelAnimationFrame(drag.frame);
+    const floatingBounds = drag.clone?.getBoundingClientRect();
+    drag.clone?.remove();
+    drag.placeholder?.remove();
+    drag.source.classList.remove("backlog-drag-source");
+    drag.target?.classList.remove("backlog-drop-before", "backlog-drop-after", "is-drag-over");
+    if (!drag.clone) return;
+    if (accept && drag.target) {
+      const id = drag.grip.dataset.id;
+      if (drag.group) moveBacklogGroup(id, drag.target.dataset.backlogGroup, drag.after);
+      else moveBacklogCard(id, drag.target.dataset.kanbanStatus);
+      const landed = $(`[${drag.group ? "data-backlog-group" : "data-backlog-id"}="${CSS.escape(id)}"]`);
+      if (landed && floatingBounds && !reducedMotion.matches) {
+        const bounds = landed.getBoundingClientRect();
+        landed.animate([
+          { transform: `translate(${floatingBounds.left - bounds.left}px, ${floatingBounds.top - bounds.top}px)` },
+          { transform: "translate(0, 0)" }
+        ], { duration: 170, easing: "cubic-bezier(.22, 1, .36, 1)" });
+      }
+    } else if (activeTab === "backlog") {
+      renderBacklog();
+    }
+  }
+
+  document.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== backlogDrag?.pointer) return;
+    backlogDrag.x = event.clientX;
+    backlogDrag.y = event.clientY;
+    if (!backlogDrag.frame) backlogDrag.frame = requestAnimationFrame(updateBacklogDrag);
+  });
+  document.addEventListener("pointerup", (event) => {
+    if (event.pointerId !== backlogDrag?.pointer) return;
+    cancelAnimationFrame(backlogDrag.frame);
+    backlogDrag.x = event.clientX;
+    backlogDrag.y = event.clientY;
+    updateBacklogDrag();
+    finishBacklogDrag(true);
+  });
+  document.addEventListener("pointercancel", (event) => {
+    if (event.pointerId === backlogDrag?.pointer) finishBacklogDrag(false);
+  });
+  window.addEventListener("blur", () => finishBacklogDrag(false));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") finishBacklogDrag(false);
   });
 
   // 1-second live countdown ticker (in-place update, zero flicker!)
@@ -3130,7 +3475,10 @@
   }, 1000);
 
   window.addEventListener("message", (ev) => {
+    const frame = $("#design-sys-frame");
+    if (ev.origin !== location.origin || ev.source !== frame?.contentWindow) return;
     const msg = ev.data;
+    if (msg?.type === "ds-page-changed" && /^(0[1-9]|10)$/.test(msg.page)) designPage = msg.page;
     if (msg && typeof msg === "object" && msg.type === "ds-copy-html" && msg.html) {
       callHost("copyText", { text: msg.html })
         .then(() => showToast(`已复制「${msg.label || "设计系统 HTML"}」（${Math.round(msg.html.length / 1024)} KB）`))
@@ -3151,9 +3499,9 @@
             try {
               const saved = localStorage.getItem("aihub_last_tab");
               if (["workspace", "projects", "backlog", "manage", "design"].includes(saved) && saved !== activeTab) {
-                activeTab = saved;
-                if (saved === "manage") postAction("refreshInstalledApps");
-                else if (saved === "projects") postAction("refreshProjects");
+                if (saved === "manage") requestAnimationFrame(openSettings);
+                else activeTab = saved;
+                if (saved === "projects") postAction("refreshProjects");
               }
             } catch (_) { }
           }

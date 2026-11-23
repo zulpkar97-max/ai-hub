@@ -120,7 +120,7 @@ namespace CodexLauncher
         public static readonly SolidColorBrush TextMuted = BrushFromHex("#6F6B63");
 
         public static readonly SolidColorBrush PrimaryBg = BrushFromHex("#1A1917");
-        public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#2C2A27");
+        public static readonly SolidColorBrush PrimaryHover = BrushFromHex("#3C3934");
 
         public static readonly SolidColorBrush OkAccent = BrushFromHex("#14A06D");
         public static readonly SolidColorBrush WarnText = BrushFromHex("#9A5005");

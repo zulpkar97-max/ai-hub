@@ -49,6 +49,9 @@ namespace CodexLauncher
         public bool minimize_to_tray { get; set; }
         public bool expiry_balloon_alert { get; set; }
         public bool quota_auto_refresh { get; set; }
+        public bool quiet_quota_alerts { get; set; }
+        public string quiet_quota_start { get; set; }
+        public string quiet_quota_end { get; set; }
         public bool screenshot_enabled { get; set; }
         public string screenshot_hotkey { get; set; }
 
@@ -57,6 +60,8 @@ namespace CodexLauncher
             minimize_to_tray = true;
             expiry_balloon_alert = true;
             quota_auto_refresh = true;
+            quiet_quota_start = "22:00";
+            quiet_quota_end = "08:00";
             screenshot_enabled = true;
             screenshot_hotkey = "Ctrl+Shift+A";
         }
